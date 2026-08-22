@@ -64,6 +64,7 @@ use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
 use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
+use pocketmine\network\mcpe\protocol\DataPacket;
 use pocketmine\network\mcpe\protocol\DisconnectPacket;
 use pocketmine\network\mcpe\protocol\ModalFormRequestPacket;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
@@ -192,6 +193,7 @@ class NetworkSession{
 	private \SplQueue $compressedQueue;
 	private bool $forceAsyncCompression = true;
 	private ?int $protocolId = null;
+	private ?string $gameVersion = null;
 	protected bool $enableCompression = false; //disabled until handshake completed
 
 	private int $nextAckReceiptId = 0;
@@ -397,6 +399,14 @@ class NetworkSession{
 		return $this->protocolId ?? ProtocolInfo::CURRENT_PROTOCOL;
 	}
 
+	public function setGameVersion(string $gameVersion) : void{
+		$this->gameVersion = $gameVersion;
+	}
+
+	public function getGameVersion() : ?string{
+		return $this->gameVersion;
+	}
+
 	/**
 	 * @return \Closure[]|ObjectSet
 	 * @phpstan-return ObjectSet<\Closure() : void>
@@ -566,7 +576,11 @@ class NetworkSession{
 			try{
 				$stream = new ByteBufferReader($buffer);
 				try{
-					$packet->decode($stream, $this->getProtocolId());
+					if($packet instanceof DataPacket){
+						$packet->decode($stream, $this->getProtocolId(), $this->gameVersion);
+					}else{
+						$packet->decode($stream, $this->getProtocolId());
+					}
 				}catch(PacketDecodeException $e){
 					throw PacketHandlingException::wrap($e);
 				}
@@ -644,7 +658,7 @@ class NetworkSession{
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
 				$writer->clear(); //memory reuse let's gooooo
-				$this->addToSendBuffer(self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket));
+				$this->addToSendBuffer(self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion));
 			}
 			if($immediate){
 				$this->flushGamePacketQueue();
@@ -677,11 +691,15 @@ class NetworkSession{
 	/**
 	 * @internal
 	 */
-	public static function encodePacketTimed(ByteBufferWriter $serializer, int $protocolId, ClientboundPacket $packet) : string{
+	public static function encodePacketTimed(ByteBufferWriter $serializer, int $protocolId, ClientboundPacket $packet, ?string $gameVersion = null) : string{
 		$timings = Timings::getEncodeDataPacketTimings($packet);
 		$timings->startTiming();
 		try{
-			$packet->encode($serializer, $protocolId);
+			if($packet instanceof DataPacket){
+				$packet->encode($serializer, $protocolId, $gameVersion);
+			}else{
+				$packet->encode($serializer, $protocolId);
+			}
 			return $serializer->getData();
 		}finally{
 			$timings->stopTiming();

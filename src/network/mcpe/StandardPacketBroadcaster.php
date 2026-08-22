@@ -28,6 +28,7 @@ use pocketmine\event\server\DataPacketSendEvent;
 use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
+use pocketmine\utils\Utils;
 use function count;
 use function log;
 use function spl_object_id;
@@ -52,29 +53,31 @@ final class StandardPacketBroadcaster implements PacketBroadcaster{
 		}
 
 		$compressors = [];
-
-		$targetsByCompressor = [];
+		$targetsByContext = [];
+		$gameVersionsByContext = [];
 		foreach($recipients as $recipient){
 			//TODO: different compressors might be compatible, it might not be necessary to split them up by object
 			$compressor = $recipient->getCompressor();
-			$compressors[spl_object_id($compressor)] = $compressor;
-
-			$targetsByCompressor[spl_object_id($compressor)][] = $recipient;
+			$compressorId = spl_object_id($compressor);
+			$context = $compressorId . ":" . ($recipient->getGameVersion() ?? "");
+			$compressors[$context] = $compressor;
+			$gameVersionsByContext[$context] = $recipient->getGameVersion();
+			$targetsByContext[$context][] = $recipient;
 		}
 
-		$totalLength = 0;
-		$packetBuffers = [];
 		$writer = new ByteBufferWriter();
-		foreach($packets as $packet){
-			$writer->clear(); //memory reuse let's gooooo
-			$buffer = NetworkSession::encodePacketTimed($writer, $this->protocolId, $packet);
-			//varint length prefix + packet buffer
-			$totalLength += (((int) log(strlen($buffer), 128)) + 1) + strlen($buffer);
-			$packetBuffers[] = $buffer;
-		}
-
-		foreach($targetsByCompressor as $compressorId => $compressorTargets){
-			$compressor = $compressors[$compressorId];
+		foreach(Utils::stringifyKeys($targetsByContext) as $context => $compressorTargets){
+			$compressor = $compressors[$context];
+			$gameVersion = $gameVersionsByContext[$context];
+			$totalLength = 0;
+			$packetBuffers = [];
+			foreach($packets as $packet){
+				$writer->clear(); //memory reuse let's gooooo
+				$buffer = NetworkSession::encodePacketTimed($writer, $this->protocolId, $packet, $gameVersion);
+				//varint length prefix + packet buffer
+				$totalLength += (((int) log(strlen($buffer), 128)) + 1) + strlen($buffer);
+				$packetBuffers[] = $buffer;
+			}
 
 			$threshold = $compressor->getCompressionThreshold();
 			if(count($compressorTargets) > 1 && $threshold !== null && $totalLength >= $threshold){
