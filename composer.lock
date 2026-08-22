@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9bc94c6f1b68a5d961214b1c0d0f096a",
+    "content-hash": "219d3a9f426d303dfa849af5ce023a49",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -127,16 +127,16 @@
         },
         {
             "name": "nethergamesmc/bedrock-data",
-            "version": "dev-master",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "https://github.com/NetherGamesMC/BedrockData.git",
-                "reference": "b5fd03f4bcc790abe3d0dcb31151566ca29d42cb"
+                "url": "https://github.com/Mykoss/BedrockData.git",
+                "reference": "fa9ece1463a7536695fe9a7ebd701ab87008f980"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/NetherGamesMC/BedrockData/zipball/b5fd03f4bcc790abe3d0dcb31151566ca29d42cb",
-                "reference": "b5fd03f4bcc790abe3d0dcb31151566ca29d42cb",
+                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/fa9ece1463a7536695fe9a7ebd701ab87008f980",
+                "reference": "fa9ece1463a7536695fe9a7ebd701ab87008f980",
                 "shasum": ""
             },
             "default-branch": true,
@@ -146,9 +146,9 @@
             ],
             "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "support": {
-                "source": "https://github.com/NetherGamesMC/BedrockData/tree/master"
+                "source": "https://github.com/Mykoss/BedrockData/tree/main"
             },
-            "time": "2026-06-16T11:24:53+00:00"
+            "time": "2026-08-22T12:40:44+00:00"
         },
         {
             "name": "nethergamesmc/bedrock-protocol",

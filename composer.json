@@ -35,7 +35,7 @@
       "adhocore/json-comment": "~1.2.0",
       "netresearch/jsonmapper": "~v5.0.0",
       "pocketmine/bedrock-block-upgrade-schema": "~5.2.0+bedrock-1.21.110",
-      "nethergamesmc/bedrock-data": "dev-master",
+      "nethergamesmc/bedrock-data": "dev-main",
       "pocketmine/bedrock-item-upgrade-schema": "~1.17.0+bedrock-1.26.20",
       "nethergamesmc/bedrock-protocol": "dev-main",
       "pocketmine/binaryutils": "^0.2.1",
@@ -108,7 +108,7 @@
       },
       {
          "type": "vcs",
-         "url":  "https://github.com/NetherGamesMC/BedrockData.git"
+         "url":  "https://github.com/Mykoss/BedrockData.git"
       }
    ]
 }
