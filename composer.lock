@@ -131,12 +131,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockData.git",
-                "reference": "e079ee4b03fb75a56feecc9a13acb5c538b7adcf"
+                "reference": "d8d550695570e0fbbfc3ddd7551c4966f8c91feb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/e079ee4b03fb75a56feecc9a13acb5c538b7adcf",
-                "reference": "e079ee4b03fb75a56feecc9a13acb5c538b7adcf",
+                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/d8d550695570e0fbbfc3ddd7551c4966f8c91feb",
+                "reference": "d8d550695570e0fbbfc3ddd7551c4966f8c91feb",
                 "shasum": ""
             },
             "type": "library",
@@ -147,7 +147,7 @@
             "support": {
                 "source": "https://github.com/Mykoss/BedrockData/tree/update/mcbe-26.40-plus"
             },
-            "time": "2026-08-22T15:22:09+00:00"
+            "time": "2026-08-22T15:36:07+00:00"
         },
         {
             "name": "nethergamesmc/bedrock-protocol",

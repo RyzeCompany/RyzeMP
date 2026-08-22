@@ -109,6 +109,7 @@ final class BedrockDataFiles{
 	public const ID_META_UPGRADE_SCHEMA = BEDROCK_DATA_PATH . '/id_meta_upgrade_schema';
 	public const ITEM_REGISTRY_JSON = BEDROCK_DATA_PATH . '/item_registry.json';
 	public const ITEM_TAGS_1_20_0_JSON = BEDROCK_DATA_PATH . '/item_tags-1.20.0.json';
+	public const ITEM_TAGS_1_26_30_JSON = BEDROCK_DATA_PATH . '/item_tags-1.26.30.json';
 	public const ITEM_TAGS_JSON = BEDROCK_DATA_PATH . '/item_tags.json';
 	public const LEVEL_SOUND_ID_MAP_JSON = BEDROCK_DATA_PATH . '/level_sound_id_map.json';
 	public const PROTOCOL_INFO_JSON = BEDROCK_DATA_PATH . '/protocol_info.json';

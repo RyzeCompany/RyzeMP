@@ -47,7 +47,7 @@ final class ItemTagToIdMap{
 	private const PATHS = [
 		ProtocolInfo::PROTOCOL_1_26_45 => "",
 		ProtocolInfo::PROTOCOL_1_26_40 => "",
-		ProtocolInfo::CURRENT_PROTOCOL => "",
+		ProtocolInfo::PROTOCOL_1_26_30 => "-1.26.30",
 		ProtocolInfo::PROTOCOL_1_26_20 => "",
 		ProtocolInfo::PROTOCOL_1_26_10 => "",
 		ProtocolInfo::PROTOCOL_1_26_0 => "",
