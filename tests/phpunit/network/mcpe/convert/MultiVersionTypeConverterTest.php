@@ -7,7 +7,13 @@ namespace pocketmine\network\mcpe\convert;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\crafting\ExactRecipeIngredient;
+use pocketmine\crafting\MetaWildcardRecipeIngredient;
+use pocketmine\data\bedrock\ItemTagToIdMap;
+use pocketmine\item\VanillaItems;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\types\recipe\IntIdMetaItemDescriptor;
+use pocketmine\network\mcpe\protocol\types\recipe\StringIdMetaItemDescriptor;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 
 final class MultiVersionTypeConverterTest extends TestCase{
@@ -27,6 +33,7 @@ final class MultiVersionTypeConverterTest extends TestCase{
 		self::assertSame($expectedSchemaId, ItemTranslator::getItemSchemaId($protocolId));
 		self::assertGreaterThanOrEqual(0, $converter->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId()));
 		self::assertGreaterThan(0, $converter->getItemTypeDictionary()->fromStringId('minecraft:shield'));
+		self::assertNotEmpty(ItemTagToIdMap::getInstance($protocolId)->getIdsForTag('minecraft:boats'));
 	}
 
 	public function testBedrock2640ItemUpgradeSchema() : void{
@@ -34,5 +41,16 @@ final class MultiVersionTypeConverterTest extends TestCase{
 		self::assertArrayHasKey(271, $upgrader->getSchemas());
 		self::assertSame(['minecraft:music_disc_bounce', 0], $upgrader->upgrade('minecraft:record_bounce', 0));
 		self::assertSame(['minecraft:poplar_chest_boat', 0], $upgrader->upgrade('minecraft:chest_boat', 10));
+	}
+
+	#[DataProvider('protocolVersions')]
+	public function testProtocolSpecificRecipeDescriptors(int $protocolId, int $expectedSchemaId) : void{
+		$converter = TypeConverter::getInstance($protocolId);
+		$exact = $converter->coreRecipeIngredientToNet(new ExactRecipeIngredient(VanillaItems::STICK()))->getDescriptor();
+		$wildcard = $converter->coreRecipeIngredientToNet(new MetaWildcardRecipeIngredient('minecraft:stick'))->getDescriptor();
+		$expectedClass = $protocolId >= ProtocolInfo::PROTOCOL_1_26_40 ? StringIdMetaItemDescriptor::class : IntIdMetaItemDescriptor::class;
+		self::assertInstanceOf($expectedClass, $exact);
+		self::assertInstanceOf($expectedClass, $wildcard);
+		self::assertSame($expectedSchemaId, ItemTranslator::getItemSchemaId($protocolId));
 	}
 }
