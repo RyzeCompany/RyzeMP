@@ -155,12 +155,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockProtocol.git",
-                "reference": "16da8ab8fd685ec5262ec103f38ef9056ff33500"
+                "reference": "28c396ac85fdd7c43755e02fd61ff3523ef5cd80"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/16da8ab8fd685ec5262ec103f38ef9056ff33500",
-                "reference": "16da8ab8fd685ec5262ec103f38ef9056ff33500",
+                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/28c396ac85fdd7c43755e02fd61ff3523ef5cd80",
+                "reference": "28c396ac85fdd7c43755e02fd61ff3523ef5cd80",
                 "shasum": ""
             },
             "require": {
@@ -202,7 +202,7 @@
             "support": {
                 "source": "https://github.com/Mykoss/BedrockProtocol/tree/update/mcbe-26.40-plus"
             },
-            "time": "2026-08-22T15:27:39+00:00"
+            "time": "2026-08-22T15:48:17+00:00"
         },
         {
             "name": "netresearch/jsonmapper",
