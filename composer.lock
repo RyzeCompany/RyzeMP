@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "219d3a9f426d303dfa849af5ce023a49",
+    "content-hash": "61d8ca57295edd37f2d6c4b4ce43814d",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -127,41 +127,40 @@
         },
         {
             "name": "nethergamesmc/bedrock-data",
-            "version": "dev-main",
+            "version": "dev-update/mcbe-26.40-plus",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockData.git",
-                "reference": "fa9ece1463a7536695fe9a7ebd701ab87008f980"
+                "reference": "0da35fd4fde2a1ff8518a4531e067fb87e3b8092"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/fa9ece1463a7536695fe9a7ebd701ab87008f980",
-                "reference": "fa9ece1463a7536695fe9a7ebd701ab87008f980",
+                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/0da35fd4fde2a1ff8518a4531e067fb87e3b8092",
+                "reference": "0da35fd4fde2a1ff8518a4531e067fb87e3b8092",
                 "shasum": ""
             },
-            "default-branch": true,
             "type": "library",
             "license": [
                 "CC0-1.0"
             ],
             "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "support": {
-                "source": "https://github.com/Mykoss/BedrockData/tree/main"
+                "source": "https://github.com/Mykoss/BedrockData/tree/update/mcbe-26.40-plus"
             },
-            "time": "2026-08-22T12:40:44+00:00"
+            "time": "2026-08-22T12:51:10+00:00"
         },
         {
             "name": "nethergamesmc/bedrock-protocol",
-            "version": "dev-main",
+            "version": "dev-update/mcbe-26.40-plus",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockProtocol.git",
-                "reference": "c3a8940efa71c331d331ff5f4cad63308a07a970"
+                "reference": "f3588f9b17aa6b9881b3d7b1a36bfc935a2315aa"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/c3a8940efa71c331d331ff5f4cad63308a07a970",
-                "reference": "c3a8940efa71c331d331ff5f4cad63308a07a970",
+                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/f3588f9b17aa6b9881b3d7b1a36bfc935a2315aa",
+                "reference": "f3588f9b17aa6b9881b3d7b1a36bfc935a2315aa",
                 "shasum": ""
             },
             "require": {
@@ -180,7 +179,6 @@
                 "phpstan/phpstan-strict-rules": "^2.0.0",
                 "phpunit/phpunit": "^9.5 || ^10.0 || ^11.0"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -202,9 +200,9 @@
             ],
             "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
             "support": {
-                "source": "https://github.com/Mykoss/BedrockProtocol/tree/main"
+                "source": "https://github.com/Mykoss/BedrockProtocol/tree/update/mcbe-26.40-plus"
             },
-            "time": "2026-08-22T06:56:34+00:00"
+            "time": "2026-08-22T07:25:56+00:00"
         },
         {
             "name": "netresearch/jsonmapper",
