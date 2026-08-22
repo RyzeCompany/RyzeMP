@@ -37,7 +37,7 @@
       "pocketmine/bedrock-block-upgrade-schema": "~5.2.0+bedrock-1.21.110",
       "nethergamesmc/bedrock-data": "dev-master",
       "pocketmine/bedrock-item-upgrade-schema": "~1.17.0+bedrock-1.26.20",
-      "nethergamesmc/bedrock-protocol": "dev-master",
+      "nethergamesmc/bedrock-protocol": "dev-main",
       "pocketmine/binaryutils": "^0.2.1",
       "pocketmine/callback-validator": "~1.0.4",
       "pocketmine/color": "^0.3.0",
@@ -104,11 +104,11 @@
    "repositories": [
       {
          "type": "vcs",
-         "url":  "git@github.com:NetherGamesMC/BedrockProtocol.git"
+         "url":  "https://github.com/Mykoss/BedrockProtocol.git"
       },
       {
          "type": "vcs",
-         "url":  "git@github.com:NetherGamesMC/BedrockData.git"
+         "url":  "https://github.com/NetherGamesMC/BedrockData.git"
       }
    ]
 }
