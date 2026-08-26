@@ -29,10 +29,12 @@ use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\network\mcpe\protocol\types\skin\SkinImage;
 use function is_array;
 use function is_string;
+use function intdiv;
 use function json_decode;
 use function json_encode;
 use function random_bytes;
 use function str_repeat;
+use function substr;
 use const JSON_THROW_ON_ERROR;
 
 class LegacySkinAdapter implements SkinAdapter{
@@ -44,14 +46,37 @@ class LegacySkinAdapter implements SkinAdapter{
 		if($geometryName === ""){
 			$geometryName = "geometry.humanoid.custom";
 		}
+		$geometryData = $skin->getGeometryData();
+		if($geometryData === ""){
+			$geometryData = SkinData::GEOMETRY_DATA_NONE;
+		}
 		return new SkinData(
 			$skin->getSkinId(),
 			"", //TODO: playfab ID
 			json_encode(["geometry" => ["default" => $geometryName]], JSON_THROW_ON_ERROR),
 			SkinImage::fromLegacy($skin->getSkinData()), [],
 			$capeImage,
-			$skin->getGeometryData()
+			$geometryData
 		);
+	}
+
+	private static function normalizeSkinImage(SkinImage $image) : string{
+		$width = $image->getWidth();
+		$height = $image->getHeight();
+		$data = $image->getData();
+		if($width !== $height || ($width !== 254 && $width !== 256)){
+			return $data;
+		}
+
+		$normalized = "";
+		for($y = 0; $y < 128; ++$y){
+			$sourceY = intdiv($y * $height, 128);
+			for($x = 0; $x < 128; ++$x){
+				$sourceX = intdiv($x * $width, 128);
+				$normalized .= substr($data, ($sourceY * $width + $sourceX) * 4, 4);
+			}
+		}
+		return $normalized;
 	}
 
 	public function fromSkinData(SkinData $data) : Skin{
@@ -68,6 +93,6 @@ class LegacySkinAdapter implements SkinAdapter{
 			throw new InvalidSkinException("Missing geometry name field");
 		}
 
-		return new Skin($data->getSkinId(), $data->getSkinImage()->getData(), $capeData, $geometryName, $data->getGeometryData());
+		return new Skin($data->getSkinId(), self::normalizeSkinImage($data->getSkinImage()), $capeData, $geometryName, $data->getGeometryData());
 	}
 }

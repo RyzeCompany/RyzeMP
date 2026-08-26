@@ -131,12 +131,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockData.git",
-                "reference": "5fe61e483a4de6575b48366ca1cdbbb446bcad10"
+                "reference": "b3ae7e6e48299f299585dd303963b47004c3fa60"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/5fe61e483a4de6575b48366ca1cdbbb446bcad10",
-                "reference": "5fe61e483a4de6575b48366ca1cdbbb446bcad10",
+                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/b3ae7e6e48299f299585dd303963b47004c3fa60",
+                "reference": "b3ae7e6e48299f299585dd303963b47004c3fa60",
                 "shasum": ""
             },
             "type": "library",
@@ -147,7 +147,7 @@
             "support": {
                 "source": "https://github.com/Mykoss/BedrockData/tree/main"
             },
-            "time": "2026-08-22T15:58:16+00:00"
+            "time": "2026-08-22T18:14:34+00:00"
         },
         {
             "name": "nethergamesmc/bedrock-protocol",
@@ -155,12 +155,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockProtocol.git",
-                "reference": "28c396ac85fdd7c43755e02fd61ff3523ef5cd80"
+                "reference": "9ba97214782afc14fc7b945420de68aa8ceecac3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/28c396ac85fdd7c43755e02fd61ff3523ef5cd80",
-                "reference": "28c396ac85fdd7c43755e02fd61ff3523ef5cd80",
+                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/9ba97214782afc14fc7b945420de68aa8ceecac3",
+                "reference": "9ba97214782afc14fc7b945420de68aa8ceecac3",
                 "shasum": ""
             },
             "require": {
