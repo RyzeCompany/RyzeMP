@@ -1,0 +1,40 @@
+name: Build and Release Phar
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: phar.readonly=Off
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+
+      - name: Build phar
+        run: php build/server-phar.php
+
+      - name: Rename phar
+        run: mv PocketMine-MP.phar PocketMine-MP_${{ github.ref_name }}.phar
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PocketMine-MP_${{ github.ref_name }}.phar
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
