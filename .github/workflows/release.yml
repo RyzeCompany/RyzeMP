@@ -25,6 +25,8 @@ jobs:
 
       - name: Install dependencies
         run: composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+        env:
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.SUBMODULE_TOKEN }}"}}'
 
       - name: Build phar
         run: php build/server-phar.php
