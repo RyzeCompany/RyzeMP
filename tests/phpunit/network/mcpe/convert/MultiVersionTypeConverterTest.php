@@ -23,7 +23,9 @@ final class MultiVersionTypeConverterTest extends TestCase{
 		return [
 			'26.30' => [ProtocolInfo::PROTOCOL_1_26_30, 261],
 			'26.40' => [ProtocolInfo::PROTOCOL_1_26_40, 271],
-			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45, 271]
+			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45, 271],
+			'26.50' => [ProtocolInfo::PROTOCOL_1_26_50, 271],
+			'26.51' => [ProtocolInfo::PROTOCOL_1_26_51, 271]
 		];
 	}
 
