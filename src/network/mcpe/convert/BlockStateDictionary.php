@@ -194,16 +194,32 @@ final class BlockStateDictionary{
 
 		// Bedrock 1.26.51 represents the trapdoor direction enum as 0, -1, 1, -2,
 		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
-		// Convert affected 1.26.51 trapdoor states; the wire value itself is not changed.
+		// Match the canonical state semantically instead of re-encoding the whole property set,
+		// since the canonical palette may use a different NBT tag representation for the enum.
 		if(str_ends_with($name, '_trapdoor') && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['direction']->getValue();
 			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			if(isset($directionMap[$direction])){
-				$properties['direction'] = new \pocketmine\nbt\tag\IntTag($directionMap[$direction]);
-				$mappedRawProperties = BlockStateDictionaryEntry::encodeStateProperties($properties);
-				if(isset($lookup[$mappedRawProperties])){
-					return $lookup[$mappedRawProperties];
+			$canonicalDirection = $directionMap[$direction] ?? null;
+			if($canonicalDirection !== null){
+				foreach($lookup as $stateId){
+					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+						continue;
+					}
+					$matches = true;
+					foreach($properties as $propertyName => $property){
+						if($propertyName === 'direction'){
+							continue;
+						}
+						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+							$matches = false;
+							break;
+						}
+					}
+					if($matches){
+						return $stateId;
+					}
 				}
 			}
 		}
