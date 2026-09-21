@@ -195,7 +195,7 @@ final class BlockStateDictionary{
 		// Bedrock trapdoor direction uses the legacy 0..3 enum in 1.26.51.
 		// Unlike stairs, it is NOT encoded using the -2,-1,0,1 weirdo_direction enum.
 		// Match the canonical state semantically to avoid depending on NBT tag encoding.
-		if(str_ends_with($name, '_trapdoor') && isset($data->getStates()['direction'])){
+		if((str_ends_with($name, ':trapdoor') || str_ends_with($name, '_trapdoor')) && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['direction']->getValue();
 			foreach($lookup as $stateId){
