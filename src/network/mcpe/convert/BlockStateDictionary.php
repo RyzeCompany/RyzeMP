@@ -151,7 +151,7 @@ final class BlockStateDictionary{
 		// Bedrock 1.26.51 adds the minecraft:corner=none state to straight stair variants.
 		// PocketMine's stair serializer has no neighbour information and intentionally omits this property.
 		// Treat that specific canonical default as equivalent, without weakening other state comparisons.
-		if($name !== BlockTypeNames::SKELETON_SKULL && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
+		if($name === BlockTypeNames::NORMAL_STONE_STAIRS && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
 			$properties = $data->getStates();
 			foreach($lookup as $stateId){
 				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
