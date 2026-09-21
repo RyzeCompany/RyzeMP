@@ -148,6 +148,29 @@ final class BlockStateDictionary{
 			return $lookup[$rawProperties];
 		}
 
+		// Bedrock 1.26.51 adds the minecraft:corner=none state to straight stair variants.
+		// PocketMine's stair serializer has no neighbour information and intentionally omits this property.
+		// Treat that specific canonical default as equivalent, without weakening other state comparisons.
+		if($name !== BlockTypeNames::SKELETON_SKULL && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
+			$properties = $data->getStates();
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(($candidate['minecraft:corner'] ?? null)?->getValue() !== 'none'){
+					continue;
+				}
+				$matches = true;
+				foreach($properties as $propertyName => $value){
+					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $value->getValue()){
+						$matches = false;
+						break;
+					}
+				}
+				if($matches){
+					return $stateId;
+				}
+			}
+		}
+
 		// Bedrock 1.26.40+ exposes cardinal connection states for fences and thin blocks.
 		// Item/blockstate serialization has no world neighbours, so these blocks serialize without
 		// connection properties. Resolve that stateless representation to the canonical no-connection state.
@@ -240,7 +263,7 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			$newState = $upgrade ? GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader()->upgrade($state) : $state;
+			$newState = $upgrade && $state->getVersion() !== BlockStateData::CURRENT_VERSION ? GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader()->upgrade($state) : $state;
 			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
 			$entries[$i] = new BlockStateDictionaryEntry($uniqueName, $newState->getStates(), $meta, $newState->equals($state) ? null : $state);
 		}
