@@ -45,6 +45,7 @@ jobs:
           php -r '$p = new Phar("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL;'
 
       - name: Upload build artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: PocketMine-MP-phar-${{ github.sha }}
