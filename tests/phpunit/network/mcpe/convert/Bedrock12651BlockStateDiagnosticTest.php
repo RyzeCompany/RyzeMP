@@ -36,6 +36,22 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertGreaterThan(0, $checked, 'Neither affected block was found in the 1.26.51 dictionary');
 	}
 
+	public function test12651CanonicalStateMatchesSerializerProperties() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$dictionary = $translator->getBlockStateDictionary();
+		$serializer = GlobalBlockStateHandlers::getSerializer();
+		$data = $serializer->serialize(VanillaBlocks::DYED_CANDLE()->setColor(DyeColor::BLACK)->getStateId());
+
+		$candidates = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() === 'minecraft:black_candle'){
+				$candidates[$stateId] = $entry->generateStateData()->toNbt();
+			}
+		}
+		self::assertNotEmpty($candidates);
+		self::assertContains($data->toNbt(), array_values($candidates));
+	}
+
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
 		$typeConverter = TypeConverter::getInstance(ProtocolInfo::PROTOCOL_1_26_51);
 		$itemTranslator = $typeConverter->getItemTranslator();
