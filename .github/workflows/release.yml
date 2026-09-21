@@ -15,8 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN }}
+          submodules: false
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -28,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs
         env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.SUBMODULE_TOKEN }}"}}'
+          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ github.token }}"}}'
 
       - name: Validate PHP syntax
         shell: bash
