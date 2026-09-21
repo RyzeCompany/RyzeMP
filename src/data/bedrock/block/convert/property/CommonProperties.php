@@ -26,6 +26,7 @@ namespace pocketmine\data\bedrock\block\convert\property;
 use pocketmine\block\Button;
 use pocketmine\block\Door;
 use pocketmine\block\DoublePlant;
+use pocketmine\block\Fence;
 use pocketmine\block\FenceGate;
 use pocketmine\block\ItemFrame;
 use pocketmine\block\Liquid;
@@ -33,6 +34,7 @@ use pocketmine\block\SimplePressurePlate;
 use pocketmine\block\Slab;
 use pocketmine\block\Stair;
 use pocketmine\block\Stem;
+use pocketmine\block\Thin;
 use pocketmine\block\Torch;
 use pocketmine\block\Trapdoor;
 use pocketmine\block\utils\Ageable;
@@ -166,6 +168,10 @@ final class CommonProperties{
 	 * @phpstan-var non-empty-list<Property<contravariant FenceGate>>
 	 */
 	public readonly array $fenceGateProperties;
+	/** @var Property[] */
+	public readonly array $fenceConnectionProperties;
+	/** @var Property[] */
+	public readonly array $thinConnectionProperties;
 
 	/**
 	 * @var Property[]
@@ -202,6 +208,22 @@ final class CommonProperties{
 	 * @phpstan-var non-empty-list<Property<contravariant Wall>>
 	 */
 	public readonly array $wallProperties;
+
+	private static function createConnectionProperties(\Closure $getter, \Closure $setter) : array{
+		return array_map(
+			fn(int $facing) => new BoolProperty(
+				match($facing){
+					Facing::NORTH => "minecraft:connection_north",
+					Facing::SOUTH => "minecraft:connection_south",
+					Facing::EAST => "minecraft:connection_east",
+					Facing::WEST => "minecraft:connection_west",
+				},
+				fn($b) => $getter($b, $facing),
+				fn($b, bool $v) => $setter($b, $facing, $v)
+			),
+			[Facing::NORTH, Facing::SOUTH, Facing::EAST, Facing::WEST]
+		);
+	}
 
 	private function __construct(){
 		$vm = ValueMappings::getInstance();
@@ -370,6 +392,15 @@ final class CommonProperties{
 			new BoolProperty(StateNames::OPEN_BIT, fn(FenceGate $b) => $b->isOpen(), fn(FenceGate $b, bool $v) => $b->setOpen($v)),
 			$this->horizontalFacingCardinal,
 		];
+
+		$this->fenceConnectionProperties = self::createConnectionProperties(
+			fn(Fence $b, int $facing) => $b->isConnected($facing),
+			fn(Fence $b, int $facing, bool $v) => null
+		);
+		$this->thinConnectionProperties = self::createConnectionProperties(
+			fn(Thin $b, int $facing) => $b->isConnected($facing),
+			fn(Thin $b, int $facing, bool $v) => null
+		);
 
 		$this->itemFrameProperties = [
 			new DummyProperty(StateNames::ITEM_FRAME_PHOTO_BIT, false), //TODO: not sure what the point of this is
