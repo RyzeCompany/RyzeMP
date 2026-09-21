@@ -74,8 +74,13 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 	public function test12651TrapdoorRawSerializerDiagnostic() : void{
 		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
 		$dictionary = $translator->getBlockStateDictionary();
-		$serializer = GlobalBlockStateHandlers::getSerializer();
-		$data = $serializer->serialize(VanillaBlocks::TRAPDOOR()->getStateId());
+		// This is the exact BlockStateData reported by ItemSerializer in the 1.26.51 login failure.
+		// Construct it directly so this diagnostic does not depend on generated VanillaBlocks methods.
+		$data = BlockStateData::current('minecraft:trapdoor', [
+			'direction' => new IntTag(3),
+			'upside_down_bit' => new ByteTag(0),
+			'open_bit' => new ByteTag(0),
+		]);
 		self::assertSame('minecraft:trapdoor', $data->getName());
 
 		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
