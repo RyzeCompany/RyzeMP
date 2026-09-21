@@ -150,23 +150,26 @@ final class BlockStateDictionary{
 
 		// Bedrock 1.26.51 adds the minecraft:corner=none state to straight stair variants.
 		// PocketMine's stair serializer has no neighbour information and intentionally omits this property.
-		// Treat that specific canonical default as equivalent, without weakening other state comparisons.
+		// It also uses the legacy 0,1,2,3 encoding for weirdo_direction, while the canonical
+		// 1.26.51 palette uses 0,-1,1,-2. Match the canonical state semantically without changing
+		// the serializer or the network representation.
 		if($name === BlockTypeNames::NORMAL_STONE_STAIRS && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
 			$properties = $data->getStates();
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				$corner = $candidate['minecraft:corner'] ?? null;
-				if($corner !== null && $corner->getValue() !== 'none'){
-					continue;
-				}
-				$matches = true;
-				foreach($properties as $propertyName => $value){
-					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $value->getValue()){
-						$matches = false;
-						break;
+			$direction = $properties['weirdo_direction']->getValue();
+			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+			$canonicalDirection = $directionMap[$direction] ?? null;
+			if($canonicalDirection !== null){
+				foreach($lookup as $stateId){
+					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+					$corner = $candidate['minecraft:corner'] ?? null;
+					if($corner !== null && $corner->getValue() !== 'none'){
+						continue;
 					}
-				}
-				if($matches){
+					if(!isset($candidate['weirdo_direction'], $candidate['upside_down_bit']) ||
+						$candidate['weirdo_direction']->getValue() !== $canonicalDirection ||
+						$candidate['upside_down_bit']->getValue() !== $properties['upside_down_bit']->getValue()){
+						continue;
+					}
 					return $stateId;
 				}
 			}
