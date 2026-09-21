@@ -214,8 +214,7 @@ final class BlockStateDictionary{
 		);
 	}
 
-	public static function loadFromString(string $blockPaletteContents, string $metaMapContents) : self{
-		$upgrader = GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader();
+	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, bool $upgrade = true) : self{
 		$metaMap = json_decode($metaMapContents, flags: JSON_THROW_ON_ERROR);
 		if(!is_array($metaMap)){
 			throw new \InvalidArgumentException("Invalid metaMap, expected array for root type, got " . get_debug_type($metaMap));
@@ -241,7 +240,7 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			$newState = $upgrader->upgrade($state);
+			$newState = $upgrade ? GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader()->upgrade($state) : $state;
 			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
 			$entries[$i] = new BlockStateDictionaryEntry($uniqueName, $newState->getStates(), $meta, $newState->equals($state) ? null : $state);
 		}
