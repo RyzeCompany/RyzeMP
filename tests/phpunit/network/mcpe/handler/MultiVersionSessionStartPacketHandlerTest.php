@@ -21,7 +21,9 @@ final class MultiVersionSessionStartPacketHandlerTest extends TestCase{
 			'1.21.20' => [ProtocolInfo::PROTOCOL_1_21_20],
 			'26.30' => [ProtocolInfo::PROTOCOL_1_26_30],
 			'26.40 and 26.44' => [ProtocolInfo::PROTOCOL_1_26_40],
-			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45]
+			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45],
+			'26.50' => [ProtocolInfo::PROTOCOL_1_26_50],
+			'26.51' => [ProtocolInfo::PROTOCOL_1_26_51]
 		];
 	}
 
