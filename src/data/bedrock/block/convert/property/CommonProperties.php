@@ -395,11 +395,11 @@ final class CommonProperties{
 
 		$this->fenceConnectionProperties = self::createConnectionProperties(
 			fn(Fence $b, int $facing) => $b->isConnected($facing),
-			fn(Fence $b, int $facing, bool $v) => null
+			fn(Fence $b, int $facing, bool $v) => $b->setConnected($facing, $v)
 		);
 		$this->thinConnectionProperties = self::createConnectionProperties(
 			fn(Thin $b, int $facing) => $b->isConnected($facing),
-			fn(Thin $b, int $facing, bool $v) => null
+			fn(Thin $b, int $facing, bool $v) => $b->setConnected($facing, $v)
 		);
 
 		$this->itemFrameProperties = [
