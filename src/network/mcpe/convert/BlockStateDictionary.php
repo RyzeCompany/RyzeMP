@@ -149,7 +149,7 @@ final class BlockStateDictionary{
 			return $lookup[$rawProperties];
 		}
 
-		// Bedrock 1.26.51 adds the minecraft:corner=none state to straight stair variants.
+		// Bedrock 1.26.51 adds the minecraft:corner=none state to stair variants.
 		// PocketMine's stair serializer has no neighbour information and intentionally omits this property.
 		// It also uses the legacy 0,1,2,3 encoding for weirdo_direction, while the canonical
 		// 1.26.51 palette uses 0,-1,1,-2. Match the canonical state semantically without changing
@@ -178,7 +178,7 @@ final class BlockStateDictionary{
 
 		// Bedrock 1.26.51 represents the stair weirdo_direction enum as 0, -1, 1, -2,
 		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
-		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
+		// Convert only affected 1.26.51 stair states; the wire value itself is not changed.
 		if(str_ends_with($name, '_stairs') && isset($data->getStates()['weirdo_direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['weirdo_direction']->getValue();
