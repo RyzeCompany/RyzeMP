@@ -106,13 +106,30 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			}
 		}
 
-		self::assertNotEmpty(
+		// A raw match is not expected here: 1.26.51 changed the canonical enum
+		// representation of trapdoor "direction" from PocketMine's 0..3 encoding to
+		// the canonical 0,-1,1,-2 encoding. The dictionary must resolve this
+		// semantically instead of requiring an identical raw NBT key.
+		self::assertSame(
+			[],
 			$rawMatches,
-			"1.26.51 trapdoor RAW mapping mismatch.\n" .
+			"Trapdoor unexpectedly has a raw 0..3 match in the 1.26.51 palette.\n" .
 			"Serializer NBT: " . $data->toNbt() . "\n" .
-			"Serializer raw: " . bin2hex($serializerRaw) . "\n" .
+			"Serializer raw: " . bin2hex($serializerRaw)
+		);
+
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			"1.26.51 trapdoor semantic mapping failed.\n" .
+			"Serializer NBT: " . $data->toNbt() . "\n" .
 			"Canonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
 		);
+
+		$mapped = $dictionary->getStates()[$lookup];
+		$mappedStates = $mapped->generateCurrentStateData()->getStates();
+		self::assertSame(-2, $mappedStates['direction']->getValue());
+		self::assertSame(3, $mapped->getMeta());
 	}
 
 	public function test12651KnownFailingSerializerStatesResolve() : void{
