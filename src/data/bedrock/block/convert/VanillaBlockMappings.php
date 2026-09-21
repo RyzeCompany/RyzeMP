@@ -391,7 +391,7 @@ final class VanillaBlockMappings{
 		$reg->mapSimple(Blocks::NETHERITE(), Ids::NETHERITE_BLOCK);
 		$reg->mapSimple(Blocks::NETHERRACK(), Ids::NETHERRACK);
 		$reg->mapSimple(Blocks::NETHER_BRICKS(), Ids::NETHER_BRICK);
-		$reg->mapSimple(Blocks::NETHER_BRICK_FENCE(), Ids::NETHER_BRICK_FENCE);
+		$reg->mapModel(Model::create(Blocks::NETHER_BRICK_FENCE(), Ids::NETHER_BRICK_FENCE)->properties($commonProperties->fenceConnectionProperties));
 		$reg->mapSimple(Blocks::NETHER_GOLD_ORE(), Ids::NETHER_GOLD_ORE);
 		$reg->mapSimple(Blocks::NETHER_QUARTZ_ORE(), Ids::QUARTZ_ORE);
 		$reg->mapSimple(Blocks::NETHER_REACTOR_CORE(), Ids::NETHERREACTOR);
@@ -673,7 +673,10 @@ final class VanillaBlockMappings{
 			->properties([$commonProperties->slabPositionProperty])
 		);
 
-		$reg->mapFlattenedId(FlattenedIdModel::create(Blocks::COPPER_BARS())->idComponents([...$commonProperties->copperIdPrefixes, "copper_bars"]));
+		$reg->mapFlattenedId(FlattenedIdModel::create(Blocks::COPPER_BARS())
+			->idComponents([...$commonProperties->copperIdPrefixes, "copper_bars"])
+			->properties($commonProperties->thinConnectionProperties)
+		);
 		$reg->mapFlattenedId(FlattenedIdModel::create(Blocks::COPPER_CHAIN())
 			->idComponents([...$commonProperties->copperIdPrefixes, "copper_chain"])
 			->properties([$commonProperties->pillarAxis])
@@ -1043,7 +1046,7 @@ final class VanillaBlockMappings{
 			[Blocks::CRIMSON_FENCE(), Ids::CRIMSON_FENCE],
 			[Blocks::WARPED_FENCE(), Ids::WARPED_FENCE]
 		] as [$block, $id]){
-			$reg->mapSimple($block, $id);
+			$reg->mapModel(Model::create($block, $id)->properties($commonProperties->fenceConnectionProperties));
 		}
 
 		foreach([
