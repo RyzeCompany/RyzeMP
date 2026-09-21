@@ -53,14 +53,14 @@ jobs:
           if-no-files-found: error
 
       - name: Rename phar
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: mv PocketMine-MP.phar PocketMine-MP_${{ github.ref_name }}.phar
+        run: mv PocketMine-MP.phar PocketMine-MP_${{ github.sha }}.phar
 
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: PocketMine-MP_${{ github.ref_name }}.phar
+          tag_name: build-${{ github.sha }}
+          name: PocketMine-MP build ${{ github.sha }}
+          files: PocketMine-MP_${{ github.sha }}.phar
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
