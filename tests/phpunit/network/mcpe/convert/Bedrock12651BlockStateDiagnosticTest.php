@@ -22,7 +22,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		$checked = 0;
 		foreach($dictionary->getStates() as $stateId => $entry){
 			$name = $entry->getStateName();
-			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall' && $name !== 'minecraft:waxed_copper_trapdoor' && $name !== 'minecraft:normal_stone_stairs'){
+			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall' && $name !== 'minecraft:waxed_copper_trapdoor' && $name !== 'minecraft:normal_stone_stairs' && $name !== 'minecraft:stone_stairs'){
 				continue;
 			}
 
@@ -84,6 +84,10 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 				'upside_down_bit' => new ByteTag(0),
 				'weirdo_direction' => new IntTag(3),
 			]),
+			BlockStateData::current('minecraft:stone_stairs', [
+				'upside_down_bit' => new ByteTag(0),
+				'weirdo_direction' => new IntTag(3),
+			]),
 		];
 
 		foreach($states as $data){
@@ -131,6 +135,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		foreach([
 			'minecraft:black_candle' => VanillaBlocks::DYED_CANDLE()->setColor(DyeColor::BLACK),
 			'minecraft:cobblestone_wall' => VanillaBlocks::COBBLESTONE_WALL(),
+			'minecraft:stone_stairs' => VanillaBlocks::STONE_STAIRS(),
 		] as $name => $block){
 			$data = $serializer->serialize($block->getStateId());
 			$lookup = $dictionary->lookupStateIdFromData($data);
