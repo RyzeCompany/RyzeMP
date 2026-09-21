@@ -171,6 +171,22 @@ final class BlockStateDictionary{
 			}
 		}
 
+		// Bedrock 1.26.51 represents the stair weirdo_direction enum as 0, -1, 1, -2,
+		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
+		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
+		if($name === BlockTypeNames::NORMAL_STONE_STAIRS && isset($data->getStates()['weirdo_direction'])){
+			$properties = $data->getStates();
+			$direction = $properties['weirdo_direction']->getValue();
+			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+			if(isset($directionMap[$direction])){
+				$properties['weirdo_direction'] = new \pocketmine\nbt\tag\IntTag($directionMap[$direction]);
+				$mappedRawProperties = BlockStateDictionaryEntry::encodeStateProperties($properties);
+				if(isset($lookup[$mappedRawProperties])){
+					return $lookup[$mappedRawProperties];
+				}
+			}
+		}
+
 		// Bedrock 1.26.51 represents the trapdoor direction enum as 0, -1, 1, -2,
 		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
 		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
