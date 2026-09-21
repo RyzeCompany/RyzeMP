@@ -92,6 +92,8 @@ class Thin extends Transparent{
 
 	public function isConnected(int $facing) : bool{ return isset($this->connections[$facing]); }
 
+	public function setConnected(int $facing, bool $connected) : self{ if($connected){$this->connections[$facing]=true;}else{unset($this->connections[$facing]);} return $this; }
+
 	public function getSupportType(int $facing) : SupportType{
 		return SupportType::NONE;
 	}
