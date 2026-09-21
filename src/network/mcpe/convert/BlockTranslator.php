@@ -42,6 +42,10 @@ final class BlockTranslator{
 	public const BLOCK_STATE_META_MAP_PATH = 1;
 
 	private const PATHS = [
+		ProtocolInfo::PROTOCOL_1_26_51 => [
+			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.51',
+			self::BLOCK_STATE_META_MAP_PATH => '-1.26.51',
+		],
 		ProtocolInfo::PROTOCOL_1_26_45 => [
 			self::CANONICAL_BLOCK_STATES_PATH => '',
 			self::BLOCK_STATE_META_MAP_PATH => '',
