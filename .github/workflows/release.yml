@@ -47,7 +47,7 @@ jobs:
       - name: Validate phar
         run: |
           test -s PocketMine-MP.phar
-          php -r '$p = new Phar("PocketMine-MP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 12582912){ fwrite(STDERR, "PHAR is unexpectedly large (>12 MiB)" . PHP_EOL); exit(1); }'
+          php -r '$p = new Phar("PocketMine-MP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
 
       - name: Upload build artifact
         continue-on-error: true
