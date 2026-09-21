@@ -49,6 +49,22 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			}
 		}
 		self::assertNotEmpty($candidates);
+
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$matchingRawStateIds = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() === 'minecraft:black_candle' && $entry->getRawStateProperties() === $serializerRaw){
+				$matchingRawStateIds[] = $stateId;
+			}
+		}
+		self::assertNotEmpty(
+			$matchingRawStateIds,
+			'Serializer raw properties do not match any canonical 1.26.51 black_candle state. Serializer=' . bin2hex($serializerRaw) .
+			'; candidates=' . json_encode(array_map(fn($stateId) => [
+				'id' => $stateId,
+				'raw' => bin2hex($dictionary->getStates()[$stateId]->getRawStateProperties()),
+			], array_keys($candidates)), JSON_THROW_ON_ERROR)
+		);
 		self::assertContains($data->toNbt(), array_values($candidates));
 	}
 
