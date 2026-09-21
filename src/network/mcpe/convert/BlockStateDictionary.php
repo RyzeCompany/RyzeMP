@@ -192,46 +192,34 @@ final class BlockStateDictionary{
 			}
 		}
 
-		// Bedrock trapdoor direction uses the legacy 0..3 enum in 1.26.51.
-		// Unlike stairs, it is NOT encoded using the -2,-1,0,1 weirdo_direction enum.
-		// Match the canonical state semantically to avoid depending on NBT tag encoding.
+		// Bedrock trapdoor direction is serialized by PocketMine using the legacy 0..3
+		// horizontal-facing enum, while the 1.26.51 canonical palette stores the same
+		// direction property using the -2,-1,0,1 enum. This is the same enum conversion
+		// used by stairs, but the property name here is "direction".
 		if((str_ends_with($name, ':trapdoor') || str_ends_with($name, '_trapdoor')) && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['direction']->getValue();
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $direction){
-					continue;
-				}
-				$matches = true;
-				foreach($properties as $propertyName => $property){
-					if($propertyName === 'direction'){
+			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+			$canonicalDirection = $directionMap[$direction] ?? null;
+			if($canonicalDirection !== null){
+				foreach($lookup as $stateId){
+					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
 						continue;
 					}
-					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-						$matches = false;
-						break;
+					$matches = true;
+					foreach($properties as $propertyName => $property){
+						if($propertyName === 'direction'){
+							continue;
+						}
+						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+							$matches = false;
+							break;
+						}
 					}
-				}
-				if($matches){
-					return $stateId;
-				}
-			}
-		}
-
-		// Some 1.26.51 canonical trapdoor entries may carry equivalent state values through
-		// an upgraded palette representation which doesn't produce the same property encoding.
-		// Trapdoor metadata is still the authoritative legacy encoding: direction (0..3),
-		// upside_down_bit (bit 2) and open_bit (bit 3). Use it as a final semantic fallback.
-		if((str_ends_with($name, ':trapdoor') || str_ends_with($name, '_trapdoor')) &&
-			isset($data->getStates()['direction'], $data->getStates()['upside_down_bit'], $data->getStates()['open_bit'])){
-			$properties = $data->getStates();
-			$meta = $properties['direction']->getValue() |
-				($properties['upside_down_bit']->getValue() << 2) |
-				($properties['open_bit']->getValue() << 3);
-			foreach($lookup as $stateId){
-				if($this->states[$stateId]->getMeta() === $meta){
-					return $stateId;
+					if($matches){
+						return $stateId;
+					}
 				}
 			}
 		}
