@@ -136,11 +136,41 @@ final class BlockStateDictionary{
 		$name = $data->getName();
 
 		$lookup = $this->stateDataToStateIdLookup[$name] ?? null;
-		return match(true){
-			$lookup === null => null,
-			is_int($lookup) => $lookup,
-			is_array($lookup) => $lookup[BlockStateDictionaryEntry::encodeStateProperties($data->getStates())] ?? null
-		};
+		if($lookup === null){
+			return null;
+		}
+		if(is_int($lookup)){
+			return $lookup;
+		}
+
+		$rawProperties = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		if(isset($lookup[$rawProperties])){
+			return $lookup[$rawProperties];
+		}
+
+		// Bedrock 1.26.40+ exposes cardinal connection states for fences and thin blocks.
+		// Item/blockstate serialization has no world neighbours, so these blocks serialize without
+		// connection properties. Resolve that stateless representation to the canonical no-connection state.
+		if($data->getStates() === []){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if($candidate === []){
+					continue;
+				}
+				$allConnectionsFalse = true;
+				foreach($candidate as $propertyName => $value){
+					if(!str_starts_with($propertyName, "minecraft:connection_") || $value->getValue() !== 0){
+						$allConnectionsFalse = false;
+						break;
+					}
+				}
+				if($allConnectionsFalse){
+					return $stateId;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**
