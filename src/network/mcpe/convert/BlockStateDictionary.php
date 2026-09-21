@@ -155,7 +155,8 @@ final class BlockStateDictionary{
 			$properties = $data->getStates();
 			foreach($lookup as $stateId){
 				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(($candidate['minecraft:corner'] ?? null)?->getValue() !== 'none'){
+				$corner = $candidate['minecraft:corner'] ?? null;
+				if($corner !== null && $corner->getValue() !== 'none'){
 					continue;
 				}
 				$matches = true;
