@@ -71,6 +71,45 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertNotEmpty($matchingRawStateIds, 'Serializer state must resolve to a canonical 1.26.51 runtime ID');
 	}
 
+	public function test12651TrapdoorRawSerializerDiagnostic() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$dictionary = $translator->getBlockStateDictionary();
+		$serializer = GlobalBlockStateHandlers::getSerializer();
+		$data = $serializer->serialize(VanillaBlocks::TRAPDOOR()->getStateId());
+		self::assertSame('minecraft:trapdoor', $data->getName());
+
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$candidates = [];
+		$rawMatches = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() !== 'minecraft:trapdoor'){
+				continue;
+			}
+			$current = $entry->generateCurrentStateData();
+			$record = [
+				'id' => $stateId,
+				'meta' => $entry->getMeta(),
+				'raw' => bin2hex($entry->getRawStateProperties()),
+				'states' => array_map(
+					fn($tag) => get_class($tag) . ':' . (string) $tag->getValue(),
+					$current->getStates()
+				),
+			];
+			$candidates[] = $record;
+			if($entry->getRawStateProperties() === $serializerRaw){
+				$rawMatches[] = $stateId;
+			}
+		}
+
+		self::assertNotEmpty(
+			$rawMatches,
+			"1.26.51 trapdoor RAW mapping mismatch.\n" .
+			"Serializer NBT: " . $data->toNbt() . "\n" .
+			"Serializer raw: " . bin2hex($serializerRaw) . "\n" .
+			"Canonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
+		);
+	}
+
 	public function test12651KnownFailingSerializerStatesResolve() : void{
 		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
 
