@@ -38,6 +38,7 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function json_decode;
+use function str_ends_with;
 use const JSON_THROW_ON_ERROR;
 
 /**
@@ -153,7 +154,7 @@ final class BlockStateDictionary{
 		// It also uses the legacy 0,1,2,3 encoding for weirdo_direction, while the canonical
 		// 1.26.51 palette uses 0,-1,1,-2. Match the canonical state semantically without changing
 		// the serializer or the network representation.
-		if(($name === BlockTypeNames::NORMAL_STONE_STAIRS || $name === BlockTypeNames::STONE_STAIRS) && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
+		if(str_ends_with($name, '_stairs') && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['weirdo_direction']->getValue();
 			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
@@ -178,7 +179,7 @@ final class BlockStateDictionary{
 		// Bedrock 1.26.51 represents the stair weirdo_direction enum as 0, -1, 1, -2,
 		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
 		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
-		if(($name === BlockTypeNames::NORMAL_STONE_STAIRS || $name === BlockTypeNames::STONE_STAIRS) && isset($data->getStates()['weirdo_direction'])){
+		if(str_ends_with($name, '_stairs') && isset($data->getStates()['weirdo_direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['weirdo_direction']->getValue();
 			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
