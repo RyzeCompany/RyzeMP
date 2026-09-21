@@ -6,6 +6,7 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\block\utils\DyeColor;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 
@@ -41,7 +42,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		$serializer = GlobalBlockStateHandlers::getSerializer();
 
 		foreach([
-			'minecraft:black_candle' => VanillaBlocks::BLACK_CANDLE(),
+			'minecraft:black_candle' => VanillaBlocks::DYED_CANDLE()->setColor(DyeColor::BLACK),
 			'minecraft:cobblestone_wall' => VanillaBlocks::COBBLESTONE_WALL(),
 		] as $name => $block){
 			$data = $serializer->serialize($block->getStateId());
