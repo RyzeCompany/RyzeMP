@@ -95,6 +95,8 @@ class Fence extends Transparent{
 		return $bbs;
 	}
 
+	public function isConnected(int $facing) : bool{ return isset($this->connections[$facing]); }
+
 	public function getSupportType(int $facing) : SupportType{
 		return Facing::axis($facing) === Axis::Y ? SupportType::CENTER : SupportType::NONE;
 	}
