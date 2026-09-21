@@ -2,7 +2,7 @@
 
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____
+ *  ____            _        _   __  __ _                  __  __ ____ 
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
  * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
@@ -167,6 +167,22 @@ final class BlockStateDictionary{
 				}
 				if($matches){
 					return $stateId;
+				}
+			}
+		}
+
+		// Bedrock 1.26.51 represents the trapdoor direction enum as 0, -1, 1, -2,
+		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
+		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
+		if($name === BlockTypeNames::WAXED_COPPER_TRAPDOOR && isset($data->getStates()['direction'])){
+			$properties = $data->getStates();
+			$direction = $properties['direction']->getValue();
+			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+			if(isset($directionMap[$direction])){
+				$properties['direction'] = new \pocketmine\nbt\tag\IntTag($directionMap[$direction]);
+				$mappedRawProperties = BlockStateDictionaryEntry::encodeStateProperties($properties);
+				if(isset($lookup[$mappedRawProperties])){
+					return $lookup[$mappedRawProperties];
 				}
 			}
 		}
