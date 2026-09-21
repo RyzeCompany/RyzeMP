@@ -136,46 +136,11 @@ final class BlockStateDictionary{
 		$name = $data->getName();
 
 		$lookup = $this->stateDataToStateIdLookup[$name] ?? null;
-		if($lookup === null){
-			return null;
-		}
-		if(is_int($lookup)){
-			return $lookup;
-		}
-
-		$rawProperties = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
-		if(isset($lookup[$rawProperties])){
-			return $lookup[$rawProperties];
-		}
-
-		// Some vanilla data sources have historically differed in the concrete NBT numeric tag type used for
-		// blockstate properties (for example Byte vs Int), even though the semantic value is identical.
-		// The wire blockstate value is what matters here, so accept equivalent integral values as a fallback.
-		foreach($lookup as $stateId){
-			$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-			$states = $data->getStates();
-			if(count($candidate) !== count($states)){
-				continue;
-			}
-			$matches = true;
-			foreach($states as $propertyName => $value){
-				if(!isset($candidate[$propertyName])){
-					$matches = false;
-					break;
-				}
-				$candidateValue = $candidate[$propertyName]->getValue();
-				$inputValue = $value->getValue();
-				if($candidateValue !== $inputValue && !(is_int($candidateValue) && is_int($inputValue) && $candidateValue === $inputValue)){
-					$matches = false;
-					break;
-				}
-			}
-			if($matches){
-				return $stateId;
-			}
-		}
-
-		return null;
+		return match(true){
+			$lookup === null => null,
+			is_int($lookup) => $lookup,
+			is_array($lookup) => $lookup[BlockStateDictionaryEntry::encodeStateProperties($data->getStates())] ?? null
+		};
 	}
 
 	/**
@@ -246,10 +211,7 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			// Canonical palettes from the current Bedrock version are already in the current blockstate schema.
-			// Running the historical upgrader on them can rewrite otherwise valid vanilla state properties.
-			// Historical palettes still need upgrading to the current schema.
-			$newState = $state->getVersion() === BlockStateData::CURRENT_VERSION ? $state : $upgrader->upgrade($state);
+			$newState = $upgrader->upgrade($state);
 			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
 			$entries[$i] = new BlockStateDictionaryEntry($uniqueName, $newState->getStates(), $meta, $newState->equals($state) ? null : $state);
 		}
