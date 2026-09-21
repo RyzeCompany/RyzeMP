@@ -192,34 +192,29 @@ final class BlockStateDictionary{
 			}
 		}
 
-		// Bedrock 1.26.51 represents the trapdoor direction enum as 0, -1, 1, -2,
-		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
-		// Match the canonical state semantically instead of re-encoding the whole property set,
-		// since the canonical palette may use a different NBT tag representation for the enum.
+		// Bedrock trapdoor direction uses the legacy 0..3 enum in 1.26.51.
+		// Unlike stairs, it is NOT encoded using the -2,-1,0,1 weirdo_direction enum.
+		// Match the canonical state semantically to avoid depending on NBT tag encoding.
 		if(str_ends_with($name, '_trapdoor') && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['direction']->getValue();
-			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			$canonicalDirection = $directionMap[$direction] ?? null;
-			if($canonicalDirection !== null){
-				foreach($lookup as $stateId){
-					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $direction){
+					continue;
+				}
+				$matches = true;
+				foreach($properties as $propertyName => $property){
+					if($propertyName === 'direction'){
 						continue;
 					}
-					$matches = true;
-					foreach($properties as $propertyName => $property){
-						if($propertyName === 'direction'){
-							continue;
-						}
-						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-							$matches = false;
-							break;
-						}
+					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+						$matches = false;
+						break;
 					}
-					if($matches){
-						return $stateId;
-					}
+				}
+				if($matches){
+					return $stateId;
 				}
 			}
 		}
