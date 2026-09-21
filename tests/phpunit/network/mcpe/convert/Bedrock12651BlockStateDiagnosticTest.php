@@ -7,6 +7,9 @@ namespace pocketmine\network\mcpe\convert;
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\block\utils\DyeColor;
+use pocketmine\data\bedrock\block\BlockStateData;
+use pocketmine\nbt\tag\ByteTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 
@@ -19,7 +22,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		$checked = 0;
 		foreach($dictionary->getStates() as $stateId => $entry){
 			$name = $entry->getStateName();
-			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall'){
+			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall' && $name !== 'minecraft:waxed_copper_trapdoor' && $name !== 'minecraft:normal_stone_stairs'){
 				continue;
 			}
 
@@ -66,6 +69,31 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			], array_keys($candidates)), JSON_THROW_ON_ERROR)
 		);
 		self::assertNotEmpty($matchingRawStateIds, 'Serializer state must resolve to a canonical 1.26.51 runtime ID');
+	}
+
+
+	public function test12651KnownFailingSerializerStatesResolve() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+
+		$states = [
+			BlockStateData::current('minecraft:waxed_copper_trapdoor', [
+				'direction' => new IntTag(3),
+				'upside_down_bit' => new ByteTag(0),
+				'open_bit' => new ByteTag(0),
+			]),
+			BlockStateData::current('minecraft:normal_stone_stairs', [
+				'upside_down_bit' => new ByteTag(0),
+				'weirdo_direction' => new IntTag(3),
+			]),
+		];
+
+		foreach($states as $data){
+			$lookup = $dictionary->lookupStateIdFromData($data);
+			self::assertNotNull(
+				$lookup,
+				'Known 1.26.51 serializer state is unmapped: ' . $data->toNbt()
+			);
+		}
 	}
 
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
