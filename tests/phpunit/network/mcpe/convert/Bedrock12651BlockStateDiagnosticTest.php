@@ -36,6 +36,19 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertGreaterThan(0, $checked, 'Neither affected block was found in the 1.26.51 dictionary');
 	}
 
+	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
+		$typeConverter = TypeConverter::getInstance(ProtocolInfo::PROTOCOL_1_26_51);
+		$itemTranslator = $typeConverter->getItemTranslator();
+
+		foreach([
+			'minecraft:black_candle' => VanillaBlocks::DYED_CANDLE()->setColor(DyeColor::BLACK)->asItem(),
+			'minecraft:cobblestone_wall' => VanillaBlocks::COBBLESTONE_WALL()->asItem(),
+		] as $name => $item){
+			$result = $itemTranslator->toNetworkId($item);
+			self::assertNotNull($result[2], 'No network runtime ID was produced for ' . $name);
+		}
+	}
+
 	public function testPocketMineSerializerOutputMatches12651Dictionary() : void{
 		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
 		$dictionary = $translator->getBlockStateDictionary();
