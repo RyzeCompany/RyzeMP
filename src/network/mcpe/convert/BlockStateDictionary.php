@@ -194,8 +194,8 @@ final class BlockStateDictionary{
 
 		// Bedrock 1.26.51 represents the trapdoor direction enum as 0, -1, 1, -2,
 		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
-		// Convert only this affected 1.26.51 state family; the wire value itself is not changed.
-		if($name === BlockTypeNames::WAXED_COPPER_TRAPDOOR && isset($data->getStates()['direction'])){
+		// Convert affected 1.26.51 trapdoor states; the wire value itself is not changed.
+		if(str_ends_with($name, '_trapdoor') && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
 			$direction = $properties['direction']->getValue();
 			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
