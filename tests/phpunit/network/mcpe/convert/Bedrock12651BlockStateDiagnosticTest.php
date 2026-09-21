@@ -22,7 +22,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		$checked = 0;
 		foreach($dictionary->getStates() as $stateId => $entry){
 			$name = $entry->getStateName();
-			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall' && $name !== 'minecraft:waxed_copper_trapdoor' && $name !== 'minecraft:normal_stone_stairs' && $name !== 'minecraft:stone_stairs'){
+			if($name !== 'minecraft:black_candle' && $name !== 'minecraft:cobblestone_wall' && $name !== 'minecraft:waxed_copper_trapdoor' && $name !== 'minecraft:normal_stone_stairs' && $name !== 'minecraft:stone_stairs' && $name !== 'minecraft:mossy_cobblestone_stairs'){
 				continue;
 			}
 
@@ -85,6 +85,10 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 				'weirdo_direction' => new IntTag(3),
 			]),
 			BlockStateData::current('minecraft:stone_stairs', [
+				'upside_down_bit' => new ByteTag(0),
+				'weirdo_direction' => new IntTag(3),
+			]),
+			BlockStateData::current('minecraft:mossy_cobblestone_stairs', [
 				'upside_down_bit' => new ByteTag(0),
 				'weirdo_direction' => new IntTag(3),
 			]),
