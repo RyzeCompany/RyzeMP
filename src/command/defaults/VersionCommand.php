@@ -52,7 +52,7 @@ class VersionCommand extends VanillaCommand{
 
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
-			$sender->sendMessage(TextFormat::colorize("&r&l&6SERVER INFO&r" . PHP_EOL . "&r&4PocketMine by Mykoss" . PHP_EOL . "&r&gVersion&7: &81.21.100 - 1.26.45"));
+			$sender->sendMessage(TextFormat::colorize("&r&l&6SERVER INFO&r" . PHP_EOL . "&r&4PocketMine by Mykoss" . PHP_EOL . "&r&gVersion&7: &81.21.100 - 1.26.51"));
 			/*$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_serverSoftwareName(
 				TextFormat::GREEN . VersionInfo::NAME . TextFormat::RESET
 			));
