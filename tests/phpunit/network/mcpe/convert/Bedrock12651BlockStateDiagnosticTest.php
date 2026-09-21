@@ -71,7 +71,6 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertNotEmpty($matchingRawStateIds, 'Serializer state must resolve to a canonical 1.26.51 runtime ID');
 	}
 
-
 	public function test12651KnownFailingSerializerStatesResolve() : void{
 		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
 
@@ -89,6 +88,21 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 
 		foreach($states as $data){
 			$lookup = $dictionary->lookupStateIdFromData($data);
+			if($lookup === null && $data->getName() === 'minecraft:waxed_copper_trapdoor'){
+				$candidates = [];
+				foreach($dictionary->getStates() as $stateId => $entry){
+					if($entry->getStateName() === $data->getName()){
+						$candidates[$stateId] = [
+							'states' => array_map(
+								fn($tag) => get_class($tag) . ':' . $tag->getValue(),
+								$entry->generateCurrentStateData()->getStates()
+							),
+							'raw' => bin2hex($entry->getRawStateProperties()),
+						];
+					}
+				}
+				self::fail('Waxed copper trapdoor candidates in loaded 1.26.51 dictionary: ' . json_encode($candidates, JSON_THROW_ON_ERROR));
+			}
 			self::assertNotNull(
 				$lookup,
 				'Known 1.26.51 serializer state is unmapped: ' . $data->toNbt()
