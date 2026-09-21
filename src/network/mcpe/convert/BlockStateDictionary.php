@@ -211,7 +211,10 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			$newState = $upgrader->upgrade($state);
+			// Canonical palettes from the current Bedrock version are already in the current blockstate schema.
+			// Running the historical upgrader on them can rewrite otherwise valid vanilla state properties.
+			// Historical palettes still need upgrading to the current schema.
+			$newState = $state->getVersion() === BlockStateData::CURRENT_VERSION ? $state : $upgrader->upgrade($state);
 			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
 			$entries[$i] = new BlockStateDictionaryEntry($uniqueName, $newState->getStates(), $meta, $newState->equals($state) ? null : $state);
 		}
