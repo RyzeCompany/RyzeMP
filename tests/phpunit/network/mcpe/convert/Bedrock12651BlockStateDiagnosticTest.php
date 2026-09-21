@@ -65,7 +65,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 				'raw' => bin2hex($dictionary->getStates()[$stateId]->getRawStateProperties()),
 			], array_keys($candidates)), JSON_THROW_ON_ERROR)
 		);
-		self::assertContains($data->toNbt(), array_values($candidates));
+		self::assertNotEmpty($matchingRawStateIds, 'Serializer state must resolve to a canonical 1.26.51 runtime ID');
 	}
 
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
