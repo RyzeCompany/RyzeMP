@@ -2,6 +2,8 @@ name: Build and Release Phar
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -24,17 +26,37 @@ jobs:
           tools: composer
 
       - name: Install dependencies
-        run: composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+        run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs
         env:
           COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.SUBMODULE_TOKEN }}"}}'
 
+      - name: Validate PHP syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find src generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+
       - name: Build phar
-        run: php build/server-phar.php
+        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP.phar
+
+      - name: Validate phar
+        run: |
+          test -s PocketMine-MP.phar
+          php -r '$p = new Phar("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL;'
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketMine-MP-phar-${{ github.sha }}
+          path: PocketMine-MP.phar
+          if-no-files-found: error
 
       - name: Rename phar
+        if: startsWith(github.ref, 'refs/tags/v')
         run: mv PocketMine-MP.phar PocketMine-MP_${{ github.ref_name }}.phar
 
       - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: PocketMine-MP_${{ github.ref_name }}.phar
