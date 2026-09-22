@@ -25,6 +25,16 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\RuntimeBlockStateRegistry;
+use pocketmine\nbt\LittleEndianNbtSerializer;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\TreeRoot;
+use pocketmine\data\bedrock\block\BlockStateData;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\utils\Utils;
+use function hash;
+use function hexdec;
+use function intval;
+use function ksort;
 
 class BlockTranslatorTest extends TestCase{
 
@@ -37,4 +47,27 @@ class BlockTranslatorTest extends TestCase{
 			$blockTranslator->internalIdToNetworkId($state->getStateId());
 		}
 	}
+
+	public function test12651UsesFNV1a32BlockStateHashes() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$internalStateId = \pocketmine\block\VanillaBlocks::STONE()->getStateId();
+		$data = $translator->internalIdToNetworkStateData($internalStateId);
+		$states = $data->getStates();
+		ksort($states, SORT_STRING);
+		$statesTag = CompoundTag::create();
+		foreach(Utils::stringifyKeys($states) as $key => $state){
+			$statesTag->setTag($key, $state);
+		}
+		$tag = CompoundTag::create()
+			->setString(BlockStateData::TAG_NAME, $data->getName())
+			->setTag(BlockStateData::TAG_STATES, $statesTag);
+		$binaryNbt = (new LittleEndianNbtSerializer())->write(new TreeRoot($tag));
+		$expected = intval(hexdec(hash("fnv1a32", $binaryNbt)));
+		if($expected > 0x7fffffff){
+			$expected -= 0x100000000;
+		}
+		self::assertSame($expected, $translator->internalIdToNetworkId($internalStateId));
+		self::assertNotSame($translator->getBlockStateDictionary()->lookupStateIdFromData($data), $expected);
+	}
+
 }

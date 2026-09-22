@@ -28,10 +28,18 @@ use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockStateSerializeException;
 use pocketmine\data\bedrock\block\BlockStateSerializer;
 use pocketmine\data\bedrock\block\BlockTypeNames;
+use pocketmine\nbt\LittleEndianNbtSerializer;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\TreeRoot;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Filesystem;
+use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
+use function hexdec;
+use function hash;
+use function intval;
+use function ksort;
 use function str_replace;
 
 /**
@@ -174,6 +182,8 @@ final class BlockTranslator{
 	 */
 	private array $networkIdCache = [];
 
+	private bool $useHashedNetworkIds = false;
+
 	/** Used when a blockstate can't be correctly serialized (e.g. because it's unknown) */
 	private BlockStateData $fallbackStateData;
 	private int $fallbackStateId;
@@ -181,10 +191,12 @@ final class BlockTranslator{
 	public static function loadFromProtocolId(int $protocolId) : BlockTranslator{
 		$canonicalBlockStatesRaw = Filesystem::fileGetContents(str_replace(".nbt", self::PATHS[$protocolId][self::CANONICAL_BLOCK_STATES_PATH] . ".nbt", BedrockDataFiles::CANONICAL_BLOCK_STATES_NBT));
 		$metaMappingRaw = Filesystem::fileGetContents(str_replace(".json", self::PATHS[$protocolId][self::BLOCK_STATE_META_MAP_PATH] . ".json", BedrockDataFiles::BLOCK_STATE_META_MAP_JSON));
-		return new self(
+		$translator = new self(
 			BlockStateDictionary::loadFromString($canonicalBlockStatesRaw, $metaMappingRaw),
 			GlobalBlockStateHandlers::getSerializer(),
 		);
+		$translator->useHashedNetworkIds = $protocolId >= ProtocolInfo::PROTOCOL_1_26_50;
+		return $translator;
 	}
 
 	public function __construct(
@@ -203,28 +215,64 @@ final class BlockTranslator{
 
 		try{
 			$blockStateData = $this->blockStateSerializer->serialize($internalStateId);
-
-			$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
-			if($networkId === null){
-				throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
-			}
+			$networkId = $this->internalStateDataToNetworkId($blockStateData);
 		}catch(BlockStateSerializeException){
 			//TODO: this will swallow any error caused by invalid block properties; this is not ideal, but it should be
 			//covered by unit tests, so this is probably a safe assumption.
-			$networkId = $this->fallbackStateId;
+			$networkId = $this->useHashedNetworkIds ? $this->hashBlockStateData($this->fallbackStateData) : $this->fallbackStateId;
 		}
 
 		return $this->networkIdCache[$internalStateId] = $networkId;
 	}
 
+	private function internalStateDataToNetworkId(BlockStateData $blockStateData) : int{
+		if($this->useHashedNetworkIds){
+			return $this->hashBlockStateData($blockStateData);
+		}
+
+		$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
+		if($networkId === null){
+			throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+		}
+		return $networkId;
+	}
+
+	private function hashBlockStateData(BlockStateData $blockStateData) : int{
+		$states = $blockStateData->getStates();
+		ksort($states, SORT_STRING);
+		$statesTag = CompoundTag::create();
+		foreach(Utils::stringifyKeys($states) as $key => $state){
+			$statesTag->setTag($key, $state);
+		}
+		$tag = CompoundTag::create()
+			->setString(BlockStateData::TAG_NAME, $blockStateData->getName())
+			->setTag(BlockStateData::TAG_STATES, $statesTag);
+		$binaryNbt = (new LittleEndianNbtSerializer())->write(new TreeRoot($tag));
+		$hash = intval(hexdec(hash("fnv1a32", $binaryNbt)));
+		return $hash > 0x7fffffff ? $hash - 0x100000000 : $hash;
+	}
+
 	/**
 	 * Looks up the network state data associated with the given internal state ID.
 	 */
+	private function getCanonicalNetworkId(int $internalStateId) : int{
+		try{
+			$blockStateData = $this->blockStateSerializer->serialize($internalStateId);
+			$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
+			if($networkId === null){
+				throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+			}
+			return $networkId;
+		}catch(BlockStateSerializeException){
+			return $this->fallbackStateId;
+		}
+	}
+
 	public function internalIdToNetworkStateData(int $internalStateId) : BlockStateData{
 		//we don't directly use the blockstate serializer here - we can't assume that the network blockstate NBT is the
 		//same as the disk blockstate NBT, in case we decide to have different world version than network version (or in
 		//case someone wants to implement multi version).
-		$networkRuntimeId = $this->internalIdToNetworkId($internalStateId);
+		$networkRuntimeId = $this->getCanonicalNetworkId($internalStateId);
 
 		return $this->blockStateDictionary->generateDataFromStateId($networkRuntimeId) ?? throw new AssumptionFailedError("We just looked up this state ID, so it must exist");
 	}
@@ -236,7 +284,7 @@ final class BlockTranslator{
 		//we don't directly use the blockstate serializer here - we can't assume that the network blockstate NBT is the
 		//same as the disk blockstate NBT, in case we decide to have different world version than network version (or in
 		//case someone wants to implement multi version).
-		$networkRuntimeId = $this->internalIdToNetworkId($internalStateId);
+		$networkRuntimeId = $this->getCanonicalNetworkId($internalStateId);
 
 		return $this->blockStateDictionary->generateCurrentDataFromStateId($networkRuntimeId) ?? throw new AssumptionFailedError("We just looked up this state ID, so it must exist");
 	}
