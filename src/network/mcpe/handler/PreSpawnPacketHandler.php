@@ -29,6 +29,7 @@ use pocketmine\network\mcpe\cache\StaticPacketCache;
 use pocketmine\network\mcpe\InventoryManager;
 use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\ItemRegistryPacket;
+use pocketmine\network\mcpe\protocol\JigsawStructureDataPacket;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
@@ -73,6 +74,15 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$world = $location->getWorld();
 
 			$typeConverter = $this->session->getTypeConverter();
+
+			if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
+				// Minecraft 1.26.50+ requires this packet before StartGamePacket. If it is absent,
+				// the client disconnects with reason 148 (MissingStructureData).
+				// PocketMine does not currently expose server-side jigsaw structure rules, so an
+				// empty compound is the correct representation of an empty rule set.
+				$this->session->getLogger()->debug("Sending empty jigsaw structure data");
+				$this->session->sendDataPacket(JigsawStructureDataPacket::create(new CacheableNbt(CompoundTag::create())));
+			}
 
 			$this->session->getLogger()->debug("Preparing StartGamePacket");
 			$levelSettings = new LevelSettings();
