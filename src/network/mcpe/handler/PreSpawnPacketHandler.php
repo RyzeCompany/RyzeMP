@@ -110,7 +110,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 				foreach($typeConverter->getBlockTranslator()->getBlockStateDictionary()->getStates() as $state){
 					$blockPalette[] = new BlockPaletteEntry(
 						$state->getStateName(),
-						new CacheableNbt($state->generateCurrentStateData()->toVanillaNbt())
+						new CacheableNbt($state->generateStateData()->toVanillaNbt())
 					);
 				}
 			}
