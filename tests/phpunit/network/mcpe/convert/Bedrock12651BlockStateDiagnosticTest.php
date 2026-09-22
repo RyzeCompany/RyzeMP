@@ -220,6 +220,10 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
 			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
 		);
+		$mapped = $dictionary->getStates()[$lookup];
+		$mappedStates = $mapped->generateCurrentStateData()->getStates();
+		self::assertSame(1, $mappedStates['direction']->getValue());
+		self::assertSame(1, $mapped->getMeta());
 	}
 
 	public function test12651BigDripleafSerializerDiagnostic() : void{
@@ -257,6 +261,12 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
 			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
 		);
+		$mapped = $dictionary->getStates()[$lookup];
+		$mappedStates = $mapped->generateCurrentStateData()->getStates();
+		self::assertSame(-1, $mappedStates['big_dripleaf_head']->getValue());
+		self::assertSame('none', $mappedStates['big_dripleaf_tilt']->getValue());
+		self::assertSame('north', $mappedStates['minecraft:cardinal_direction']->getValue());
+		self::assertSame(20, $mapped->getMeta());
 	}
 
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
