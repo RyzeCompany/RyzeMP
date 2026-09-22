@@ -65,6 +65,7 @@ use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\DataPacket;
+use pocketmine\network\mcpe\protocol\PacketViolationWarningPacket;
 use pocketmine\network\mcpe\protocol\DisconnectPacket;
 use pocketmine\network\mcpe\protocol\ModalFormRequestPacket;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
@@ -538,6 +539,26 @@ class NetworkSession{
 			throw new PacketHandlingException("Unexpected non-serverbound packet");
 		}
 
+		//TEMP DEBUG: the Bedrock client sends this packet right before it disconnects because something we
+		//sent was malformed/unexpected. Decode and log it unconditionally (regardless of the current handler's
+		//allowed-packet list) so we don't lose it to a silent "Discarded without decoding".
+		if($packet instanceof PacketViolationWarningPacket){
+			try{
+				$debugStream = new ByteBufferReader($buffer);
+				$packet->decode($debugStream, $this->getProtocolId(), $this->gameVersion);
+				$this->logger->warning(sprintf(
+					"[PacketViolationWarning] type=%d severity=%d packetId=%d (0x%s) message=%s",
+					$packet->getType(),
+					$packet->getSeverity(),
+					$packet->getPacketId(),
+					dechex($packet->getPacketId()),
+					$packet->getMessage()
+				));
+			}catch(\Throwable $e){
+				$this->logger->warning("[PacketViolationWarning] raw=" . base64_encode($buffer) . " (decode failed: " . $e->getMessage() . ")");
+			}
+		}
+
 		$timings = Timings::getReceiveDataPacketTimings($packet);
 		$timings->startTiming();
 
@@ -658,7 +679,17 @@ class NetworkSession{
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
 				$writer->clear(); //memory reuse let's gooooo
-				$this->addToSendBuffer(self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion));
+				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
+				//TEMP DEBUG: dump every outgoing packet's raw bytes so we can see exactly what the client
+				//received right before it disconnects. Remove once the "missing structure data" bug is found.
+				$this->logger->debug(sprintf(
+					"[PacketDump] -> %s (%d bytes) header_hex=%s base64=%s",
+					(new \ReflectionClass($evPacket))->getShortName(),
+					strlen($encoded),
+					bin2hex(substr($encoded, 0, 8)),
+					base64_encode($encoded)
+				));
+				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
 				$this->flushGamePacketQueue();
