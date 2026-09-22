@@ -451,4 +451,26 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		);
 	}
 
+	public function test12651NetworkOnlyBlockstatePropertiesDoNotAffectHash() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$dataWithNetworkOnlyProperties = BlockStateData::current('minecraft:cobblestone_wall', [
+			'minecraft:corner' => new ByteTag(1),
+			'minecraft:connection_north' => new ByteTag(1),
+			'minecraft:connection_south' => new ByteTag(0),
+			'minecraft:connection_east' => new ByteTag(1),
+			'minecraft:connection_west' => new ByteTag(0),
+			'wall_post_bit' => new ByteTag(1),
+		]);
+		$dataWithoutNetworkOnlyProperties = BlockStateData::current('minecraft:cobblestone_wall', [
+			'wall_post_bit' => new ByteTag(1),
+		]);
+
+		$method = new \\ReflectionMethod(BlockTranslator::class, 'hashBlockStateData');
+		$method->setAccessible(true);
+		$hashWithNetworkOnlyProperties = $method->invoke($translator, $dataWithNetworkOnlyProperties);
+		$hashWithoutNetworkOnlyProperties = $method->invoke($translator, $dataWithoutNetworkOnlyProperties);
+
+		self::assertSame($hashWithoutNetworkOnlyProperties, $hashWithNetworkOnlyProperties);
+	}
+
 }
