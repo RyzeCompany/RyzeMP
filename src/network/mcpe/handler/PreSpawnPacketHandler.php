@@ -50,6 +50,7 @@ use pocketmine\network\mcpe\protocol\types\ServerTelemetryData;
 use pocketmine\network\mcpe\protocol\types\SpawnSettings;
 use pocketmine\player\Player;
 use pocketmine\utils\Filesystem;
+use const pocketmine\BEDROCK_DATA_PATH;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use pocketmine\VersionInfo;
