@@ -184,6 +184,20 @@ final class BlockTranslator{
 
 	private bool $useHashedNetworkIds = false;
 
+	/**
+	 * These properties exist in the 1.26.50+ network blockstate palette but are not part of
+	 * PocketMine's server-side block model. They must not participate in the 1.26.50+ hashed
+	 * block network ID calculation.
+	 */
+	private const NETWORK_ONLY_PROPERTIES = [
+		"minecraft:corner" => true,
+		"minecraft:connection_north" => true,
+		"minecraft:connection_south" => true,
+		"minecraft:connection_east" => true,
+		"minecraft:connection_west" => true,
+	];
+
+
 	/** Used when a blockstate can't be correctly serialized (e.g. because it's unknown) */
 	private BlockStateData $fallbackStateData;
 	private int $fallbackStateId;
@@ -239,6 +253,13 @@ final class BlockTranslator{
 
 	private function hashBlockStateData(BlockStateData $blockStateData) : int{
 		$states = $blockStateData->getStates();
+		if($this->useHashedNetworkIds){
+			foreach($states as $property => $_){
+				if(isset(self::NETWORK_ONLY_PROPERTIES[$property])){
+					unset($states[$property]);
+				}
+			}
+		}
 		ksort($states, SORT_STRING);
 		$statesTag = CompoundTag::create();
 		foreach(Utils::stringifyKeys($states) as $key => $state){
