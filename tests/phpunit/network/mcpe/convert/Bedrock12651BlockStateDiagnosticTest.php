@@ -285,6 +285,21 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertSame(0, $mappedStates['books_stored']->getValue());
 	}
 
+	public function test12651MushroomStemSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:mushroom_stem', [
+			'huge_mushroom_bits' => new IntTag(15),
+		]);
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			'1.26.51 mushroom_stem mapping failed: ' . $data->toNbt()
+		);
+		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
+		self::assertSame(-8, $mappedStates['huge_mushroom_bits']->getValue());
+	}
+
+
 	public function test12651RedMushroomBlockSerializerDiagnostic() : void{
 		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
 		$data = BlockStateData::current('minecraft:red_mushroom_block', [
