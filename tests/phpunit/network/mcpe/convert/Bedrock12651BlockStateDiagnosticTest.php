@@ -184,6 +184,81 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		}
 	}
 
+
+	public function test12651TripwireHookSerializerDiagnostic() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$dictionary = $translator->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:tripwire_hook', [
+			'attached_bit' => new ByteTag(0),
+			'powered_bit' => new ByteTag(0),
+			'direction' => new IntTag(2),
+		]);
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$candidates = [];
+		$rawMatches = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() !== 'minecraft:tripwire_hook'){
+				continue;
+			}
+			$current = $entry->generateCurrentStateData();
+			$candidates[] = [
+				'id' => $stateId,
+				'meta' => $entry->getMeta(),
+				'raw' => bin2hex($entry->getRawStateProperties()),
+				'states' => array_map(fn($tag) => get_class($tag) . ':' . (string) $tag->getValue(), $current->getStates()),
+			];
+			if($entry->getRawStateProperties() === $serializerRaw){
+				$rawMatches[] = $stateId;
+			}
+		}
+		self::assertNotEmpty($candidates, 'No minecraft:tripwire_hook states found in the 1.26.51 dictionary');
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			"1.26.51 tripwire_hook mapping failed.\nSerializer NBT: " . $data->toNbt() .
+			"\nSerializer raw: " . bin2hex($serializerRaw) .
+			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
+			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
+		);
+	}
+
+	public function test12651BigDripleafSerializerDiagnostic() : void{
+		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
+		$dictionary = $translator->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:big_dripleaf', [
+			'minecraft:cardinal_direction' => new \pocketmine\nbt\tag\StringTag('north'),
+			'big_dripleaf_tilt' => new \pocketmine\nbt\tag\StringTag('none'),
+			'big_dripleaf_head' => new ByteTag(1),
+		]);
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$candidates = [];
+		$rawMatches = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() !== 'minecraft:big_dripleaf'){
+				continue;
+			}
+			$current = $entry->generateCurrentStateData();
+			$candidates[] = [
+				'id' => $stateId,
+				'meta' => $entry->getMeta(),
+				'raw' => bin2hex($entry->getRawStateProperties()),
+				'states' => array_map(fn($tag) => get_class($tag) . ':' . (string) $tag->getValue(), $current->getStates()),
+			];
+			if($entry->getRawStateProperties() === $serializerRaw){
+				$rawMatches[] = $stateId;
+			}
+		}
+		self::assertNotEmpty($candidates, 'No minecraft:big_dripleaf states found in the 1.26.51 dictionary');
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			"1.26.51 big_dripleaf mapping failed.\nSerializer NBT: " . $data->toNbt() .
+			"\nSerializer raw: " . bin2hex($serializerRaw) .
+			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
+			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
+		);
+	}
+
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
 		$typeConverter = TypeConverter::getInstance(ProtocolInfo::PROTOCOL_1_26_51);
 		$itemTranslator = $typeConverter->getItemTranslator();
