@@ -35,6 +35,7 @@ use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
 use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\StartGamePacket;
+use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\network\mcpe\protocol\types\BoolGameRule;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
@@ -103,6 +104,17 @@ class PreSpawnPacketHandler extends PacketHandler{
 			];
 			$levelSettings->experiments = new Experiments([], false);
 
+			$blockNetworkIdsAreHashes = $protocolId >= ProtocolInfo::PROTOCOL_1_26_50;
+			$blockPalette = [];
+			if(!$blockNetworkIdsAreHashes){
+				foreach($typeConverter->getBlockTranslator()->getBlockStateDictionary()->getStates() as $state){
+					$blockPalette[] = new BlockPaletteEntry(
+						$state->getStateName(),
+						new CacheableNbt($state->generateCurrentStateData()->toVanillaNbt())
+					);
+				}
+			}
+
 			$this->session->sendDataPacket(StartGamePacket::create(
 				$this->player->getId(),
 				$this->player->getId(),
@@ -124,13 +136,13 @@ class PreSpawnPacketHandler extends PacketHandler{
 				sprintf("%s %s", VersionInfo::NAME, VersionInfo::VERSION()->getFullVersion(true)),
 				Uuid::fromString(Uuid::NIL),
 				false,
-				false,
+				$blockNetworkIdsAreHashes,
 				false,
 				new NetworkPermissions(disableClientSounds: true),
 				true,
 				null,
 				new ServerTelemetryData("", "", "", ""),
-				[],
+				$blockPalette,
 				0,
 				$typeConverter->getItemTypeDictionary()->getEntries(),
 			));
