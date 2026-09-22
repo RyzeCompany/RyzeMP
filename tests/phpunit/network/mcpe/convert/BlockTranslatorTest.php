@@ -24,8 +24,9 @@ declare(strict_types=1);
 namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\TestCase;
+use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\nbt\LittleEndianNbtSerializer;
-use pocketmine\nbt	ag\CompoundTag;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
@@ -34,7 +35,6 @@ use function hash;
 use function hexdec;
 use function intval;
 use function ksort;
-use pocketmine\block\RuntimeBlockStateRegistry;
 
 class BlockTranslatorTest extends TestCase{
 
@@ -47,6 +47,7 @@ class BlockTranslatorTest extends TestCase{
 			$blockTranslator->internalIdToNetworkId($state->getStateId());
 		}
 	}
+
 	public function test12651UsesFNV1a32BlockStateHashes() : void{
 		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
 		$internalStateId = \pocketmine\block\VanillaBlocks::STONE()->getStateId();
