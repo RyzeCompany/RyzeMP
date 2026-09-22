@@ -38,6 +38,7 @@ use pocketmine\network\mcpe\protocol\StartGamePacket;
 use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\network\mcpe\protocol\types\BoolGameRule;
+use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\protocol\types\Experiments;
@@ -48,6 +49,7 @@ use pocketmine\network\mcpe\protocol\types\ServerAuthMovementMode;
 use pocketmine\network\mcpe\protocol\types\ServerTelemetryData;
 use pocketmine\network\mcpe\protocol\types\SpawnSettings;
 use pocketmine\player\Player;
+use pocketmine\utils\Filesystem;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use pocketmine\VersionInfo;
@@ -60,6 +62,24 @@ use function sprintf;
 #[SilentDiscard(PlayerAuthInputPacket::class, comment: "Spammed after StartGame even though player has no controls")]
 #[SilentDiscard(ServerboundLoadingScreenPacket::class, "Not needed")]
 class PreSpawnPacketHandler extends PacketHandler{
+	private static ?JigsawStructureDataPacket $jigsawStructureData = null;
+
+	private static function jigsawStructureData() : JigsawStructureDataPacket{
+		if(self::$jigsawStructureData === null){
+			$json = json_decode(
+				Filesystem::fileGetContents(BEDROCK_DATA_PATH . "jigsaw_structures-1.26.50.json"),
+				true,
+				flags: JSON_THROW_ON_ERROR
+			);
+			$nbt = (new NetworkNbtSerializer())
+				->read(base64_decode($json["nbtB64"], true))
+				->mustGetCompoundTag();
+			self::$jigsawStructureData = JigsawStructureDataPacket::create(new CacheableNbt($nbt));
+		}
+
+		return self::$jigsawStructureData;
+	}
+
 	public function __construct(
 		private Server $server,
 		private Player $player,
@@ -77,12 +97,10 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$typeConverter = $this->session->getTypeConverter();
 
 			if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
-				// Minecraft 1.26.50+ requires this packet before StartGamePacket. If it is absent,
-				// the client disconnects with reason 148 (MissingStructureData).
-				// PocketMine does not currently expose server-side jigsaw structure rules, so an
-				// empty compound is the correct representation of an empty rule set.
-				$this->session->getLogger()->debug("Sending empty jigsaw structure data");
-				$this->session->sendDataPacket(JigsawStructureDataPacket::create(new CacheableNbt(CompoundTag::create())));
+				// Minecraft 1.26.50+ requires the real jigsaw structure definitions before StartGamePacket.
+				// 1.26.50 and 1.26.51 share protocol 2193, so the 1.26.50 fixture applies to both.
+				$this->session->getLogger()->debug("Sending jigsaw structure data");
+				$this->session->sendDataPacket(self::jigsawStructureData());
 			}
 
 			$this->session->getLogger()->debug("Preparing StartGamePacket");
