@@ -243,10 +243,41 @@ final class BlockStateDictionary{
 		}
 	}
 
+	// Bedrock 1.26.51 stores chiseled bookshelf direction using the canonical
+	// -2,-1,0,1 enum, while PocketMine serializes horizontal facing as 0,1,2,3.
+	// Match the remaining books_stored property exactly.
+	if($name === 'minecraft:chiseled_bookshelf' && isset($data->getStates()['direction'])){
+		$properties = $data->getStates();
+		$direction = $properties['direction']->getValue();
+		$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+		$canonicalDirection = $directionMap[$direction] ?? null;
+		if($canonicalDirection !== null){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+					continue;
+				}
+				$matches = true;
+				foreach($properties as $propertyName => $property){
+					if($propertyName === 'direction'){
+						continue;
+					}
+					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+						$matches = false;
+						break;
+					}
+				}
+				if($matches){
+					return $stateId;
+				}
+			}
+		}
+	}
+
 	// Bedrock 1.26.51 stores huge_mushroom_bits using a signed representation:
 	// even legacy values map to the positive half and odd values map to the
 	// preceding negative half. For example, 14 maps to canonical 7.
-	if($name === 'minecraft:brown_mushroom_block' && isset($data->getStates()['huge_mushroom_bits'])){
+	if(($name === 'minecraft:brown_mushroom_block' || $name === 'minecraft:red_mushroom_block') && isset($data->getStates()['huge_mushroom_bits'])){
 		$properties = $data->getStates();
 		$bits = $properties['huge_mushroom_bits']->getValue();
 		$canonicalBits = $bits % 2 === 0 ? intdiv($bits, 2) : -intdiv($bits + 1, 2);
