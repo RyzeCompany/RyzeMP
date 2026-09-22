@@ -352,7 +352,36 @@ final class BlockStateDictionary{
 			}
 		}
 
-		// Bedrock 1.26.51 stores big_dripleaf_head as a signed boolean (0/-1),
+		// Bedrock 1.26.51 stores bell direction using the canonical -2,-1,0,1 enum,
+	// while PocketMine serializes horizontal facing as the legacy 0,1,2,3 enum.
+	if($name === 'minecraft:bell' && isset($data->getStates()['direction'])){
+		$properties = $data->getStates();
+		$direction = $properties['direction']->getValue();
+		$canonicalDirection = [0 => 0, 1 => -1, 2 => 1, 3 => -2][$direction] ?? null;
+		if($canonicalDirection !== null){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+					continue;
+				}
+				$matches = true;
+				foreach($properties as $propertyName => $property){
+					if($propertyName === 'direction'){
+						continue;
+					}
+					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+						$matches = false;
+						break;
+					}
+				}
+				if($matches){
+					return $stateId;
+				}
+			}
+		}
+	}
+
+	// Bedrock 1.26.51 stores big_dripleaf_head as a signed boolean (0/-1),
 		// while PocketMine's serializer emits the normal byte/int boolean (0/1).
 		if($name === 'minecraft:big_dripleaf' && isset($data->getStates()['big_dripleaf_head'])){
 			$properties = $data->getStates();
