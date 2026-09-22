@@ -274,6 +274,39 @@ final class BlockStateDictionary{
 		}
 	}
 
+	// Bedrock 1.26.51 stores sea_pickle dead_bit as a signed boolean (0/-1),
+	// while PocketMine's serializer emits the normal byte/int boolean (0/1).
+	if($name === 'minecraft:sea_pickle' && isset($data->getStates()['dead_bit'])){
+		$properties = $data->getStates();
+		$dead = $properties['dead_bit']->getValue();
+		$canonicalDead = match($dead){
+			0 => 0,
+			1 => -1,
+			default => null,
+		};
+		if($canonicalDead !== null){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(!isset($candidate['dead_bit']) || $candidate['dead_bit']->getValue() !== $canonicalDead){
+					continue;
+				}
+				$matches = true;
+				foreach($properties as $propertyName => $property){
+					if($propertyName === 'dead_bit'){
+						continue;
+					}
+					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+						$matches = false;
+						break;
+					}
+				}
+				if($matches){
+					return $stateId;
+				}
+			}
+		}
+	}
+
 	// Bedrock 1.26.51 stores huge_mushroom_bits using a signed representation:
 	// even legacy values map to the positive half and odd values map to the
 	// preceding negative half. For example, 14 maps to canonical 7.
