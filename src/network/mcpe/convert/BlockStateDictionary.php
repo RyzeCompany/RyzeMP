@@ -225,7 +225,40 @@ final class BlockStateDictionary{
 		}
 
 
-		// Bedrock 1.26.51 uses the canonical -2,-1,0,1 enum for tripwire_hook
+		// Bedrock 1.26.51 stores loom direction using the canonical -2,-1,0,1 enum,
+	// while PocketMine serializes horizontal facing as 0,1,2,3.
+	if($name === 'minecraft:loom' && isset($data->getStates()['direction'])){
+		$properties = $data->getStates();
+		$direction = $properties['direction']->getValue();
+		$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+		$canonicalDirection = $directionMap[$direction] ?? null;
+		if($canonicalDirection !== null){
+			foreach($lookup as $stateId){
+				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+					continue;
+				}
+				return $stateId;
+			}
+		}
+	}
+
+	// Bedrock 1.26.51 stores huge_mushroom_bits using a signed representation:
+	// even legacy values map to the positive half and odd values map to the
+	// preceding negative half. For example, 14 maps to canonical 7.
+	if($name === 'minecraft:brown_mushroom_block' && isset($data->getStates()['huge_mushroom_bits'])){
+		$properties = $data->getStates();
+		$bits = $properties['huge_mushroom_bits']->getValue();
+		$canonicalBits = $bits % 2 === 0 ? intdiv($bits, 2) : -intdiv($bits + 1, 2);
+		foreach($lookup as $stateId){
+			$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+			if(isset($candidate['huge_mushroom_bits']) && $candidate['huge_mushroom_bits']->getValue() === $canonicalBits){
+				return $stateId;
+			}
+		}
+	}
+
+	// Bedrock 1.26.51 uses the canonical -2,-1,0,1 enum for tripwire_hook
 		// direction, while PocketMine serializes horizontal facing as 0,1,2,3.
 		if($name === 'minecraft:tripwire_hook' && isset($data->getStates()['direction'])){
 			$properties = $data->getStates();
