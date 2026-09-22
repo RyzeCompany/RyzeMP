@@ -38,9 +38,8 @@ use pocketmine\network\mcpe\protocol\StartGamePacket;
 use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\network\mcpe\protocol\types\BoolGameRule;
-use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
-use pocketmine\utils\Filesystem;
+use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\protocol\types\Experiments;
 use pocketmine\network\mcpe\protocol\types\LevelSettings;
@@ -50,6 +49,7 @@ use pocketmine\network\mcpe\protocol\types\ServerAuthMovementMode;
 use pocketmine\network\mcpe\protocol\types\ServerTelemetryData;
 use pocketmine\network\mcpe\protocol\types\SpawnSettings;
 use pocketmine\player\Player;
+use pocketmine\utils\Filesystem;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use pocketmine\VersionInfo;
@@ -79,6 +79,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 
 		return self::$jigsawStructureData;
 	}
+
 	public function __construct(
 		private Server $server,
 		private Player $player,
