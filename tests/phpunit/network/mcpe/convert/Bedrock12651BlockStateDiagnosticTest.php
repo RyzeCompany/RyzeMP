@@ -269,6 +269,37 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertSame(20, $mapped->getMeta());
 	}
 
+	public function test12651ChiseledBookshelfSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:chiseled_bookshelf', [
+			'direction' => new IntTag(2),
+			'books_stored' => new IntTag(0),
+		]);
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			'1.26.51 chiseled_bookshelf mapping failed: ' . $data->toNbt()
+		);
+		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
+		self::assertSame(1, $mappedStates['direction']->getValue());
+		self::assertSame(0, $mappedStates['books_stored']->getValue());
+	}
+
+	public function test12651RedMushroomBlockSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:red_mushroom_block', [
+			'huge_mushroom_bits' => new IntTag(14),
+		]);
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull(
+			$lookup,
+			'1.26.51 red_mushroom_block mapping failed: ' . $data->toNbt()
+		);
+		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
+		self::assertSame(7, $mappedStates['huge_mushroom_bits']->getValue());
+	}
+
+
 	public function testTypeConverterItemTranslatorUses12651Dictionary() : void{
 		$typeConverter = TypeConverter::getInstance(ProtocolInfo::PROTOCOL_1_26_51);
 		$itemTranslator = $typeConverter->getItemTranslator();
