@@ -285,6 +285,21 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		self::assertSame(0, $mappedStates['books_stored']->getValue());
 	}
 
+	public function test12651BellSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:bell', [
+			'toggle_bit' => new ByteTag(0),
+			'attachment' => new \pocketmine\nbt\tag\StringTag('standing'),
+			'direction' => new IntTag(2),
+		]);
+		$lookup = $dictionary->lookupStateIdFromData($data);
+		self::assertNotNull($lookup, '1.26.51 bell mapping failed: ' . $data->toNbt());
+		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
+		self::assertSame(0, $mappedStates['toggle_bit']->getValue());
+		self::assertSame('standing', $mappedStates['attachment']->getValue());
+		self::assertSame(1, $mappedStates['direction']->getValue());
+	}
+
 	public function test12651SeaPickleSerializerDiagnostic() : void{
 		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
 		$data = BlockStateData::current('minecraft:sea_pickle', [
