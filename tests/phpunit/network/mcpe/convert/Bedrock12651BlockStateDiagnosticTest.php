@@ -300,4 +300,77 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			);
 		}
 	}
+
+	public function test12651LoomSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:loom', [
+			'direction' => new IntTag(2),
+		]);
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$candidates = [];
+		$rawMatches = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() !== 'minecraft:loom'){
+				continue;
+			}
+			$current = $entry->generateCurrentStateData();
+			$candidates[] = [
+				'id' => $stateId,
+				'meta' => $entry->getMeta(),
+				'raw' => bin2hex($entry->getRawStateProperties()),
+				'states' => array_map(fn($tag) => get_class($tag) . ':' . (string) $tag->getValue(), $current->getStates()),
+			];
+			if($entry->getRawStateProperties() === $serializerRaw){
+				$rawMatches[] = $stateId;
+			}
+		}
+		self::assertNotEmpty(
+			$candidates,
+			"No minecraft:loom states found in the 1.26.51 dictionary. Serializer NBT: " . $data->toNbt()
+		);
+		self::assertNotNull(
+			$dictionary->lookupStateIdFromData($data),
+			"1.26.51 loom mapping failed.\nSerializer NBT: " . $data->toNbt() .
+			"\nSerializer raw: " . bin2hex($serializerRaw) .
+			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
+			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
+		);
+	}
+
+	public function test12651BrownMushroomBlockSerializerDiagnostic() : void{
+		$dictionary = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)->getBlockStateDictionary();
+		$data = BlockStateData::current('minecraft:brown_mushroom_block', [
+			'huge_mushroom_bits' => new IntTag(14),
+		]);
+		$serializerRaw = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
+		$candidates = [];
+		$rawMatches = [];
+		foreach($dictionary->getStates() as $stateId => $entry){
+			if($entry->getStateName() !== 'minecraft:brown_mushroom_block'){
+				continue;
+			}
+			$current = $entry->generateCurrentStateData();
+			$candidates[] = [
+				'id' => $stateId,
+				'meta' => $entry->getMeta(),
+				'raw' => bin2hex($entry->getRawStateProperties()),
+				'states' => array_map(fn($tag) => get_class($tag) . ':' . (string) $tag->getValue(), $current->getStates()),
+			];
+			if($entry->getRawStateProperties() === $serializerRaw){
+				$rawMatches[] = $stateId;
+			}
+		}
+		self::assertNotEmpty(
+			$candidates,
+			"No minecraft:brown_mushroom_block states found in the 1.26.51 dictionary. Serializer NBT: " . $data->toNbt()
+		);
+		self::assertNotNull(
+			$dictionary->lookupStateIdFromData($data),
+			"1.26.51 brown_mushroom_block mapping failed.\nSerializer NBT: " . $data->toNbt() .
+			"\nSerializer raw: " . bin2hex($serializerRaw) .
+			"\nRaw matches: " . json_encode($rawMatches, JSON_THROW_ON_ERROR) .
+			"\nCanonical candidates: " . json_encode($candidates, JSON_THROW_ON_ERROR)
+		);
+	}
+
 }
