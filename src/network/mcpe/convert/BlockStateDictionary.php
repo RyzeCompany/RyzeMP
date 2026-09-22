@@ -277,7 +277,7 @@ final class BlockStateDictionary{
 	// Bedrock 1.26.51 stores huge_mushroom_bits using a signed representation:
 	// even legacy values map to the positive half and odd values map to the
 	// preceding negative half. For example, 14 maps to canonical 7.
-	if(($name === 'minecraft:brown_mushroom_block' || $name === 'minecraft:red_mushroom_block') && isset($data->getStates()['huge_mushroom_bits'])){
+	if(($name === 'minecraft:brown_mushroom_block' || $name === 'minecraft:red_mushroom_block' || $name === 'minecraft:mushroom_stem') && isset($data->getStates()['huge_mushroom_bits'])){
 		$properties = $data->getStates();
 		$bits = $properties['huge_mushroom_bits']->getValue();
 		$canonicalBits = $bits % 2 === 0 ? intdiv($bits, 2) : -intdiv($bits + 1, 2);
