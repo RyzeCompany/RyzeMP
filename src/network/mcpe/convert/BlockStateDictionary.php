@@ -224,6 +224,70 @@ final class BlockStateDictionary{
 			}
 		}
 
+
+		// Bedrock 1.26.51 uses the canonical -2,-1,0,1 enum for tripwire_hook
+		// direction, while PocketMine serializes horizontal facing as 0,1,2,3.
+		if($name === 'minecraft:tripwire_hook' && isset($data->getStates()['direction'])){
+			$properties = $data->getStates();
+			$direction = $properties['direction']->getValue();
+			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
+			$canonicalDirection = $directionMap[$direction] ?? null;
+			if($canonicalDirection !== null){
+				foreach($lookup as $stateId){
+					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
+						continue;
+					}
+					$matches = true;
+					foreach($properties as $propertyName => $property){
+						if($propertyName === 'direction'){
+							continue;
+						}
+						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+							$matches = false;
+							break;
+						}
+					}
+					if($matches){
+						return $stateId;
+					}
+				}
+			}
+		}
+
+		// Bedrock 1.26.51 stores big_dripleaf_head as a signed boolean (0/-1),
+		// while PocketMine's serializer emits the normal byte/int boolean (0/1).
+		if($name === 'minecraft:big_dripleaf' && isset($data->getStates()['big_dripleaf_head'])){
+			$properties = $data->getStates();
+			$head = $properties['big_dripleaf_head']->getValue();
+			$canonicalHead = match($head){
+				0 => 0,
+				1 => -1,
+				default => null,
+			};
+			if($canonicalHead !== null){
+				foreach($lookup as $stateId){
+					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
+					if(!isset($candidate['big_dripleaf_head']) || $candidate['big_dripleaf_head']->getValue() !== $canonicalHead){
+						continue;
+					}
+					$matches = true;
+					foreach($properties as $propertyName => $property){
+						if($propertyName === 'big_dripleaf_head'){
+							continue;
+						}
+						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
+							$matches = false;
+							break;
+						}
+					}
+					if($matches){
+						return $stateId;
+					}
+				}
+			}
+		}
+
 		// Bedrock 1.26.40+ exposes cardinal connection states for fences and thin blocks.
 		// Item/blockstate serialization has no world neighbours, so these blocks serialize without
 		// connection properties. Resolve that stateless representation to the canonical no-connection state.
