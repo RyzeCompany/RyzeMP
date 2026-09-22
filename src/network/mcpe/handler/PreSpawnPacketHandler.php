@@ -25,6 +25,7 @@ namespace pocketmine\network\mcpe\handler;
 
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\cache\CraftingDataCache;
+use pocketmine\network\mcpe\protocol\CraftingDataPacket;
 use pocketmine\network\mcpe\cache\StaticPacketCache;
 use pocketmine\network\mcpe\InventoryManager;
 use pocketmine\network\mcpe\NetworkSession;
@@ -183,8 +184,11 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$this->session->getLogger()->debug("Sending creative inventory data");
 			$this->inventoryManager->syncCreative();
 
-			$this->session->getLogger()->debug("Sending crafting data");
-			$this->session->sendDataPacket(CraftingDataCache::getInstance($protocolId)->getCache($this->server->getCraftingManager()));
+			//TEMP TEST: send an empty CraftingDataPacket instead of the real one, to check whether the
+			//real recipe/crafting data (which embeds block-state NBT for 1.26.51) is what makes the
+			//client abort the connection. Revert this once the test is done.
+			$this->session->getLogger()->debug("Sending crafting data (TEMP: EMPTY for testing)");
+			$this->session->sendDataPacket(CraftingDataPacket::create([], [], [], [], false));
 
 			$this->session->getLogger()->debug("Sending player list");
 			$this->session->syncPlayerList($this->server->getOnlinePlayers());
