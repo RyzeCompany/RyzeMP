@@ -251,6 +251,17 @@ final class BlockTranslator{
 		return $networkId;
 	}
 
+	/**
+	 * Converts network blockstate data to the runtime network ID.
+	 *
+	 * For protocols using hashed block network IDs, this must not use the
+	 * canonical dictionary lookup because synthetic network states may not be
+	 * present in the dictionary.
+	 */
+	public function networkStateDataToNetworkId(BlockStateData $blockStateData) : int{
+		return $this->internalStateDataToNetworkId($blockStateData);
+	}
+
 	private function hashBlockStateData(BlockStateData $blockStateData) : int{
 		$states = $blockStateData->getStates();
 		if($this->useHashedNetworkIds){
