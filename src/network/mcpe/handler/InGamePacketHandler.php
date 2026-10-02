@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\handler;
 
+use pocketmine\anticheat\AntiCheatManager;
+use pocketmine\anticheat\validation\MiningValidator;
 use pocketmine\block\BaseSign;
 use pocketmine\block\Lectern;
 use pocketmine\block\tile\Sign;
@@ -155,11 +157,15 @@ class InGamePacketHandler extends PacketHandler{
 
 	protected ?string $lastRequestedFullSkinId = null;
 
+	private MiningValidator $miningValidator;
+
 	public function __construct(
 		private Player $player,
 		private NetworkSession $session,
 		private InventoryManager $inventoryManager
-	){}
+	){
+		$this->miningValidator = new MiningValidator();
+	}
 
 	public function handleText(TextPacket $packet) : bool{
 		if($packet->type === TextPacket::TYPE_CHAT){
@@ -681,6 +687,15 @@ class InGamePacketHandler extends PacketHandler{
 
 	private function handlePlayerActionFromData(int $action, BlockPosition $blockPosition, int $face) : bool{
 		$pos = new Vector3($blockPosition->getX(), $blockPosition->getY(), $blockPosition->getZ());
+
+		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
+		if(!$this->miningValidator->validate($this->player, $antiCheatSession, $action, $pos)){
+			$this->session->getLogger()->debug("AntiCheat rejected player action $action at $pos");
+			$this->lastBlockAttacked = null;
+			$this->player->stopBreakBlock($pos);
+			$this->syncBlocksNearby($pos, null);
+			return true;
+		}
 
 		switch($action){
 			case PlayerAction::START_BREAK:
