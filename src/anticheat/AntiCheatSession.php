@@ -32,7 +32,7 @@ final class AntiCheatSession{
 		// A generous burst is deliberate. This layer protects the server from
 		// impossible action spam without punishing normal high-latency clients.
 		$this->miningBudget = new ActionBudget(40.0, 25.0);
-		$this->combatBudget = new ActionBudget(20.0, 16.0);
+		$this->combatBudget = new ActionBudget(40.0, 30.0);
 		$this->inputTimeline = new InputTimeline();
 		$this->impulseTracker = new ImpulseTracker();
 	}
