@@ -5,12 +5,18 @@ declare(strict_types=1);
 namespace pocketmine\anticheat;
 
 use pocketmine\anticheat\timeline\InputTimeline;
+use pocketmine\anticheat\timeline\MovementSample;
+use function array_shift;
+use function count;
 use pocketmine\math\Vector3;
 
 final class AntiCheatSession{
 	private ActionBudget $miningBudget;
 	private InputTimeline $inputTimeline;
 	private ?Vector3 $miningTarget = null;
+
+	/** @var list<MovementSample> */
+	private array $movementSamples = [];
 
 	/** @var array<string, float> */
 	private array $violations = [];
@@ -45,4 +51,42 @@ final class AntiCheatSession{
 	public function getViolationLevel(string $check) : float{
 		return $this->violations[$check] ?? 0.0;
 	}
+	public function recordMovementSample(
+		int $protocolId,
+		int $tickDelta,
+		float $timeDelta,
+		float $horizontalPerTick,
+		float $verticalPerTick,
+		float $distancePerTick,
+		?int $ping,
+		bool $sprinting,
+		bool $flying,
+		bool $swimming,
+		bool $gliding
+	) : void{
+		$this->movementSamples[] = new MovementSample(
+			$protocolId,
+			$tickDelta,
+			$timeDelta,
+			$horizontalPerTick,
+			$verticalPerTick,
+			$distancePerTick,
+			$ping,
+			$sprinting,
+			$flying,
+			$swimming,
+			$gliding
+		);
+		if(count($this->movementSamples) > 120){
+			array_shift($this->movementSamples);
+		}
+	}
+
+	/**
+	 * @return list<MovementSample>
+	 */
+	public function getMovementSamples() : array{
+		return $this->movementSamples;
+	}
+
 }
