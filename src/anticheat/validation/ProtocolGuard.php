@@ -45,8 +45,11 @@ final class ProtocolGuard{
 		$latest = $session->getInputTimeline()->getLatest();
 		if($latest !== null){
 			if($packet->getTick() < $latest->clientTick){
-				$session->addViolation("protocol.tick_regression", 3.0);
-				return false;
+				// Record but don't enforce yet. The accepted protocol range is
+				// broad and we want real-client measurements before treating
+				// reordering as malicious.
+				$session->addViolation("protocol.tick_regression", 0.5);
+				return true;
 			}
 			if($packet->getTick() === $latest->clientTick){
 				// Same-tick input is unusual, but don't enforce until we have
