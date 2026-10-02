@@ -1497,6 +1497,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 			$latestInput = $antiCheatSession->getInputTimeline()->getLatest();
 			$antiCheatSession->getImpulseTracker()->record(
 				$motion,
+				$this->getPosition(),
 				$this->server->getTick(),
 				$this->getNetworkSession()->getProtocolId(),
 				$latestInput?->clientTick
