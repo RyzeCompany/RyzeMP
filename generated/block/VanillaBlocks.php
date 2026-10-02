@@ -298,6 +298,7 @@ final class VanillaBlocks{
 	private static Stair $_mDIORITE_STAIRS;
 	private static Wall $_mDIORITE_WALL;
 	private static Dirt $_mDIRT;
+	private static Dispenser $_mDISPENSER;
 	private static DoublePitcherCrop $_mDOUBLE_PITCHER_CROP;
 	private static DoubleTallGrass $_mDOUBLE_TALLGRASS;
 	private static DragonEgg $_mDRAGON_EGG;
@@ -1131,6 +1132,7 @@ final class VanillaBlocks{
 			"diorite_stairs" => fn(Stair $v) => self::$_mDIORITE_STAIRS = $v,
 			"diorite_wall" => fn(Wall $v) => self::$_mDIORITE_WALL = $v,
 			"dirt" => fn(Dirt $v) => self::$_mDIRT = $v,
+			"dispenser" => fn(Dispenser $v) => self::$_mDISPENSER = $v,
 			"double_pitcher_crop" => fn(DoublePitcherCrop $v) => self::$_mDOUBLE_PITCHER_CROP = $v,
 			"double_tallgrass" => fn(DoubleTallGrass $v) => self::$_mDOUBLE_TALLGRASS = $v,
 			"dragon_egg" => fn(DragonEgg $v) => self::$_mDRAGON_EGG = $v,
@@ -3006,6 +3008,11 @@ final class VanillaBlocks{
 	public static function DIRT() : Dirt{
 		if(!isset(self::$_mDIRT)){ self::init(); }
 		return clone self::$_mDIRT;
+	}
+
+	public static function DISPENSER() : Dispenser{
+		if(!isset(self::$_mDISPENSER)){ self::init(); }
+		return clone self::$_mDISPENSER;
 	}
 
 	public static function DOUBLE_PITCHER_CROP() : DoublePitcherCrop{
