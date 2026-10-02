@@ -6,6 +6,7 @@ namespace pocketmine\anticheat\validation;
 
 use pocketmine\anticheat\AntiCheatSession;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\InputMode;
 use pocketmine\network\mcpe\protocol\types\InteractionMode;
 use pocketmine\network\mcpe\protocol\types\PlayMode;
@@ -20,8 +21,8 @@ use function is_nan;
  * (speed, fly, timer, etc.) consume InputTimeline later and use tolerances.
  */
 final class ProtocolGuard{
-	public function validatePlayerAuthInput(Player $player, AntiCheatSession $session, PlayerAuthInputPacket $packet) : bool{
-		if(!$this->hasFiniteInput($packet)){
+	public function validatePlayerAuthInput(Player $player, AntiCheatSession $session, PlayerAuthInputPacket $packet, int $protocolId) : bool{
+		if(!$this->hasFiniteInput($packet, $protocolId)){
 			$session->addViolation("protocol.non_finite", 5.0);
 			return false;
 		}
@@ -58,34 +59,44 @@ final class ProtocolGuard{
 		return true;
 	}
 
-	private function hasFiniteInput(PlayerAuthInputPacket $packet) : bool{
+	private function hasFiniteInput(PlayerAuthInputPacket $packet, int $protocolId) : bool{
 		$position = $packet->getPosition();
 		$delta = $packet->getDelta();
-		$interactRotation = $packet->getInteractRotation();
-		$camera = $packet->getCameraOrientation();
-		$rawMove = $packet->getRawMove();
 
-		foreach([
+		$values = [
 			$position->x, $position->y, $position->z,
 			$packet->getPitch(), $packet->getYaw(), $packet->getHeadYaw(),
 			$packet->getMoveVecX(), $packet->getMoveVecZ(),
 			$delta->x, $delta->y, $delta->z,
-			$packet->getAnalogMoveVecX(), $packet->getAnalogMoveVecZ(),
-			$interactRotation->x, $interactRotation->y,
-			$camera->x, $camera->y, $camera->z,
-			$rawMove->x, $rawMove->y
-		] as $value){
-			if(is_infinite($value) || is_nan($value)){
-				return false;
+			$packet->getAnalogMoveVecX(), $packet->getAnalogMoveVecZ()
+		];
+
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_21_40){
+			$interactRotation = $packet->getInteractRotation();
+			$camera = $packet->getCameraOrientation();
+			$values[] = $interactRotation->x;
+			$values[] = $interactRotation->y;
+			$values[] = $camera->x;
+			$values[] = $camera->y;
+			$values[] = $camera->z;
+		}else{
+			$vrGaze = $packet->getVrGazeDirection();
+			if($vrGaze !== null){
+				$values[] = $vrGaze->x;
+				$values[] = $vrGaze->y;
+				$values[] = $vrGaze->z;
 			}
 		}
 
-		$vrGaze = $packet->getVrGazeDirection();
-		if($vrGaze !== null){
-			foreach([$vrGaze->x, $vrGaze->y, $vrGaze->z] as $value){
-				if(is_infinite($value) || is_nan($value)){
-					return false;
-				}
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_21_50){
+			$rawMove = $packet->getRawMove();
+			$values[] = $rawMove->x;
+			$values[] = $rawMove->y;
+		}
+
+		foreach($values as $value){
+			if(is_infinite($value) || is_nan($value)){
+				return false;
 			}
 		}
 
