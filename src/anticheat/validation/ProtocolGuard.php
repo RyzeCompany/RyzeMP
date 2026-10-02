@@ -58,7 +58,7 @@ final class ProtocolGuard{
 			}
 		}
 
-		$session->getInputTimeline()->record($packet);
+		$session->getInputTimeline()->record($packet, $protocolId);
 		return true;
 	}
 
