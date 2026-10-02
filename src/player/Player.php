@@ -44,9 +44,9 @@ use pocketmine\entity\Human;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
 use pocketmine\entity\NeverSavedWithChunkEntity;
-use pocketmine\entity\projectile\FishingHook;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\entity\projectile\Arrow;
+use pocketmine\entity\projectile\FishingHook;
 use pocketmine\entity\Skin;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
@@ -1704,11 +1704,6 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}
 	}
 
-	/**
-	 * Activates the item in hand, for example throwing a projectile.
-	 *
-	 * @return bool if it did something
-	 */
 	public function getFishingHook() : ?FishingHook{
 		if($this->fishingHook !== null && ($this->fishingHook->isClosed() || $this->fishingHook->isFlaggedForDespawn())){
 			$this->fishingHook = null;
@@ -1733,6 +1728,11 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		return true;
 	}
 
+	/**
+	 * Activates the item in hand, for example throwing a projectile.
+	 *
+	 * @return bool if it did something
+	 */
 	public function useHeldItem() : bool{
 		$directionVector = $this->getDirectionVector();
 		$item = $this->inventory->getItemInHand();

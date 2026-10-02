@@ -112,6 +112,7 @@ final class FishingHookTest extends TestCase{
 			"attack", "onDispose", "destroyCycles"
 		])->getMock();
 		(new \ReflectionProperty(Entity::class, "server"))->setValue($player, $this->server);
+		(new \ReflectionProperty(Player::class, "logger"))->setValue($player, $this->createStub(\Logger::class));
 		$player->method("getId")->willReturn($id);
 		$player->method("getWorld")->willReturn($this->world);
 		$player->method("getServer")->willReturn($this->server);
