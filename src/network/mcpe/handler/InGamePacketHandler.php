@@ -25,6 +25,7 @@ namespace pocketmine\network\mcpe\handler;
 
 use pocketmine\anticheat\AntiCheatManager;
 use pocketmine\anticheat\validation\MiningValidator;
+use pocketmine\anticheat\validation\MovementValidator;
 use pocketmine\anticheat\validation\ProtocolGuard;
 use pocketmine\block\BaseSign;
 use pocketmine\block\Lectern;
@@ -159,6 +160,7 @@ class InGamePacketHandler extends PacketHandler{
 	protected ?string $lastRequestedFullSkinId = null;
 
 	private MiningValidator $miningValidator;
+	private MovementValidator $movementValidator;
 	private ProtocolGuard $protocolGuard;
 
 	public function __construct(
@@ -167,6 +169,7 @@ class InGamePacketHandler extends PacketHandler{
 		private InventoryManager $inventoryManager
 	){
 		$this->miningValidator = new MiningValidator();
+		$this->movementValidator = new MovementValidator();
 		$this->protocolGuard = new ProtocolGuard();
 	}
 
@@ -194,6 +197,8 @@ class InGamePacketHandler extends PacketHandler{
 			$this->session->getLogger()->debug("AntiCheat rejected invalid PlayerAuthInput");
 			return false;
 		}
+
+		$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
 
 		$rawPos = $packet->getPosition();
 		$rawYaw = $packet->getYaw();
