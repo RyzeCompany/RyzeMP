@@ -13,6 +13,10 @@ namespace pocketmine\anticheat\timeline;
 final class InputFrame{
 	public function __construct(
 		public readonly int $clientTick,
+		public readonly int $protocolId,
+		public readonly int $inputMode,
+		public readonly int $playMode,
+		public readonly int $interactionMode,
 		public readonly float $receivedAt,
 		public readonly float $x,
 		public readonly float $y,
