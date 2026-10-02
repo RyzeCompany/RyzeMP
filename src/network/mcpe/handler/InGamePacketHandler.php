@@ -245,9 +245,10 @@ class InGamePacketHandler extends PacketHandler{
 			if($inputFlags->get(PlayerAuthInputFlags::START_JUMPING)){
 				$this->player->jump();
 			}
-			if($inputFlags->get(PlayerAuthInputFlags::MISSED_SWING)){
-				$this->player->missSwing();
-			}
+		}
+
+		if($inputFlags->get(PlayerAuthInputFlags::MISSED_SWING)){
+			$this->player->missSwing();
 		}
 
 		if(!$this->forceMoveSync && $hasMoved){

@@ -1,0 +1,31 @@
+name: Regression tests
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      SUBMODULE_TOKEN:
+        required: true
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Validate Composer files
+        run: composer validate --no-check-publish --no-interaction
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
+      - name: Validate PHP syntax including tests
+        run: find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -n -l
+      - name: Run PHPUnit
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
