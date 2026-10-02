@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace pocketmine\anticheat\validation;
 
+use pocketmine\anticheat\protocol\ProtocolCapabilities;
 use pocketmine\anticheat\AntiCheatSession;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\InputMode;
 use pocketmine\network\mcpe\protocol\types\InteractionMode;
 use pocketmine\network\mcpe\protocol\types\PlayMode;
@@ -63,6 +63,7 @@ final class ProtocolGuard{
 	}
 
 	private function hasFiniteInput(PlayerAuthInputPacket $packet, int $protocolId) : bool{
+		$capabilities = ProtocolCapabilities::fromProtocolId($protocolId);
 		$position = $packet->getPosition();
 		$delta = $packet->getDelta();
 
@@ -74,7 +75,7 @@ final class ProtocolGuard{
 			$packet->getAnalogMoveVecX(), $packet->getAnalogMoveVecZ()
 		];
 
-		if($protocolId >= ProtocolInfo::PROTOCOL_1_21_40){
+		if($capabilities->hasInteractRotation && $capabilities->hasCameraOrientation){
 			$interactRotation = $packet->getInteractRotation();
 			$camera = $packet->getCameraOrientation();
 			$values[] = $interactRotation->x;
@@ -91,7 +92,7 @@ final class ProtocolGuard{
 			}
 		}
 
-		if($protocolId >= ProtocolInfo::PROTOCOL_1_21_50){
+		if($capabilities->hasRawMove){
 			$rawMove = $packet->getRawMove();
 			$values[] = $rawMove->x;
 			$values[] = $rawMove->y;
