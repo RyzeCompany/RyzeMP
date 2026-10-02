@@ -31,7 +31,7 @@ final class ImpulseTracker{
 		}
 	}
 
-	public function record(Vector3 $motion, int $serverTick, int $protocolId, ?int $clientTickAtSend) : void{
+	public function record(Vector3 $motion, Vector3 $origin, int $serverTick, int $protocolId, ?int $clientTickAtSend) : void{
 		if($motion->lengthSquared() < self::MIN_MAGNITUDE_SQUARED){
 			return;
 		}
@@ -41,6 +41,9 @@ final class ImpulseTracker{
 			$motion->x,
 			$motion->y,
 			$motion->z,
+			$origin->x,
+			$origin->y,
+			$origin->z,
 			$source,
 			$serverTick,
 			$protocolId,
@@ -61,6 +64,18 @@ final class ImpulseTracker{
 	public function hasActiveImpulse() : bool{
 		$this->pruneExpired();
 		return count($this->pending) > 0;
+	}
+
+	public function getOldestPending() : ?ExpectedImpulse{
+		$this->pruneExpired();
+		return $this->pending[0] ?? null;
+	}
+
+	public function discardOldest() : void{
+		$this->pruneExpired();
+		if(count($this->pending) > 0){
+			array_shift($this->pending);
+		}
 	}
 
 	/**
