@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\anticheat;
 
+use pocketmine\anticheat\impulse\ImpulseTracker;
 use pocketmine\anticheat\timeline\InputTimeline;
 use pocketmine\anticheat\timeline\MovementSample;
 use function array_shift;
@@ -13,6 +14,7 @@ use pocketmine\math\Vector3;
 final class AntiCheatSession{
 	private ActionBudget $miningBudget;
 	private InputTimeline $inputTimeline;
+	private ImpulseTracker $impulseTracker;
 	private ?Vector3 $miningTarget = null;
 
 	/** @var list<MovementSample> */
@@ -26,6 +28,7 @@ final class AntiCheatSession{
 		// impossible action spam without punishing normal high-latency clients.
 		$this->miningBudget = new ActionBudget(40.0, 25.0);
 		$this->inputTimeline = new InputTimeline();
+		$this->impulseTracker = new ImpulseTracker();
 	}
 
 	public function getMiningBudget() : ActionBudget{
@@ -34,6 +37,10 @@ final class AntiCheatSession{
 
 	public function getInputTimeline() : InputTimeline{
 		return $this->inputTimeline;
+	}
+
+	public function getImpulseTracker() : ImpulseTracker{
+		return $this->impulseTracker;
 	}
 
 	public function getMiningTarget() : ?Vector3{
