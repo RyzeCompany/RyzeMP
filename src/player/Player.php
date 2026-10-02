@@ -46,6 +46,7 @@ use pocketmine\entity\Location;
 use pocketmine\entity\NeverSavedWithChunkEntity;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\entity\projectile\Arrow;
+use pocketmine\entity\projectile\FishingHook;
 use pocketmine\entity\Skin;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
@@ -222,6 +223,9 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	protected ?NetworkSession $networkSession;
 
 	public bool $spawned = false;
+
+	private ?FishingHook $fishingHook = null;
+	private int $nextFishingActionTick = 0;
 
 	protected string $username;
 	protected string $displayName;
@@ -1700,6 +1704,30 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}
 	}
 
+	public function getFishingHook() : ?FishingHook{
+		if($this->fishingHook !== null && ($this->fishingHook->isClosed() || $this->fishingHook->isFlaggedForDespawn())){
+			$this->fishingHook = null;
+		}
+		return $this->fishingHook;
+	}
+
+	public function setFishingHook(?FishingHook $hook) : void{
+		if($this->fishingHook !== null && $this->fishingHook !== $hook && !$this->fishingHook->isClosed()){
+			$this->fishingHook->flagForDespawn();
+		}
+		$this->fishingHook = $hook;
+	}
+
+	/** A player-wide cooldown: changing rods or durability cannot bypass it. */
+	public function tryStartFishingAction(int $cooldownTicks) : bool{
+		$tick = $this->server->getTick();
+		if($tick < $this->nextFishingActionTick){
+			return false;
+		}
+		$this->nextFishingActionTick = $tick + $cooldownTicks;
+		return true;
+	}
+
 	/**
 	 * Activates the item in hand, for example throwing a projectile.
 	 *
@@ -2401,6 +2429,8 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 			throw new \LogicException("Player is still connected");
 		}
 
+		$this->setFishingHook(null);
+
 		//prevent the player receiving their own disconnect message
 		$this->server->unsubscribeFromAllBroadcastChannels($this);
 
@@ -2455,6 +2485,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	}
 
 	protected function destroyCycles() : void{
+		$this->fishingHook = null;
 		$this->networkSession = null;
 		unset($this->cursorInventory);
 		unset($this->craftingGrid);
@@ -2523,6 +2554,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	}
 
 	protected function onDeath() : void{
+		$this->setFishingHook(null);
 		//Crafting grid must always be evacuated even if keep-inventory is true. This dumps the contents into the
 		//main inventory and drops the rest on the ground.
 		$this->removeCurrentWindow();
@@ -2725,6 +2757,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	public function teleport(Vector3 $pos, ?float $yaw = null, ?float $pitch = null) : bool{
 		if(parent::teleport($pos, $yaw, $pitch)){
+			$this->setFishingHook(null);
 
 			$this->removeCurrentWindow();
 			$this->stopSleep();

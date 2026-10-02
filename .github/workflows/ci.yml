@@ -27,5 +27,14 @@ jobs:
           COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
       - name: Validate PHP syntax including tests
         run: find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -n -l
+      - name: Verify generated block registry and state fixture
+        run: |
+          php build/codegen/registry-interface.php src/block generated/block
+          php tests/phpunit/block/regenerate_consistency_check.php
+          git diff --exit-code -- generated/block/VanillaBlocks.php tests/phpunit/block/block_factory_consistency_check.json
+      - name: Verify generated configuration constants
+        run: |
+          php build/codegen/pocketmine-yml-property-consts.php
+          git diff --exit-code -- generated/YmlServerProperties.php
       - name: Run PHPUnit
         run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
