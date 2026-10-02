@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\player;
 
+use pocketmine\anticheat\AntiCheatManager;
 use pocketmine\block\BaseSign;
 use pocketmine\block\Bed;
 use pocketmine\block\BlockTypeTags;
@@ -1492,6 +1493,15 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	public function setMotion(Vector3 $motion) : bool{
 		if(parent::setMotion($motion)){
+			$antiCheatSession = AntiCheatManager::getInstance()->getSession($this);
+			$latestInput = $antiCheatSession->getInputTimeline()->getLatest();
+			$antiCheatSession->getImpulseTracker()->record(
+				$motion,
+				$this->server->getTick(),
+				$this->getNetworkSession()->getProtocolId(),
+				$latestInput?->clientTick
+			);
+
 			$this->broadcastMotion();
 			$this->getNetworkSession()->sendDataPacket(SetActorMotionPacket::create($this->id, $motion, tick: 0));
 
@@ -2757,6 +2767,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	public function teleport(Vector3 $pos, ?float $yaw = null, ?float $pitch = null) : bool{
 		if(parent::teleport($pos, $yaw, $pitch)){
+			AntiCheatManager::getInstance()->getSession($this)->getImpulseTracker()->onTeleport();
 			$this->setFishingHook(null);
 
 			$this->removeCurrentWindow();
