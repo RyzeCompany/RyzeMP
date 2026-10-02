@@ -146,7 +146,7 @@ class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
 		if($blockHit instanceof Water){
 			$this->waterBlock = $blockHit->getPosition()->asVector3();
 			$this->waitTicks = mt_rand($this->settings->biteWaitMin, $this->settings->biteWaitMax);
-			$this->setPosition($this->location->withComponents(y: self::waterSurface($blockHit)));
+			$this->setPosition($this->location->withComponents(null, self::waterSurface($blockHit), null));
 			$this->broadcastSound(new WaterSplashSound(0.25));
 		}else{
 			parent::onHitBlock($blockHit, $hitResult);
@@ -184,7 +184,7 @@ class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
 				$this->biteTicks = 0;
 				$this->onGround = false;
 			}else{
-				$this->setPosition($this->location->withComponents(y: self::waterSurface($water) - ($this->biteTicks > 0 ? 0.15 : 0)));
+				$this->setPosition($this->location->withComponents(null, self::waterSurface($water) - ($this->biteTicks > 0 ? 0.15 : 0), null));
 				// Only exposed water can yield a catch; water under a solid ceiling cannot.
 				$above = $this->getWorld()->getBlock($this->waterBlock->add(0, 1, 0));
 				if($above instanceof Water || $above->isSolid()){

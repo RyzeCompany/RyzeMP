@@ -219,6 +219,33 @@ final class FishingHookTest extends TestCase{
 		self::assertNull($hook->getTargetEntity());
 	}
 
+	public function testInvulnerableTargetCannotBeHooked() : void{
+		$this->target->noDamageTicks = 20;
+		$hook = $this->hook();
+		$this->hit($hook);
+		self::assertNull($hook->getTargetEntity());
+		self::assertTrue($hook->isFlaggedForDespawn());
+	}
+
+	public function testSuccessfulPullDamagesHeldRod() : void{
+		$hook = $this->hook();
+		$this->hit($hook);
+		$this->target->method("setMotion")->willReturn(true);
+		$rod = $this->inventory->getItemInHand();
+		$returned = [];
+		self::assertSame(ItemUseResult::SUCCESS, $rod->onClickAir($this->owner, new Vector3(1, 0, 0), $returned));
+		self::assertSame(5, $rod->getDamage());
+		self::assertNull($this->owner->getFishingHook());
+	}
+
+	public function testRejectedMotionDoesNotChargeDurability() : void{
+		$hook = $this->hook();
+		$this->hit($hook);
+		$this->target->expects(self::once())->method("setMotion")->willReturn(false);
+		self::assertSame(0, $hook->reelIn($this->owner));
+		self::assertTrue($hook->isFlaggedForDespawn());
+	}
+
 	public function testWallAddedAfterHookPreventsPull() : void{
 		$hook = $this->hook();
 		$this->hit($hook);
@@ -256,6 +283,18 @@ final class FishingHookTest extends TestCase{
 		$this->world->expects(self::once())->method("dropExperience")->with(self::anything(), self::callback(static fn(int $xp) : bool => $xp >= 1 && $xp <= 6));
 		self::assertSame(1, $hook->reelIn($this->owner));
 		self::assertSame(0, $hook->reelIn($this->owner));
+	}
+
+	public function testFlyingHookHitsWaterSurfaceAndCatches() : void{
+		$this->blocks["4:64:0"] = VanillaBlocks::WATER();
+		$hook = new FishingHook(new Location(4.5, 65.5, 0.5, $this->world, 0, 0), $this->owner, new FishingSettings(["bite-wait-min-ticks" => 1, "bite-wait-max-ticks" => 1]));
+		$this->owner->setFishingHook($hook);
+		$hook->setMotion(new Vector3(0, -1, 0));
+		self::assertTrue($hook->onUpdate(1));
+		self::assertFalse($hook->hasMovementUpdate());
+		self::assertGreaterThan(64.5, $hook->getPosition()->y);
+		$this->world->expects(self::once())->method("dropItem");
+		self::assertSame(1, $hook->reelIn($this->owner));
 	}
 
 	public function testCancelledCatchAndRecursiveReelProduceNoLoot() : void{
