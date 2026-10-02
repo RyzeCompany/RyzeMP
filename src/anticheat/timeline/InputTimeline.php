@@ -21,12 +21,16 @@ final class InputTimeline{
 	/** @var list<InputFrame> */
 	private array $frames = [];
 
-	public function record(PlayerAuthInputPacket $packet) : InputFrame{
+	public function record(PlayerAuthInputPacket $packet, int $protocolId) : InputFrame{
 		$position = $packet->getPosition();
 		$delta = $packet->getDelta();
 
 		$frame = new InputFrame(
 			$packet->getTick(),
+			$protocolId,
+			$packet->getInputMode(),
+			$packet->getPlayMode(),
+			$packet->getInteractionMode(),
 			microtime(true),
 			$position->x,
 			$position->y,
