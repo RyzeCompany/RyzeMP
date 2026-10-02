@@ -42,6 +42,8 @@ final class MovementValidator{
 		$verticalPerTick = $dy / $tickDelta;
 		$distancePerTick = $distance3d / $tickDelta;
 
+		$hasActiveImpulse = $session->getImpulseTracker()->hasActiveImpulse();
+
 		$session->recordMovementSample(
 			$latest->protocolId,
 			$tickDelta,
@@ -65,7 +67,7 @@ final class MovementValidator{
 			}
 		}
 
-		if(!$player->isFlying() && !$player->isGliding() && !$player->isSwimming()){
+		if(!$hasActiveImpulse && !$player->isFlying() && !$player->isGliding() && !$player->isSwimming()){
 			if(abs($verticalPerTick) > 4.0){
 				$session->addViolation("movement.vertical_observation", 0.1);
 			}
