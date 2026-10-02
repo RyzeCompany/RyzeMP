@@ -9,7 +9,6 @@ use function array_pop;
 use function array_shift;
 use function count;
 use function microtime;
-use function sqrt;
 
 final class ImpulseTracker{
 	private const MAX_PENDING = 16;
