@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace pocketmine\anticheat;
 
+use pocketmine\anticheat\timeline\InputTimeline;
 use pocketmine\math\Vector3;
 
 final class AntiCheatSession{
 	private ActionBudget $miningBudget;
+	private InputTimeline $inputTimeline;
 	private ?Vector3 $miningTarget = null;
 
 	/** @var array<string, float> */
@@ -17,10 +19,15 @@ final class AntiCheatSession{
 		// A generous burst is deliberate. This layer protects the server from
 		// impossible action spam without punishing normal high-latency clients.
 		$this->miningBudget = new ActionBudget(40.0, 25.0);
+		$this->inputTimeline = new InputTimeline();
 	}
 
 	public function getMiningBudget() : ActionBudget{
 		return $this->miningBudget;
+	}
+
+	public function getInputTimeline() : InputTimeline{
+		return $this->inputTimeline;
 	}
 
 	public function getMiningTarget() : ?Vector3{
