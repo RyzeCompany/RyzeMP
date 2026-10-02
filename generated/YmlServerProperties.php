@@ -67,6 +67,17 @@ final class YmlServerProperties{
 	public const CONSOLE_TITLE_TICK = 'console.title-tick';
 	public const DEBUG = 'debug';
 	public const DEBUG_LEVEL = 'debug.level';
+	public const FISHING = 'fishing';
+	public const FISHING_BITE_WAIT_MAX_TICKS = 'fishing.bite-wait-max-ticks';
+	public const FISHING_BITE_WAIT_MIN_TICKS = 'fishing.bite-wait-min-ticks';
+	public const FISHING_BITE_WINDOW_TICKS = 'fishing.bite-window-ticks';
+	public const FISHING_COOLDOWN_TICKS = 'fishing.cooldown-ticks';
+	public const FISHING_ENABLED = 'fishing.enabled';
+	public const FISHING_LIFETIME_TICKS = 'fishing.lifetime-ticks';
+	public const FISHING_MAX_DISTANCE = 'fishing.max-distance';
+	public const FISHING_PULL_STRENGTH = 'fishing.pull-strength';
+	public const FISHING_PULL_VERTICAL = 'fishing.pull-vertical';
+	public const FISHING_PVP_ENABLED = 'fishing.pvp-enabled';
 	public const LEVEL_SETTINGS = 'level-settings';
 	public const LEVEL_SETTINGS_DEFAULT_FORMAT = 'level-settings.default-format';
 	public const LEVEL_SETTINGS_MIN_Y = 'level-settings.min-y';

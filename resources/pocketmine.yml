@@ -3,6 +3,20 @@
 # Some of these settings are safe, others can break your server if modified incorrectly
 # New settings/defaults won't appear automatically in this file when upgrading.
 
+fishing:
+  enabled: true
+  # Also requires pvp=true in server.properties. Hooks do not deal damage.
+  pvp-enabled: true
+  max-distance: 24
+  cooldown-ticks: 10
+  pull-strength: 0.6
+  pull-vertical: 0.2
+  # 20 ticks = 1 second. Reel during the splash/bob to catch a fish.
+  bite-wait-min-ticks: 100
+  bite-wait-max-ticks: 300
+  bite-window-ticks: 30
+  lifetime-ticks: 2400
+
 settings:
   #Whether to send all strings translated to server locale or let the device handle them
   force-language: false

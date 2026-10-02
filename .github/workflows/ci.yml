@@ -32,5 +32,9 @@ jobs:
           php build/codegen/registry-interface.php src/block generated/block
           php tests/phpunit/block/regenerate_consistency_check.php
           git diff --exit-code -- generated/block/VanillaBlocks.php tests/phpunit/block/block_factory_consistency_check.json
+      - name: Verify generated configuration constants
+        run: |
+          php build/codegen/pocketmine-yml-property-consts.php
+          git diff --exit-code -- generated/YmlServerProperties.php
       - name: Run PHPUnit
         run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit

@@ -23,6 +23,15 @@ declare(strict_types=1);
 
 namespace pocketmine\item;
 
+use pocketmine\block\Block;
+use pocketmine\entity\Location;
+use pocketmine\entity\projectile\FishingHook;
+use pocketmine\entity\projectile\FishingSettings;
+use pocketmine\event\entity\ProjectileLaunchEvent;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\sound\ThrowSound;
+
 class FishingRod extends Durable{
 
 	public function getMaxStackSize() : int{
@@ -33,5 +42,41 @@ class FishingRod extends Durable{
 		return 384;
 	}
 
-	//TODO
+	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
+		$settings = FishingSettings::fromConfig($player->getServer()->getConfigGroup());
+		if(!$settings->enabled || !$player->isAlive() || $player->isSpectator()
+			|| !$player->tryStartFishingAction($settings->cooldownTicks)){
+			return ItemUseResult::FAIL;
+		}
+		$hook = $player->getFishingHook();
+		if($hook !== null){
+			$damage = $hook->reelIn($player);
+			$player->setFishingHook(null);
+			if(!$player->isCreative()){
+				$this->applyDamage($damage);
+			}
+			return ItemUseResult::SUCCESS;
+		}
+
+		$location = $player->getLocation();
+		$hook = new FishingHook(Location::fromObject($player->getEyePos(), $player->getWorld(), $location->yaw, $location->pitch), $player, $settings);
+		$hook->setMotion($directionVector->normalize()->multiply(1.1));
+		$player->setFishingHook($hook);
+		$event = new ProjectileLaunchEvent($hook);
+		$event->call();
+		if($event->isCancelled() || !$hook->isValidFor($player) || $player->getFishingHook() !== $hook){
+			$hook->flagForDespawn();
+			if($player->getFishingHook() === $hook){
+				$player->setFishingHook(null);
+			}
+			return ItemUseResult::FAIL;
+		}
+		$hook->spawnToAll();
+		$player->getWorld()->addSound($location, new ThrowSound());
+		return ItemUseResult::SUCCESS;
+	}
+
+	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
+		return $this->onClickAir($player, $player->getDirectionVector(), $returnedItems);
+	}
 }
