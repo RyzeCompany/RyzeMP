@@ -11,8 +11,10 @@ use pmmp\encoding\ByteBufferWriter;
 use pocketmine\crafting\CraftingManager;
 use pocketmine\crafting\CraftingManagerFromDataHelper;
 use pocketmine\data\bedrock\BedrockDataFiles;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\CraftingDataPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\types\recipe\ShapedRecipe;
 use pocketmine\timings\Timings;
 
 final class MultiVersionCraftingDataCacheTest extends TestCase{
@@ -39,7 +41,8 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 	#[DataProvider('supportedGameVersions')]
 	public function testEveryRecipeAndPotionEncodesAndDecodesForItsClient(int $protocolId, string $gameVersion) : void{
 		$packet = CraftingDataCache::getInstance($protocolId)->getCache(self::$craftingManager);
-		self::assertCount(2258, $packet->recipesWithTypeIds);
+		// Registering the dispenser enables one additional vanilla crafting recipe.
+		self::assertCount(2259, $packet->recipesWithTypeIds);
 		self::assertCount(195, $packet->potionTypeRecipes);
 
 		$out = new ByteBufferWriter();
@@ -47,8 +50,26 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 		$decoded = new CraftingDataPacket();
 		$decoded->decode(new ByteBufferReader($out->getData()), $protocolId, $gameVersion);
 
-		self::assertCount(2258, $decoded->recipesWithTypeIds);
+		self::assertCount(2259, $decoded->recipesWithTypeIds);
 		self::assertCount(195, $decoded->potionTypeRecipes);
 		self::assertSame($packet->cleanRecipes, $decoded->cleanRecipes);
+
+		$dispenserId = TypeConverter::getInstance($protocolId)->getItemTypeDictionary()->fromStringId("minecraft:dispenser");
+		foreach([$packet, $decoded] as $recipes){
+			$dispenserRecipes = 0;
+			foreach($recipes->recipesWithTypeIds as $recipe){
+				if($recipe instanceof ShapedRecipe){
+					foreach($recipe->getOutput() as $result){
+						if($result->getId() === $dispenserId){
+							++$dispenserRecipes;
+							self::assertSame(3, $recipe->getWidth());
+							self::assertSame(3, $recipe->getHeight());
+							self::assertSame(1, $result->getCount());
+						}
+					}
+				}
+			}
+			self::assertSame(1, $dispenserRecipes, "The dispenser recipe must survive the protocol round trip");
+		}
 	}
 }
