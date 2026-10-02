@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\network\mcpe\handler;
 
 use pocketmine\anticheat\AntiCheatManager;
+use pocketmine\anticheat\validation\CombatValidator;
 use pocketmine\anticheat\validation\ImpulseValidator;
 use pocketmine\anticheat\validation\MiningValidator;
 use pocketmine\anticheat\validation\MovementValidator;
@@ -160,6 +161,7 @@ class InGamePacketHandler extends PacketHandler{
 
 	protected ?string $lastRequestedFullSkinId = null;
 
+	private CombatValidator $combatValidator;
 	private ImpulseValidator $impulseValidator;
 	private MiningValidator $miningValidator;
 	private MovementValidator $movementValidator;
@@ -170,6 +172,7 @@ class InGamePacketHandler extends PacketHandler{
 		private NetworkSession $session,
 		private InventoryManager $inventoryManager
 	){
+		$this->combatValidator = new CombatValidator();
 		$this->impulseValidator = new ImpulseValidator();
 		$this->miningValidator = new MiningValidator();
 		$this->movementValidator = new MovementValidator();
@@ -593,6 +596,18 @@ class InGamePacketHandler extends PacketHandler{
 				$this->player->interactEntity($target, $data->getClickPosition());
 				return true;
 			case UseItemOnEntityTransactionData::ACTION_ATTACK:
+				$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
+				if(!$this->combatValidator->validateAttack(
+					$this->player,
+					$target,
+					$data,
+					$antiCheatSession,
+					$this->session->getProtocolId(),
+					$this->session->getPing()
+				)){
+					$this->session->getLogger()->debug("AntiCheat rejected combat attack on entity " . $target->getId());
+					return true;
+				}
 				$this->player->attackEntity($target);
 				return true;
 		}
