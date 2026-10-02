@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\network\mcpe\handler;
 
 use pocketmine\anticheat\AntiCheatManager;
+use pocketmine\anticheat\validation\ImpulseValidator;
 use pocketmine\anticheat\validation\MiningValidator;
 use pocketmine\anticheat\validation\MovementValidator;
 use pocketmine\anticheat\validation\ProtocolGuard;
@@ -159,6 +160,7 @@ class InGamePacketHandler extends PacketHandler{
 
 	protected ?string $lastRequestedFullSkinId = null;
 
+	private ImpulseValidator $impulseValidator;
 	private MiningValidator $miningValidator;
 	private MovementValidator $movementValidator;
 	private ProtocolGuard $protocolGuard;
@@ -168,6 +170,7 @@ class InGamePacketHandler extends PacketHandler{
 		private NetworkSession $session,
 		private InventoryManager $inventoryManager
 	){
+		$this->impulseValidator = new ImpulseValidator();
 		$this->miningValidator = new MiningValidator();
 		$this->movementValidator = new MovementValidator();
 		$this->protocolGuard = new ProtocolGuard();
@@ -199,6 +202,8 @@ class InGamePacketHandler extends PacketHandler{
 		}
 
 		$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
+
+		$this->impulseValidator->observe($this->player, $antiCheatSession, $this->session->getPing());
 
 		$rawPos = $packet->getPosition();
 		$rawYaw = $packet->getYaw();
