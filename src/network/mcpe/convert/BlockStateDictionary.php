@@ -38,18 +38,29 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function json_decode;
-use function str_ends_with;
 use const JSON_THROW_ON_ERROR;
 
 /**
  * Handles translation of network block runtime IDs into blockstate data, and vice versa
  */
 final class BlockStateDictionary{
+	/** Blockstate properties clients have from 1.26.50 that the server's block model does not. */
+	private const NETWORK_ONLY_PROPERTIES = [
+		"minecraft:corner" => true,
+		"minecraft:connection_north" => true,
+		"minecraft:connection_south" => true,
+		"minecraft:connection_east" => true,
+		"minecraft:connection_west" => true,
+	];
+
 	/**
 	 * @var int[][]|int[]
 	 * @phpstan-var array<string, array<string, int>|int>
 	 */
 	private array $stateDataToStateIdLookup = [];
+
+	/** @var array<string, array<string, int>> */
+	private array $networkStateDataToStateIdLookup = [];
 
 	/**
 	 * @var int[][]|null
@@ -60,14 +71,22 @@ final class BlockStateDictionary{
 	/**
 	 * @param BlockStateDictionaryEntry[] $states
 	 *
-	 * @phpstan-param list<BlockStateDictionaryEntry> $states
+	 * @phpstan-param array<int, BlockStateDictionaryEntry> $states
 	 */
 	public function __construct(
 		private array $states
 	){
 		$table = [];
 		foreach($this->states as $stateId => $stateNbt){
-			$table[$stateNbt->getStateName()][$stateNbt->getRawStateProperties()] = $stateId;
+			$raw = $stateNbt->getRawStateProperties();
+			$networkState = $stateNbt->generateStateData();
+			if(!$networkState->equals($stateNbt->generateCurrentStateData())){
+				$this->networkStateDataToStateIdLookup[$networkState->getName()][BlockStateDictionaryEntry::encodeStateProperties($networkState->getStates())] = $stateId;
+			}
+			if($stateNbt->hasStrippedProperties() && isset($table[$stateNbt->getStateName()][$raw])){
+				continue; //keep the default state (listed first) for server lookups
+			}
+			$table[$stateNbt->getStateName()][$raw] = $stateId;
 		}
 
 		//setup fast path for stateless blocks
@@ -135,308 +154,19 @@ final class BlockStateDictionary{
 	 */
 	public function lookupStateIdFromData(BlockStateData $data) : ?int{
 		$name = $data->getName();
+		if(isset($this->networkStateDataToStateIdLookup[$name])){
+			$networkId = $this->networkStateDataToStateIdLookup[$name][BlockStateDictionaryEntry::encodeStateProperties($data->getStates())] ?? null;
+			if($networkId !== null){
+				return $networkId;
+			}
+		}
 
 		$lookup = $this->stateDataToStateIdLookup[$name] ?? null;
-		if($lookup === null){
-			return null;
-		}
-		if(is_int($lookup)){
-			return $lookup;
-		}
-
-		$rawProperties = BlockStateDictionaryEntry::encodeStateProperties($data->getStates());
-		if(isset($lookup[$rawProperties])){
-			return $lookup[$rawProperties];
-		}
-
-		// Bedrock 1.26.51 adds the minecraft:corner=none state to stair variants.
-		// PocketMine's stair serializer has no neighbour information and intentionally omits this property.
-		// It also uses the legacy 0,1,2,3 encoding for weirdo_direction, while the canonical
-		// 1.26.51 palette uses 0,-1,1,-2. Match the canonical state semantically without changing
-		// the serializer or the network representation.
-		if(str_ends_with($name, '_stairs') && isset($data->getStates()['upside_down_bit'], $data->getStates()['weirdo_direction'])){
-			$properties = $data->getStates();
-			$direction = $properties['weirdo_direction']->getValue();
-			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			$canonicalDirection = $directionMap[$direction] ?? null;
-			if($canonicalDirection !== null){
-				foreach($lookup as $stateId){
-					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-					$corner = $candidate['minecraft:corner'] ?? null;
-					if($corner !== null && $corner->getValue() !== 'none'){
-						continue;
-					}
-					if(!isset($candidate['weirdo_direction'], $candidate['upside_down_bit']) ||
-						$candidate['weirdo_direction']->getValue() !== $canonicalDirection ||
-						$candidate['upside_down_bit']->getValue() !== $properties['upside_down_bit']->getValue()){
-						continue;
-					}
-					return $stateId;
-				}
-			}
-		}
-
-		// Bedrock 1.26.51 represents the stair weirdo_direction enum as 0, -1, 1, -2,
-		// while PocketMine's serializer uses the legacy 0, 1, 2, 3 encoding.
-		// Convert only affected 1.26.51 stair states; the wire value itself is not changed.
-		if(str_ends_with($name, '_stairs') && isset($data->getStates()['weirdo_direction'])){
-			$properties = $data->getStates();
-			$direction = $properties['weirdo_direction']->getValue();
-			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			if(isset($directionMap[$direction])){
-				$properties['weirdo_direction'] = new \pocketmine\nbt\tag\IntTag($directionMap[$direction]);
-				$mappedRawProperties = BlockStateDictionaryEntry::encodeStateProperties($properties);
-				if(isset($lookup[$mappedRawProperties])){
-					return $lookup[$mappedRawProperties];
-				}
-			}
-		}
-
-		// Bedrock trapdoor direction is serialized by PocketMine using the legacy 0..3
-		// horizontal-facing enum, while the 1.26.51 canonical palette stores the same
-		// direction property using the -2,-1,0,1 enum. This is the same enum conversion
-		// used by stairs, but the property name here is "direction".
-		if((str_ends_with($name, ':trapdoor') || str_ends_with($name, '_trapdoor')) && isset($data->getStates()['direction'])){
-			$properties = $data->getStates();
-			$direction = $properties['direction']->getValue();
-			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			$canonicalDirection = $directionMap[$direction] ?? null;
-			if($canonicalDirection !== null){
-				foreach($lookup as $stateId){
-					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
-						continue;
-					}
-					$matches = true;
-					foreach($properties as $propertyName => $property){
-						if($propertyName === 'direction'){
-							continue;
-						}
-						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-							$matches = false;
-							break;
-						}
-					}
-					if($matches){
-						return $stateId;
-					}
-				}
-			}
-		}
-
-
-		// Bedrock 1.26.51 stores loom direction using the canonical -2,-1,0,1 enum,
-	// while PocketMine serializes horizontal facing as 0,1,2,3.
-	if($name === 'minecraft:loom' && isset($data->getStates()['direction'])){
-		$properties = $data->getStates();
-		$direction = $properties['direction']->getValue();
-		$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-		$canonicalDirection = $directionMap[$direction] ?? null;
-		if($canonicalDirection !== null){
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
-					continue;
-				}
-				return $stateId;
-			}
-		}
-	}
-
-	// Bedrock 1.26.51 stores chiseled bookshelf direction using the canonical
-	// -2,-1,0,1 enum, while PocketMine serializes horizontal facing as 0,1,2,3.
-	// Match the remaining books_stored property exactly.
-	if($name === 'minecraft:chiseled_bookshelf' && isset($data->getStates()['direction'])){
-		$properties = $data->getStates();
-		$direction = $properties['direction']->getValue();
-		$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-		$canonicalDirection = $directionMap[$direction] ?? null;
-		if($canonicalDirection !== null){
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
-					continue;
-				}
-				$matches = true;
-				foreach($properties as $propertyName => $property){
-					if($propertyName === 'direction'){
-						continue;
-					}
-					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-						$matches = false;
-						break;
-					}
-				}
-				if($matches){
-					return $stateId;
-				}
-			}
-		}
-	}
-
-	// Bedrock 1.26.51 stores sea_pickle dead_bit as a signed boolean (0/-1),
-	// while PocketMine's serializer emits the normal byte/int boolean (0/1).
-	if($name === 'minecraft:sea_pickle' && isset($data->getStates()['dead_bit'])){
-		$properties = $data->getStates();
-		$dead = $properties['dead_bit']->getValue();
-		$canonicalDead = match($dead){
-			0 => 0,
-			1 => -1,
-			default => null,
+		return match(true){
+			$lookup === null => null,
+			is_int($lookup) => $lookup,
+			is_array($lookup) => $lookup[BlockStateDictionaryEntry::encodeStateProperties($data->getStates())] ?? null
 		};
-		if($canonicalDead !== null){
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(!isset($candidate['dead_bit']) || $candidate['dead_bit']->getValue() !== $canonicalDead){
-					continue;
-				}
-				$matches = true;
-				foreach($properties as $propertyName => $property){
-					if($propertyName === 'dead_bit'){
-						continue;
-					}
-					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-						$matches = false;
-						break;
-					}
-				}
-				if($matches){
-					return $stateId;
-				}
-			}
-		}
-	}
-
-	// Bedrock 1.26.51 stores huge_mushroom_bits using a signed representation:
-	// even legacy values map to the positive half and odd values map to the
-	// preceding negative half. For example, 14 maps to canonical 7.
-	if(($name === 'minecraft:brown_mushroom_block' || $name === 'minecraft:red_mushroom_block' || $name === 'minecraft:mushroom_stem') && isset($data->getStates()['huge_mushroom_bits'])){
-		$properties = $data->getStates();
-		$bits = $properties['huge_mushroom_bits']->getValue();
-		$canonicalBits = $bits % 2 === 0 ? intdiv($bits, 2) : -intdiv($bits + 1, 2);
-		foreach($lookup as $stateId){
-			$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-			if(isset($candidate['huge_mushroom_bits']) && $candidate['huge_mushroom_bits']->getValue() === $canonicalBits){
-				return $stateId;
-			}
-		}
-	}
-
-	// Bedrock 1.26.51 uses the canonical -2,-1,0,1 enum for tripwire_hook
-		// direction, while PocketMine serializes horizontal facing as 0,1,2,3.
-		if($name === 'minecraft:tripwire_hook' && isset($data->getStates()['direction'])){
-			$properties = $data->getStates();
-			$direction = $properties['direction']->getValue();
-			$directionMap = [0 => 0, 1 => -1, 2 => 1, 3 => -2];
-			$canonicalDirection = $directionMap[$direction] ?? null;
-			if($canonicalDirection !== null){
-				foreach($lookup as $stateId){
-					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-					if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
-						continue;
-					}
-					$matches = true;
-					foreach($properties as $propertyName => $property){
-						if($propertyName === 'direction'){
-							continue;
-						}
-						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-							$matches = false;
-							break;
-						}
-					}
-					if($matches){
-						return $stateId;
-					}
-				}
-			}
-		}
-
-		// Bedrock 1.26.51 stores bell direction using the canonical -2,-1,0,1 enum,
-	// while PocketMine serializes horizontal facing as the legacy 0,1,2,3 enum.
-	if($name === 'minecraft:bell' && isset($data->getStates()['direction'])){
-		$properties = $data->getStates();
-		$direction = $properties['direction']->getValue();
-		$canonicalDirection = [0 => 0, 1 => -1, 2 => 1, 3 => -2][$direction] ?? null;
-		if($canonicalDirection !== null){
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if(!isset($candidate['direction']) || $candidate['direction']->getValue() !== $canonicalDirection){
-					continue;
-				}
-				$matches = true;
-				foreach($properties as $propertyName => $property){
-					if($propertyName === 'direction'){
-						continue;
-					}
-					if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-						$matches = false;
-						break;
-					}
-				}
-				if($matches){
-					return $stateId;
-				}
-			}
-		}
-	}
-
-	// Bedrock 1.26.51 stores big_dripleaf_head as a signed boolean (0/-1),
-		// while PocketMine's serializer emits the normal byte/int boolean (0/1).
-		if($name === 'minecraft:big_dripleaf' && isset($data->getStates()['big_dripleaf_head'])){
-			$properties = $data->getStates();
-			$head = $properties['big_dripleaf_head']->getValue();
-			$canonicalHead = match($head){
-				0 => 0,
-				1 => -1,
-				default => null,
-			};
-			if($canonicalHead !== null){
-				foreach($lookup as $stateId){
-					$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-					if(!isset($candidate['big_dripleaf_head']) || $candidate['big_dripleaf_head']->getValue() !== $canonicalHead){
-						continue;
-					}
-					$matches = true;
-					foreach($properties as $propertyName => $property){
-						if($propertyName === 'big_dripleaf_head'){
-							continue;
-						}
-						if(!isset($candidate[$propertyName]) || $candidate[$propertyName]->getValue() !== $property->getValue()){
-							$matches = false;
-							break;
-						}
-					}
-					if($matches){
-						return $stateId;
-					}
-				}
-			}
-		}
-
-		// Bedrock 1.26.40+ exposes cardinal connection states for fences and thin blocks.
-		// Item/blockstate serialization has no world neighbours, so these blocks serialize without
-		// connection properties. Resolve that stateless representation to the canonical no-connection state.
-		if($data->getStates() === []){
-			foreach($lookup as $stateId){
-				$candidate = $this->states[$stateId]->generateCurrentStateData()->getStates();
-				if($candidate === []){
-					continue;
-				}
-				$allConnectionsFalse = true;
-				foreach($candidate as $propertyName => $value){
-					if(!str_starts_with($propertyName, "minecraft:connection_") || $value->getValue() !== 0){
-						$allConnectionsFalse = false;
-						break;
-					}
-				}
-				if($allConnectionsFalse){
-					return $stateId;
-				}
-			}
-		}
-
-		return null;
 	}
 
 	/**
@@ -480,7 +210,11 @@ final class BlockStateDictionary{
 		);
 	}
 
-	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, bool $upgrade = true) : self{
+	/**
+	 * @param int[]|null $networkIds when set, states are keyed by these (hashed) network ids instead of their index
+	 */
+	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null) : self{
+		$upgrader = GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader();
 		$metaMap = json_decode($metaMapContents, flags: JSON_THROW_ON_ERROR);
 		if(!is_array($metaMap)){
 			throw new \InvalidArgumentException("Invalid metaMap, expected array for root type, got " . get_debug_type($metaMap));
@@ -498,7 +232,11 @@ final class BlockStateDictionary{
 			}
 		}
 
-		foreach(self::loadPaletteFromString($blockPaletteContents) as $i => $state){
+		$palette = self::loadPaletteFromString($blockPaletteContents);
+		if(count($palette) !== count($metaMap) || ($networkIds !== null && count($palette) !== count($networkIds))){
+			throw new \InvalidArgumentException("Palette, metadata and network IDs must have matching lengths");
+		}
+		foreach($palette as $i => $state){
 			$meta = $metaMap[$i] ?? null;
 			if($meta === null){
 				throw new \InvalidArgumentException("Missing associated meta value for state $i (" . $state->toNbt() . ")");
@@ -506,9 +244,21 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			$newState = $upgrade && $state->getVersion() !== BlockStateData::CURRENT_VERSION ? GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader()->upgrade($state) : $state;
+			$newState = $upgrader->upgrade($state);
 			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
-			$entries[$i] = new BlockStateDictionaryEntry($uniqueName, $newState->getStates(), $meta, $newState->equals($state) ? null : $state);
+			$currentStates = $newState->getStates();
+			$stripped = false;
+			foreach($currentStates as $property => $_){
+				if(isset(self::NETWORK_ONLY_PROPERTIES[$property])){
+					unset($currentStates[$property]);
+					$stripped = true;
+				}
+			}
+			$networkId = $networkIds === null ? $i : ($networkIds[$i] ?? null);
+			if(!is_int($networkId) || isset($entries[$networkId])){
+				throw new \InvalidArgumentException("Invalid or duplicate network id for state $i");
+			}
+			$entries[$networkId] = new BlockStateDictionaryEntry($uniqueName, $currentStates, $meta, $stripped || !$newState->equals($state) ? $state : null, $stripped);
 		}
 
 		return new self($entries);

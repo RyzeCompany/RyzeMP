@@ -28,19 +28,13 @@ use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockStateSerializeException;
 use pocketmine\data\bedrock\block\BlockStateSerializer;
 use pocketmine\data\bedrock\block\BlockTypeNames;
-use pocketmine\nbt\LittleEndianNbtSerializer;
-use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\TreeRoot;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Filesystem;
-use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
-use function hexdec;
-use function hash;
-use function intval;
-use function ksort;
 use function str_replace;
+use function json_decode;
+use const JSON_THROW_ON_ERROR;
 
 /**
  * @internal
@@ -51,8 +45,8 @@ final class BlockTranslator{
 
 	private const PATHS = [
 		ProtocolInfo::PROTOCOL_1_26_51 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.51',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.51',
+			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.50',
+			self::BLOCK_STATE_META_MAP_PATH => '-1.26.50',
 		],
 		ProtocolInfo::PROTOCOL_1_26_45 => [
 			self::CANONICAL_BLOCK_STATES_PATH => '',
@@ -182,22 +176,6 @@ final class BlockTranslator{
 	 */
 	private array $networkIdCache = [];
 
-	private bool $useHashedNetworkIds = false;
-
-	/**
-	 * These properties exist in the 1.26.50+ network blockstate palette but are not part of
-	 * PocketMine's server-side block model. They must not participate in the 1.26.50+ hashed
-	 * block network ID calculation.
-	 */
-	private const NETWORK_ONLY_PROPERTIES = [
-		"minecraft:corner" => true,
-		"minecraft:connection_north" => true,
-		"minecraft:connection_south" => true,
-		"minecraft:connection_east" => true,
-		"minecraft:connection_west" => true,
-	];
-
-
 	/** Used when a blockstate can't be correctly serialized (e.g. because it's unknown) */
 	private BlockStateData $fallbackStateData;
 	private int $fallbackStateId;
@@ -206,10 +184,13 @@ final class BlockTranslator{
 		$canonicalBlockStatesRaw = Filesystem::fileGetContents(str_replace(".nbt", self::PATHS[$protocolId][self::CANONICAL_BLOCK_STATES_PATH] . ".nbt", BedrockDataFiles::CANONICAL_BLOCK_STATES_NBT));
 		$metaMappingRaw = Filesystem::fileGetContents(str_replace(".json", self::PATHS[$protocolId][self::BLOCK_STATE_META_MAP_PATH] . ".json", BedrockDataFiles::BLOCK_STATE_META_MAP_JSON));
 		$translator = new self(
-			BlockStateDictionary::loadFromString($canonicalBlockStatesRaw, $metaMappingRaw),
+			BlockStateDictionary::loadFromString(
+				$canonicalBlockStatesRaw,
+				$metaMappingRaw,
+				$protocolId >= ProtocolInfo::PROTOCOL_1_26_50 ? json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "block_network_ids-1.26.50.json"), flags: JSON_THROW_ON_ERROR) : null
+			),
 			GlobalBlockStateHandlers::getSerializer(),
 		);
-		$translator->useHashedNetworkIds = $protocolId >= ProtocolInfo::PROTOCOL_1_26_50;
 		return $translator;
 	}
 
@@ -233,17 +214,13 @@ final class BlockTranslator{
 		}catch(BlockStateSerializeException){
 			//TODO: this will swallow any error caused by invalid block properties; this is not ideal, but it should be
 			//covered by unit tests, so this is probably a safe assumption.
-			$networkId = $this->useHashedNetworkIds ? $this->hashBlockStateData($this->fallbackStateData) : $this->fallbackStateId;
+			$networkId = $this->fallbackStateId;
 		}
 
 		return $this->networkIdCache[$internalStateId] = $networkId;
 	}
 
 	private function internalStateDataToNetworkId(BlockStateData $blockStateData) : int{
-		if($this->useHashedNetworkIds){
-			return $this->hashBlockStateData($blockStateData);
-		}
-
 		$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
 		if($networkId === null){
 			throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
@@ -254,34 +231,10 @@ final class BlockTranslator{
 	/**
 	 * Converts network blockstate data to the runtime network ID.
 	 *
-	 * For protocols using hashed block network IDs, this must not use the
-	 * canonical dictionary lookup because synthetic network states may not be
-	 * present in the dictionary.
+	 * All consumers use the same dictionary, including protocols with hashed IDs.
 	 */
 	public function networkStateDataToNetworkId(BlockStateData $blockStateData) : int{
 		return $this->internalStateDataToNetworkId($blockStateData);
-	}
-
-	private function hashBlockStateData(BlockStateData $blockStateData) : int{
-		$states = $blockStateData->getStates();
-		if($this->useHashedNetworkIds){
-			foreach($states as $property => $_){
-				if(isset(self::NETWORK_ONLY_PROPERTIES[$property])){
-					unset($states[$property]);
-				}
-			}
-		}
-		ksort($states, SORT_STRING);
-		$statesTag = CompoundTag::create();
-		foreach(Utils::stringifyKeys($states) as $key => $state){
-			$statesTag->setTag($key, $state);
-		}
-		$tag = CompoundTag::create()
-			->setString(BlockStateData::TAG_NAME, $blockStateData->getName())
-			->setTag(BlockStateData::TAG_STATES, $statesTag);
-		$binaryNbt = (new LittleEndianNbtSerializer())->write(new TreeRoot($tag));
-		$hash = intval(hexdec(hash("fnv1a32", $binaryNbt)));
-		return $hash > 0x7fffffff ? $hash - 0x100000000 : $hash;
 	}
 
 	/**

@@ -25,9 +25,7 @@ namespace pocketmine\network\mcpe\convert;
 
 use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\nbt\LittleEndianNbtSerializer;
-use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\utils\Utils;
@@ -52,7 +50,8 @@ final class BlockStateDictionaryEntry{
 		private string $stateName,
 		array $stateProperties,
 		private int $meta,
-		private ?BlockStateData $oldBlockStateData
+		private ?BlockStateData $oldBlockStateData,
+		private bool $strippedProperties = false
 	){
 		$rawStateProperties = self::encodeStateProperties($stateProperties);
 		$this->rawStateProperties = self::$uniqueRawStates[$rawStateProperties] ??= $rawStateProperties;
@@ -76,6 +75,9 @@ final class BlockStateDictionaryEntry{
 
 	public function getMeta() : int{ return $this->meta; }
 
+	/** True when network-only properties were removed from this state's server-side form. */
+	public function hasStrippedProperties() : bool{ return $this->strippedProperties; }
+
 	/**
 	 * @return Tag[]
 	 */
@@ -98,13 +100,6 @@ final class BlockStateDictionaryEntry{
 		ksort($properties, SORT_STRING);
 		$tag = new CompoundTag();
 		foreach(Utils::stringifyKeys($properties) as $k => $v){
-			// Bedrock has historically represented boolean/integer blockstate properties with
-			// different NBT scalar types across protocol data revisions. Treat integral values
-			// as their semantic integer value when building the lookup key, so ByteTag(0) and
-			// IntTag(0) represent the same blockstate property.
-			if($v instanceof ByteTag){
-				$v = new IntTag($v->getValue());
-			}
 			$tag->setTag($k, $v);
 		}
 		return (new LittleEndianNbtSerializer())->write(new TreeRoot($tag));

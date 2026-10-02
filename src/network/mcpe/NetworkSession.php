@@ -680,15 +680,6 @@ class NetworkSession{
 			foreach($packets as $evPacket){
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
-				//TEMP DEBUG: dump every outgoing packet's raw bytes so we can see exactly what the client
-				//received right before it disconnects. Remove once the "missing structure data" bug is found.
-				$this->logger->debug(sprintf(
-					"[PacketDump] -> %s (%d bytes) header_hex=%s base64=%s",
-					(new \ReflectionClass($evPacket))->getShortName(),
-					strlen($encoded),
-					bin2hex(substr($encoded, 0, 8)),
-					base64_encode($encoded)
-				));
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
@@ -1115,10 +1106,20 @@ class NetworkSession{
 		$this->logger->debug("Waiting for chunk radius request");
 	}
 
+	private bool $spawnResponseReceivedEarly = false;
+
+	public function notifyEarlySpawnResponse() : void{
+		$this->spawnResponseReceivedEarly = true;
+	}
+
 	public function notifyTerrainReady() : void{
 		$this->logger->debug("Sending spawn notification, waiting for spawn response");
 		$this->sendDataPacket(PlayStatusPacket::create(PlayStatusPacket::PLAYER_SPAWN));
-		$this->setHandler(new SpawnResponsePacketHandler($this->onClientSpawnResponse(...)));
+		if($this->spawnResponseReceivedEarly){
+			$this->onClientSpawnResponse();
+		}else{
+			$this->setHandler(new SpawnResponsePacketHandler($this->onClientSpawnResponse(...)));
+		}
 	}
 
 	private function onClientSpawnResponse() : void{

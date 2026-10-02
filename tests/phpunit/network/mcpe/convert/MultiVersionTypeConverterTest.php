@@ -33,7 +33,8 @@ final class MultiVersionTypeConverterTest extends TestCase{
 	public function testProtocolSpecificConverters(int $protocolId, int $expectedSchemaId) : void{
 		$converter = TypeConverter::getInstance($protocolId);
 		self::assertSame($expectedSchemaId, ItemTranslator::getItemSchemaId($protocolId));
-		self::assertGreaterThanOrEqual(0, $converter->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId()));
+		$airId = $converter->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId());
+		self::assertSame('minecraft:air', $converter->getBlockTranslator()->getBlockStateDictionary()->generateDataFromStateId($airId)?->getName());
 		self::assertGreaterThan(0, $converter->getItemTypeDictionary()->fromStringId('minecraft:shield'));
 		self::assertNotEmpty(ItemTagToIdMap::getInstance($protocolId)->getIdsForTag('minecraft:boats'));
 	}

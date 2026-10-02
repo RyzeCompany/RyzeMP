@@ -67,7 +67,8 @@ class BlockTranslatorTest extends TestCase{
 			$expected -= 0x100000000;
 		}
 		self::assertSame($expected, $translator->internalIdToNetworkId($internalStateId));
-		self::assertNotSame($translator->getBlockStateDictionary()->lookupStateIdFromData($data), $expected);
+		self::assertSame($translator->getBlockStateDictionary()->lookupStateIdFromData($data), $expected);
+		self::assertTrue($data->equals($translator->getBlockStateDictionary()->generateDataFromStateId($expected)));
 	}
 
 }

@@ -28,9 +28,9 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 
 			$data = $entry->generateCurrentStateData();
 			$lookup = $dictionary->lookupStateIdFromData($data);
-			self::assertSame(
-				$stateId,
-				$lookup,
+			self::assertEquals(
+				$data,
+				$lookup === null ? null : $dictionary->generateCurrentDataFromStateId($lookup),
 				'Dictionary self-lookup failed for runtime ID ' . $stateId . ': ' . $data->toNbt()
 			);
 			$checked++;
@@ -106,17 +106,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			}
 		}
 
-		// A raw match is not expected here: 1.26.51 changed the canonical enum
-		// representation of trapdoor "direction" from PocketMine's 0..3 encoding to
-		// the canonical 0,-1,1,-2 encoding. The dictionary must resolve this
-		// semantically instead of requiring an identical raw NBT key.
-		self::assertSame(
-			[],
-			$rawMatches,
-			"Trapdoor unexpectedly has a raw 0..3 match in the 1.26.51 palette.\n" .
-			"Serializer NBT: " . $data->toNbt() . "\n" .
-			"Serializer raw: " . bin2hex($serializerRaw)
-		);
+		self::assertNotEmpty($rawMatches, "Trapdoor properties must retain their typed 0..3 values");
 
 		$lookup = $dictionary->lookupStateIdFromData($data);
 		self::assertNotNull(
@@ -128,7 +118,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 
 		$mapped = $dictionary->getStates()[$lookup];
 		$mappedStates = $mapped->generateCurrentStateData()->getStates();
-		self::assertSame(-2, $mappedStates['direction']->getValue());
+		self::assertSame(3, $mappedStates['direction']->getValue());
 		self::assertSame(3, $mapped->getMeta());
 	}
 
@@ -222,8 +212,8 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		);
 		$mapped = $dictionary->getStates()[$lookup];
 		$mappedStates = $mapped->generateCurrentStateData()->getStates();
-		self::assertSame(1, $mappedStates['direction']->getValue());
-		self::assertSame(1, $mapped->getMeta());
+		self::assertSame(2, $mappedStates['direction']->getValue());
+		self::assertSame(2, $mapped->getMeta());
 	}
 
 	public function test12651BigDripleafSerializerDiagnostic() : void{
@@ -263,7 +253,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		);
 		$mapped = $dictionary->getStates()[$lookup];
 		$mappedStates = $mapped->generateCurrentStateData()->getStates();
-		self::assertSame(-1, $mappedStates['big_dripleaf_head']->getValue());
+		self::assertSame(1, $mappedStates['big_dripleaf_head']->getValue());
 		self::assertSame('none', $mappedStates['big_dripleaf_tilt']->getValue());
 		self::assertSame('north', $mappedStates['minecraft:cardinal_direction']->getValue());
 		self::assertSame(20, $mapped->getMeta());
@@ -281,7 +271,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			'1.26.51 chiseled_bookshelf mapping failed: ' . $data->toNbt()
 		);
 		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
-		self::assertSame(1, $mappedStates['direction']->getValue());
+		self::assertSame(2, $mappedStates['direction']->getValue());
 		self::assertSame(0, $mappedStates['books_stored']->getValue());
 	}
 
@@ -297,7 +287,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
 		self::assertSame(0, $mappedStates['toggle_bit']->getValue());
 		self::assertSame('standing', $mappedStates['attachment']->getValue());
-		self::assertSame(1, $mappedStates['direction']->getValue());
+		self::assertSame(2, $mappedStates['direction']->getValue());
 	}
 
 	public function test12651SeaPickleSerializerDiagnostic() : void{
@@ -313,7 +303,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		);
 		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
 		self::assertSame(0, $mappedStates['cluster_count']->getValue());
-		self::assertSame(-1, $mappedStates['dead_bit']->getValue());
+		self::assertSame(1, $mappedStates['dead_bit']->getValue());
 	}
 
 
@@ -328,7 +318,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			'1.26.51 mushroom_stem mapping failed: ' . $data->toNbt()
 		);
 		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
-		self::assertSame(-8, $mappedStates['huge_mushroom_bits']->getValue());
+		self::assertSame(15, $mappedStates['huge_mushroom_bits']->getValue());
 	}
 
 
@@ -343,7 +333,7 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 			'1.26.51 red_mushroom_block mapping failed: ' . $data->toNbt()
 		);
 		$mappedStates = $dictionary->getStates()[$lookup]->generateCurrentStateData()->getStates();
-		self::assertSame(7, $mappedStates['huge_mushroom_bits']->getValue());
+		self::assertSame(14, $mappedStates['huge_mushroom_bits']->getValue());
 	}
 
 
@@ -451,26 +441,18 @@ final class Bedrock12651BlockStateDiagnosticTest extends TestCase{
 		);
 	}
 
-	public function test12651NetworkOnlyBlockstatePropertiesDoNotAffectHash() : void{
+	public function test12651NetworkStatesRetainTheirNetworkOnlyProperties() : void{
 		$translator = BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51);
-		$dataWithNetworkOnlyProperties = BlockStateData::current('minecraft:cobblestone_wall', [
-			'minecraft:corner' => new ByteTag(1),
-			'minecraft:connection_north' => new ByteTag(1),
-			'minecraft:connection_south' => new ByteTag(0),
-			'minecraft:connection_east' => new ByteTag(1),
-			'minecraft:connection_west' => new ByteTag(0),
-			'wall_post_bit' => new ByteTag(1),
-		]);
-		$dataWithoutNetworkOnlyProperties = BlockStateData::current('minecraft:cobblestone_wall', [
-			'wall_post_bit' => new ByteTag(1),
-		]);
-
-		$method = new \\ReflectionMethod(BlockTranslator::class, 'hashBlockStateData');
-		$method->setAccessible(true);
-		$hashWithNetworkOnlyProperties = $method->invoke($translator, $dataWithNetworkOnlyProperties);
-		$hashWithoutNetworkOnlyProperties = $method->invoke($translator, $dataWithoutNetworkOnlyProperties);
-
-		self::assertSame($hashWithoutNetworkOnlyProperties, $hashWithNetworkOnlyProperties);
+		$dictionary = $translator->getBlockStateDictionary();
+		$checked = 0;
+		foreach($dictionary->getStates() as $networkId => $entry){
+			if($entry->hasStrippedProperties()){
+				self::assertFalse($entry->generateStateData()->equals($entry->generateCurrentStateData()));
+				self::assertNotNull($dictionary->generateDataFromStateId($networkId));
+				self::assertNotNull($dictionary->lookupStateIdFromData($entry->generateCurrentStateData()));
+				++$checked;
+			}
+		}
+		self::assertGreaterThan(0, $checked);
 	}
-
 }
