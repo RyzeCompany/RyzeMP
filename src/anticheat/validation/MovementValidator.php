@@ -8,7 +8,6 @@ use pocketmine\anticheat\AntiCheatSession;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\player\Player;
 use function abs;
-use function max;
 use function sqrt;
 
 /**
@@ -21,7 +20,7 @@ final class MovementValidator{
 	public function observe(Player $player, AntiCheatSession $session, PlayerAuthInputPacket $packet, ?int $ping) : void{
 		$latest = $session->getInputTimeline()->getLatest();
 		$previous = $session->getInputTimeline()->getPrevious();
-		if($latest === null || $previous === null){
+		if($latest === null || $previous === null || $latest->clientTick !== $packet->getTick()){
 			return;
 		}
 
