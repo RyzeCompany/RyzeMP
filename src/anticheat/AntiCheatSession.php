@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\anticheat;
 
 use pocketmine\anticheat\impulse\ImpulseTracker;
+use pocketmine\anticheat\timeline\CombatSample;
 use pocketmine\anticheat\timeline\InputTimeline;
 use pocketmine\anticheat\timeline\MovementSample;
 use function array_shift;
@@ -13,12 +14,16 @@ use pocketmine\math\Vector3;
 
 final class AntiCheatSession{
 	private ActionBudget $miningBudget;
+	private ActionBudget $combatBudget;
 	private InputTimeline $inputTimeline;
 	private ImpulseTracker $impulseTracker;
 	private ?Vector3 $miningTarget = null;
 
 	/** @var list<MovementSample> */
 	private array $movementSamples = [];
+
+	/** @var list<CombatSample> */
+	private array $combatSamples = [];
 
 	/** @var array<string, float> */
 	private array $violations = [];
@@ -27,12 +32,17 @@ final class AntiCheatSession{
 		// A generous burst is deliberate. This layer protects the server from
 		// impossible action spam without punishing normal high-latency clients.
 		$this->miningBudget = new ActionBudget(40.0, 25.0);
+		$this->combatBudget = new ActionBudget(20.0, 16.0);
 		$this->inputTimeline = new InputTimeline();
 		$this->impulseTracker = new ImpulseTracker();
 	}
 
 	public function getMiningBudget() : ActionBudget{
 		return $this->miningBudget;
+	}
+
+	public function getCombatBudget() : ActionBudget{
+		return $this->combatBudget;
 	}
 
 	public function getInputTimeline() : InputTimeline{
@@ -94,6 +104,36 @@ final class AntiCheatSession{
 	 */
 	public function getMovementSamples() : array{
 		return $this->movementSamples;
+	}
+
+	public function recordCombatSample(
+		int $protocolId,
+		int $targetRuntimeId,
+		?int $clientTick,
+		float $receivedAt,
+		float $reach,
+		float $directionDot,
+		?int $ping
+	) : void{
+		$this->combatSamples[] = new CombatSample(
+			$protocolId,
+			$targetRuntimeId,
+			$clientTick,
+			$receivedAt,
+			$reach,
+			$directionDot,
+			$ping
+		);
+		if(count($this->combatSamples) > 80){
+			array_shift($this->combatSamples);
+		}
+	}
+
+	/**
+	 * @return list<CombatSample>
+	 */
+	public function getCombatSamples() : array{
+		return $this->combatSamples;
 	}
 
 }
