@@ -194,4 +194,46 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame(str_repeat("\x7f\x7f\x7f\xff", 64 * 64), $outgoing->getSkinImage()->getData());
 	}
 
+	/** @return array<string, array{int, int, bool}> */
+	public static function personaProtocolMatrix() : array{
+		return [
+			'1.20.0 -> 1.20.80 same legacy family' => [ProtocolInfo::PROTOCOL_1_20_0, ProtocolInfo::PROTOCOL_1_20_80, false],
+			'1.21.80 -> 1.26.30 same legacy family' => [ProtocolInfo::PROTOCOL_1_21_80, ProtocolInfo::PROTOCOL_1_26_30, false],
+			'1.26.30 -> 1.26.40 crosses legacy to 2168 family' => [ProtocolInfo::PROTOCOL_1_26_30, ProtocolInfo::PROTOCOL_1_26_40, true],
+			'1.26.40 -> 1.26.45 same 2168/2169 family' => [ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45, false],
+			'1.26.45 -> 1.26.52 crosses into 2193 family' => [ProtocolInfo::PROTOCOL_1_26_45, ProtocolInfo::PROTOCOL_1_26_50, true],
+			'1.26.52 -> 1.26.45 crosses backwards out of 2193' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_45, true],
+			'1.26.52 -> 1.26.30 crosses modern to legacy' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_30, true],
+			'1.26.52 -> 1.26.52 same modern family' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_50, false],
+		];
+	}
+
+	#[DataProvider('personaProtocolMatrix')]
+	public function testPersonaCompatibilityFamilies(int $sourceProtocol, int $targetProtocol, bool $expectClassicFallback) : void{
+		$incoming = new SkinData(
+			'persona-matrix',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x21\x43\x65\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("c", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, $sourceProtocol);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, $targetProtocol);
+
+		self::assertSame(!$expectClassicFallback, $outgoing->isPersona());
+		if($expectClassicFallback){
+			self::assertSame("false", $outgoing->getTrustedSkinFlag());
+			self::assertSame("", $outgoing->getProfileHash());
+			self::assertContains($outgoing->getSkinImage()->getWidth(), [64, 128]);
+			self::assertSame($outgoing->getSkinImage()->getWidth(), $outgoing->getSkinImage()->getHeight());
+		}else{
+			self::assertSame($incoming, $outgoing);
+		}
+	}
+
 }
