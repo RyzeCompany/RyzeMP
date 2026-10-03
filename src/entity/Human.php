@@ -167,7 +167,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	public function sendSkin(?array $targets = null) : void{
 		TypeConverter::broadcastByTypeConverter($targets ?? $this->hasSpawned, function(TypeConverter $typeConverter) : array{
 			return [
-				PlayerSkinPacket::create($this->getUniqueId(), "", "", $typeConverter->getSkinAdapter()->toSkinData($this->skin, $typeConverter->getProtocolId()))
+				PlayerSkinPacket::create($this->getUniqueId(), "", "", $typeConverter->coreSkinToNet($this->skin))
 			];
 		});
 	}
@@ -510,7 +510,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			);
 		}
 		if(!($this instanceof Player)){
-			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->getSkinAdapter()->toSkinData($this->skin, $typeConverter->getProtocolId()))]));
+			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]));
 		}
 
 		$networkSession->sendDataPacket(AddPlayerPacket::create(
