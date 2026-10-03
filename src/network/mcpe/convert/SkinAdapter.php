@@ -35,11 +35,11 @@ interface SkinAdapter{
 	/**
 	 * Allows you to convert a skin entity to skin data.
 	 */
-	public function toSkinData(Skin $skin) : SkinData;
+	public function toSkinData(Skin $skin, ?int $targetProtocol = null) : SkinData;
 
 	/**
 	 * Allows you to convert skin data to a skin entity.
 	 * @throws InvalidSkinException
 	 */
-	public function fromSkinData(SkinData $data) : Skin;
+	public function fromSkinData(SkinData $data, ?int $sourceProtocol = null) : Skin;
 }
