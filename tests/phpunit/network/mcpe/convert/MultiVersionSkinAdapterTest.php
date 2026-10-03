@@ -103,8 +103,8 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		);
 
 		$adapter = new LegacySkinAdapter();
-		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_45);
-		$outgoing = $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_50);
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
 
 		self::assertFalse($outgoing->isPersona());
 		self::assertSame("false", $outgoing->getTrustedSkinFlag());
@@ -127,9 +127,9 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		);
 
 		$adapter = new LegacySkinAdapter();
-		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
 
-		self::assertSame($incoming, $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_45));
+		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_45));
 	}
 
 	public function testModernPersonaIsPreservedFor2193Recipient() : void{
@@ -145,9 +145,27 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		);
 
 		$adapter = new LegacySkinAdapter();
-		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
 
-		self::assertSame($incoming, $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_50));
+		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50));
+	}
+
+	public function testLegacyOverrideSignatureRemainsCompatible() : void{
+		$adapter = new class extends LegacySkinAdapter{
+			public function toSkinData(Skin $skin) : SkinData{
+				return parent::toSkinData($skin);
+			}
+
+			public function fromSkinData(SkinData $data) : Skin{
+				return parent::fromSkinData($data);
+			}
+		};
+
+		$skin = new Skin('plugin-compatible', str_repeat("\xff", 64 * 64 * 4));
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
 	}
 
 }
