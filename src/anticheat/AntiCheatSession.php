@@ -102,6 +102,12 @@ final class AntiCheatSession{
 	public function resetAirTicks() : void{
 		$this->airTicks = 0;
 	}
+
+	public function resetMovementState() : void{
+		$this->airTicks = 0;
+		$this->inputTimeline->clear();
+		$this->movementSamples = [];
+	}
 	public function recordMovementSample(
 		int $protocolId,
 		int $tickDelta,
