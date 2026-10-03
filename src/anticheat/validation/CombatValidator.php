@@ -33,17 +33,17 @@ final class CombatValidator{
 		?int $ping
 	) : bool{
 		if(!$session->getCombatBudget()->consume()){
-			$session->addViolation("combat.action_rate", 1.0);
+			$session->addViolation("combat.action_rate", 1.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
 		if($target === $player || $target->getWorld() !== $player->getWorld()){
-			$session->addViolation("combat.invalid_target", 3.0);
+			$session->addViolation("combat.invalid_target", 3.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
 		if(!$this->hasFiniteTransactionVectors($data)){
-			$session->addViolation("combat.non_finite", 5.0);
+			$session->addViolation("combat.non_finite", 5.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
@@ -75,7 +75,7 @@ final class CombatValidator{
 		);
 
 		if($reach > self::HARD_REACH){
-			$session->addViolation("combat.hard_reach", 3.0);
+			$session->addViolation("combat.hard_reach", 3.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
