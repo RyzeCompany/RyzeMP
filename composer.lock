@@ -131,12 +131,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockData.git",
-                "reference": "2766f1221c1a59a7cc275d41c9fa35d1d3e1573b"
+                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/2766f1221c1a59a7cc275d41c9fa35d1d3e1573b",
-                "reference": "2766f1221c1a59a7cc275d41c9fa35d1d3e1573b",
+                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
+                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
                 "shasum": ""
             },
             "type": "library",
