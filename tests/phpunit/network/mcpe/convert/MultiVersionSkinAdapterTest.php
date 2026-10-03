@@ -75,7 +75,8 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		return [
 			'26.30' => [ProtocolInfo::PROTOCOL_1_26_30],
 			'26.40 and 26.44' => [ProtocolInfo::PROTOCOL_1_26_40],
-			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45]
+			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45],
+			'26.50+' => [ProtocolInfo::PROTOCOL_1_26_50]
 		];
 	}
 
@@ -90,4 +91,35 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), $protocolId);
 		self::assertSame('{}', $decoded->getGeometryData());
 	}
+	public function testPersonaFrom2169CanBeBroadcastAsClassicSkinTo2193() : void{
+		$incoming = new SkinData(
+			'persona-source',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: 'true',
+			profileHash: str_repeat('a', 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$coreSkin = $adapter->fromSkinData($incoming);
+		self::assertSame(64 * 64 * 4, strlen($coreSkin->getSkinData()));
+
+		$outgoing = $adapter->toSkinData($coreSkin);
+		self::assertFalse($outgoing->isPersona());
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(64 * 64 * 4, strlen($outgoing->getSkinImage()->getData()));
+
+		$out = new ByteBufferWriter();
+		CommonTypes::putSkin($out, $outgoing, ProtocolInfo::PROTOCOL_1_26_50);
+		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), ProtocolInfo::PROTOCOL_1_26_50);
+		self::assertFalse($decoded->isPersona());
+		self::assertSame(64, $decoded->getSkinImage()->getWidth());
+		self::assertSame(64, $decoded->getSkinImage()->getHeight());
+		self::assertSame(64 * 64 * 4, strlen($decoded->getSkinImage()->getData()));
+	}
+
 }
