@@ -33,7 +33,6 @@ use function is_string;
 use function intdiv;
 use function json_decode;
 use function json_encode;
-use function random_bytes;
 use function str_repeat;
 use function substr;
 use const JSON_THROW_ON_ERROR;
@@ -119,9 +118,31 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 		return $normalized;
 	}
 
+	private static function personaToClassicSkin(SkinData $data) : Skin{
+		$skinData = self::normalizeSkinImage($data->getSkinImage());
+		try{
+			return new Skin(
+				"Standard_Custom",
+				$skinData,
+				"",
+				"geometry.humanoid.custom",
+				SkinData::GEOMETRY_DATA_NONE
+			);
+		}catch(InvalidSkinException){
+			// Keep a deterministic safe fallback for unexpected Persona image sizes.
+			return new Skin(
+				"Standard_Custom",
+				str_repeat("\x7f\x7f\x7f\xff", 64 * 64),
+				"",
+				"geometry.humanoid.custom",
+				SkinData::GEOMETRY_DATA_NONE
+			);
+		}
+	}
+
 	public function fromSkinData(SkinData $data) : Skin{
 		if($data->isPersona()){
-			$skin = new Skin("Standard_Custom", str_repeat(random_bytes(3) . "\xff", 4096));
+			$skin = self::personaToClassicSkin($data);
 			self::$personaSkins[$skin] = $data;
 			return $skin;
 		}
