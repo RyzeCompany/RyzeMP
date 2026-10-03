@@ -171,6 +171,8 @@ class NetworkSession{
 	private ?array $handlerActions = null;
 
 	private bool $connected = true;
+	private bool $crossVersionPacketTrace = false;
+	private int $crossVersionPacketTraceSequence = 0;
 	private bool $disconnectGuard = false;
 	protected bool $loggedIn = false;
 	private bool $authenticated = false;
@@ -680,6 +682,10 @@ class NetworkSession{
 			foreach($packets as $evPacket){
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
+				$this->traceCrossVersionOutbound(
+					"packet",
+					$evPacket->getName() . " bytes=" . strlen($encoded) . " immediate=" . ($immediate ? "yes" : "no")
+				);
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
@@ -1113,6 +1119,8 @@ class NetworkSession{
 	}
 
 	public function notifyTerrainReady() : void{
+		$this->traceCrossVersionOutbound("terrain", "ready");
+		$this->crossVersionPacketTrace = false;
 		$this->logger->debug("Sending spawn notification, waiting for spawn response");
 		$this->sendDataPacket(PlayStatusPacket::create(PlayStatusPacket::PLAYER_SPAWN));
 		if($this->spawnResponseReceivedEarly){
@@ -1354,6 +1362,7 @@ class NetworkSession{
 	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world) : void{
 		$world->timings->syncChunkSend->startTiming();
 		try{
+			$this->traceCrossVersionOutbound("chunk-send", "compressedBytes=" . strlen($chunkPacket));
 			$this->queueCompressed($chunkPacket);
 			$onCompletion();
 		}finally{
@@ -1368,6 +1377,10 @@ class NetworkSession{
 	 */
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
 		$world = $this->player->getLocation()->getWorld();
+		$this->traceCrossVersionOutbound(
+			"chunk-request",
+			"x=$chunkX z=$chunkZ protocol=" . $this->getProtocolId()
+		);
 		$promiseOrPacket = ChunkCache::getInstance($world, $this->compressor)->request($chunkX, $chunkZ, $this->getTypeConverter());
 		if(is_string($promiseOrPacket)){
 			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
@@ -1432,6 +1445,16 @@ class NetworkSession{
 		}, $players)));
 	}
 
+	private function traceCrossVersionOutbound(string $kind, string $detail) : void{
+		if(!$this->crossVersionPacketTrace){
+			return;
+		}
+		$this->logger->debug(
+			"CrossVersion[outbound#" . (++$this->crossVersionPacketTraceSequence) . "] " .
+			$kind . " " . $detail
+		);
+	}
+
 	private function debugCrossVersionPlayerSync(Player $source, string $phase) : void{
 		$sourceSession = $source->getNetworkSession();
 		$sourceProtocol = $sourceSession->getProtocolId();
@@ -1439,6 +1462,7 @@ class NetworkSession{
 		if($sourceProtocol === $targetProtocol){
 			return;
 		}
+		$this->crossVersionPacketTrace = true;
 
 		$skin = $source->getSkin();
 		$extra = $source->getPlayerInfo()->getExtraData();
