@@ -91,11 +91,15 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame('{}', $decoded->getGeometryData());
 	}
 	public function testLegacyPersonaFallsBackToClassicFor2193() : void{
+		$imageData = str_repeat("\x44\x55\x66\xff", 256 * 256);
+		$imageData = substr_replace($imageData, "\x11\x22\x33\xff", 0, 4);
+		$imageData = substr_replace($imageData, "\xaa\xbb\xcc\xdd", ((254 * 256) + 254) * 4, 4);
+
 		$incoming = new SkinData(
 			'legacy-persona',
 			'',
 			'{"geometry":{"default":"geometry.humanoid.custom"}}',
-			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			new SkinImage(256, 256, $imageData),
 			geometryData: '{}',
 			persona: true,
 			trustedSkinFlag: "true",
@@ -109,9 +113,11 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertFalse($outgoing->isPersona());
 		self::assertSame("false", $outgoing->getTrustedSkinFlag());
 		self::assertSame("", $outgoing->getProfileHash());
-		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
-		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
-		self::assertSame(64 * 64 * 4, strlen($outgoing->getSkinImage()->getData()));
+		self::assertSame(128, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(128, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(128 * 128 * 4, strlen($outgoing->getSkinImage()->getData()));
+		self::assertSame("\x11\x22\x33\xff", substr($outgoing->getSkinImage()->getData(), 0, 4));
+		self::assertSame("\xaa\xbb\xcc\xdd", substr($outgoing->getSkinImage()->getData(), -4));
 	}
 
 	public function testLegacyPersonaIsPreservedForLegacyRecipient() : void{
@@ -166,6 +172,26 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 
 		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
 		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+	}
+
+	public function testUnsupportedPersonaImageFallsBackDeterministically() : void{
+		$incoming = new SkinData(
+			'odd-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(96, 96, str_repeat("\x01\x02\x03\xff", 96 * 96)),
+			geometryData: '{}',
+			persona: true
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertFalse($outgoing->isPersona());
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(str_repeat("\x7f\x7f\x7f\xff", 64 * 64), $outgoing->getSkinImage()->getData());
 	}
 
 }
