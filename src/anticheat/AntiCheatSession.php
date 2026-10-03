@@ -11,13 +11,22 @@ use pocketmine\anticheat\timeline\MovementSample;
 use function array_shift;
 use function count;
 use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use function microtime;
 
 final class AntiCheatSession{
+	public const MODE_OBSERVE = "OBSERVE";
+	public const MODE_BLOCK = "BLOCK";
+
+	private \WeakReference $playerRef;
+	/** @var array<string, float> */
+	private array $lastAlertAt = [];
 	private ActionBudget $miningBudget;
 	private ActionBudget $combatBudget;
 	private InputTimeline $inputTimeline;
 	private ImpulseTracker $impulseTracker;
 	private ?Vector3 $miningTarget = null;
+	private int $airTicks = 0;
 
 	/** @var list<MovementSample> */
 	private array $movementSamples = [];
@@ -28,7 +37,8 @@ final class AntiCheatSession{
 	/** @var array<string, float> */
 	private array $violations = [];
 
-	public function __construct(){
+	public function __construct(Player $player){
+		$this->playerRef = \WeakReference::create($player);
 		// A generous burst is deliberate. This layer protects the server from
 		// impossible action spam without punishing normal high-latency clients.
 		$this->miningBudget = new ActionBudget(40.0, 25.0);
@@ -61,12 +71,42 @@ final class AntiCheatSession{
 		$this->miningTarget = $target;
 	}
 
-	public function addViolation(string $check, float $weight = 1.0) : float{
-		return $this->violations[$check] = ($this->violations[$check] ?? 0.0) + $weight;
+	public function addViolation(string $check, float $weight = 1.0, string $mode = self::MODE_OBSERVE, string $details = "") : float{
+		$total = $this->violations[$check] = ($this->violations[$check] ?? 0.0) + $weight;
+
+		$now = microtime(true);
+		$alertKey = $mode . ":" . $check;
+		if(($this->lastAlertAt[$alertKey] ?? 0.0) + 1.0 <= $now){
+			$this->lastAlertAt[$alertKey] = $now;
+			$player = $this->playerRef->get();
+			if($player instanceof Player && $player->isConnected()){
+				AntiCheatManager::getInstance()->notifyViolation($player, $check, $weight, $total, $mode, $details);
+			}
+		}
+
+		return $total;
 	}
 
 	public function getViolationLevel(string $check) : float{
 		return $this->violations[$check] ?? 0.0;
+	}
+
+	public function getAirTicks() : int{
+		return $this->airTicks;
+	}
+
+	public function addAirTicks(int $ticks) : int{
+		return $this->airTicks += $ticks;
+	}
+
+	public function resetAirTicks() : void{
+		$this->airTicks = 0;
+	}
+
+	public function resetMovementState() : void{
+		$this->airTicks = 0;
+		$this->inputTimeline->clear();
+		$this->movementSamples = [];
 	}
 	public function recordMovementSample(
 		int $protocolId,

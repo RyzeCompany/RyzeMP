@@ -75,6 +75,8 @@ abstract class DefaultPermissions{
 
 		self::registerNoArgsDesc(Names::COMMAND_DUMPMEMORY, [$consoleRoot]);
 
+		self::registerPermission(new Permission(Names::ANTICHEAT_LOG, "Receives anti-cheat detection alerts"), [$operatorRoot]);
+
 		foreach([
 			Names::BROADCAST_ADMIN,
 			Names::COMMAND_BAN_IP,

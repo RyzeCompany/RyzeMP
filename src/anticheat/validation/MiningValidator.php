@@ -15,7 +15,7 @@ final class MiningValidator{
 
 	public function validate(Player $player, AntiCheatSession $session, int $action, Vector3 $pos) : bool{
 		if(!$session->getMiningBudget()->consume()){
-			$session->addViolation("mining.action_rate", 1.0);
+			$session->addViolation("mining.action_rate", 1.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
@@ -23,7 +23,7 @@ final class MiningValidator{
 			$maxDistance = $player->isCreative() ? self::MAX_CREATIVE_DISTANCE : self::MAX_SURVIVAL_DISTANCE;
 			$target = $pos->add(0.5, 0.5, 0.5);
 			if($target->distanceSquared($player->getLocation()) > $maxDistance * $maxDistance){
-				$session->addViolation("mining.reach", 2.0);
+				$session->addViolation("mining.reach", 2.0, AntiCheatSession::MODE_BLOCK);
 				return false;
 			}
 		}
