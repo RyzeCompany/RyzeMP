@@ -57,14 +57,23 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 		return $this->toClassicSkinData($skin, true);
 	}
 
+	private static function getPersonaCompatibilityFamily(int $protocolId) : int{
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
+			return 2; // 2193+: 1.26.50/51/52
+		}
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_40){
+			return 1; // 2168/2169: 1.26.40/44/45
+		}
+		return 0; // Legacy Persona wire format (1.26.30 and older)
+	}
+
 	public function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
 		$persona = self::$personaSkins[$skin] ?? null;
 		if($persona !== null){
 			$sourceProtocol = self::$personaSourceProtocols[$skin] ?? null;
 			if(
 				$sourceProtocol !== null &&
-				$sourceProtocol < ProtocolInfo::PROTOCOL_1_26_50 &&
-				$targetProtocol >= ProtocolInfo::PROTOCOL_1_26_50
+				self::getPersonaCompatibilityFamily($sourceProtocol) !== self::getPersonaCompatibilityFamily($targetProtocol)
 			){
 				return $this->toClassicSkinData($skin, false);
 			}
