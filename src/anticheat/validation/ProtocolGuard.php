@@ -23,22 +23,22 @@ use function is_nan;
 final class ProtocolGuard{
 	public function validatePlayerAuthInput(Player $player, AntiCheatSession $session, PlayerAuthInputPacket $packet, int $protocolId) : bool{
 		if(!$this->hasFiniteInput($packet, $protocolId)){
-			$session->addViolation("protocol.non_finite", 5.0);
+			$session->addViolation("protocol.non_finite", 5.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
 		if(!$this->isValidInputMode($packet->getInputMode())){
-			$session->addViolation("protocol.input_mode", 2.0);
+			$session->addViolation("protocol.input_mode", 2.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
 		if(!$this->isValidPlayMode($packet->getPlayMode())){
-			$session->addViolation("protocol.play_mode", 2.0);
+			$session->addViolation("protocol.play_mode", 2.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
 		if(!$this->isValidInteractionMode($packet->getInteractionMode())){
-			$session->addViolation("protocol.interaction_mode", 2.0);
+			$session->addViolation("protocol.interaction_mode", 2.0, AntiCheatSession::MODE_BLOCK);
 			return false;
 		}
 
