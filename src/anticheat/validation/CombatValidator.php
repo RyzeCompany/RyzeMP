@@ -17,11 +17,13 @@ use function is_nan;
 use function max;
 use function min;
 use function microtime;
+use function number_format;
 use function sin;
 use function sqrt;
 
 final class CombatValidator{
-	private const TELEMETRY_REACH = 4.25;
+	private const BASE_TELEMETRY_REACH = 3.80;
+	private const MAX_TELEMETRY_REACH = 4.60;
 	private const HARD_REACH = 8.5;
 
 	public function validateAttack(
@@ -75,16 +77,37 @@ final class CombatValidator{
 		);
 
 		if($reach > self::HARD_REACH){
-			$session->addViolation("combat.hard_reach", 3.0, AntiCheatSession::MODE_BLOCK);
+			$session->addViolation(
+				"combat.hard_reach",
+				3.0,
+				AntiCheatSession::MODE_BLOCK,
+				"reach=" . number_format($reach, 2) .
+				" limit=" . number_format(self::HARD_REACH, 2) .
+				" direction=" . number_format($directionDot, 2)
+			);
 			return false;
 		}
 
-		if($reach > self::TELEMETRY_REACH){
-			$session->addViolation("combat.reach_observation", 0.25);
+		$telemetryReach = $this->getTelemetryReachLimit($ping);
+		if($reach > $telemetryReach){
+			$session->addViolation(
+				"combat.reach_observation",
+				0.25,
+				AntiCheatSession::MODE_OBSERVE,
+				"reach=" . number_format($reach, 2) .
+				" limit=" . number_format($telemetryReach, 2) .
+				" direction=" . number_format($directionDot, 2)
+			);
 		}
 
 		if($directionDot < 0.0){
-			$session->addViolation("combat.direction_observation", 0.15);
+			$session->addViolation(
+				"combat.direction_observation",
+				0.15,
+				AntiCheatSession::MODE_OBSERVE,
+				"direction=" . number_format($directionDot, 2) .
+				" reach=" . number_format($reach, 2)
+			);
 		}
 
 		$this->observeAttackPattern($session, $target->getId(), $clientTick);
@@ -148,6 +171,13 @@ final class CombatValidator{
 			}
 		}
 		return true;
+	}
+
+	private function getTelemetryReachLimit(?int $ping) : float{
+		// This is telemetry-only. A small latency allowance prevents ordinary
+		// target interpolation/desync from looking like reach.
+		$latencyAllowance = min(0.80, max(0, $ping ?? 0) / 1000 * 1.5);
+		return min(self::MAX_TELEMETRY_REACH, self::BASE_TELEMETRY_REACH + $latencyAllowance);
 	}
 
 	private function closestPointOnBox(Vector3 $point, AxisAlignedBB $bb) : Vector3{
