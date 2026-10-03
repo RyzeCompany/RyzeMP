@@ -6,6 +6,11 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Ramsey\Uuid\Uuid;
+use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
+use pocketmine\network\mcpe\protocol\types\DeviceOS;
+use pocketmine\network\mcpe\protocol\PlayerListPacket;
+use pocketmine\color\Color;
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
 use pocketmine\entity\InvalidSkinException;
@@ -120,6 +125,50 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame(64, $decoded->getSkinImage()->getWidth());
 		self::assertSame(64, $decoded->getSkinImage()->getHeight());
 		self::assertSame(64 * 64 * 4, strlen($decoded->getSkinImage()->getData()));
+	}
+
+	public function testNormalizedPersonaPlayerListWireIsIdenticalBetween2169And2193() : void{
+		$incoming = new SkinData(
+			'persona-source',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: 'true',
+			profileHash: str_repeat('a', 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$coreSkin = $adapter->fromSkinData($incoming);
+		$outgoing = $adapter->toSkinData($coreSkin);
+
+		$entry = PlayerListEntry::createAdditionEntry(
+			Uuid::fromString('00000000-0000-0000-0000-000000000001'),
+			7,
+			'Montana6752',
+			$outgoing,
+			'1234567890123456',
+			'',
+			DeviceOS::UNKNOWN,
+			false,
+			false,
+			false,
+			new Color(255, 255, 255)
+		);
+		$packet = PlayerListPacket::add([$entry]);
+
+		$legacyOut = new ByteBufferWriter();
+		$packet->encode($legacyOut, ProtocolInfo::PROTOCOL_1_26_45);
+
+		$modernOut = new ByteBufferWriter();
+		$packet->encode($modernOut, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame(
+			$legacyOut->getData(),
+			$modernOut->getData(),
+			'PlayerList wire format unexpectedly changes between protocol 2169 and 2193'
+		);
 	}
 
 }
