@@ -52,8 +52,9 @@ final class DispenserTest extends TestCase{
 		$serializer = GlobalBlockStateHandlers::getSerializer();
 		$deserializer = GlobalBlockStateHandlers::getDeserializer();
 		$translators = [
-			BlockTranslator::loadFromProtocolId(ProtocolInfo::CURRENT_PROTOCOL),
-			BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_51)
+			BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_45),
+			BlockTranslator::loadFromProtocolId(ProtocolInfo::PROTOCOL_1_26_50),
+			BlockTranslator::loadFromProtocolId(ProtocolInfo::CURRENT_PROTOCOL)
 		];
 		$stateIds = [];
 		foreach(Facing::ALL as $facing){
