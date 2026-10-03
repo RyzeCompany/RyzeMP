@@ -39,6 +39,7 @@ use pocketmine\data\bedrock\item\BlockItemIdMap;
 use pocketmine\data\bedrock\item\downgrade\ItemIdMetaDowngrader;
 use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\SavedDataLoadingException;
+use pocketmine\entity\Skin;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\nbt\LittleEndianNbtSerializer;
@@ -60,6 +61,7 @@ use pocketmine\network\mcpe\protocol\types\recipe\IntIdMetaItemDescriptor;
 use pocketmine\network\mcpe\protocol\types\recipe\RecipeIngredient as ProtocolRecipeIngredient;
 use pocketmine\network\mcpe\protocol\types\recipe\StringIdMetaItemDescriptor;
 use pocketmine\network\mcpe\protocol\types\recipe\TagItemDescriptor;
+use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\player\GameMode;
 use pocketmine\player\Player;
 use pocketmine\utils\AssumptionFailedError;
@@ -121,6 +123,20 @@ class TypeConverter{
 	public function getItemTranslator() : ItemTranslator{ return $this->itemTranslator; }
 
 	public function getSkinAdapter() : SkinAdapter{ return $this->skinAdapter; }
+
+	public function coreSkinToNet(Skin $skin) : SkinData{
+		if($this->skinAdapter instanceof ProtocolAwareSkinAdapter){
+			return $this->skinAdapter->toSkinDataForProtocol($skin, $this->getProtocolId());
+		}
+		return $this->skinAdapter->toSkinData($skin);
+	}
+
+	public function netSkinToCore(SkinData $skinData) : Skin{
+		if($this->skinAdapter instanceof ProtocolAwareSkinAdapter){
+			return $this->skinAdapter->fromSkinDataForProtocol($skinData, $this->getProtocolId());
+		}
+		return $this->skinAdapter->fromSkinData($skinData);
+	}
 
 	public function setSkinAdapter(SkinAdapter $skinAdapter) : void{
 		$this->skinAdapter = $skinAdapter;

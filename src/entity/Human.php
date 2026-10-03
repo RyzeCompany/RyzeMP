@@ -167,7 +167,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	public function sendSkin(?array $targets = null) : void{
 		TypeConverter::broadcastByTypeConverter($targets ?? $this->hasSpawned, function(TypeConverter $typeConverter) : array{
 			return [
-				PlayerSkinPacket::create($this->getUniqueId(), "", "", $typeConverter->getSkinAdapter()->toSkinData($this->skin))
+				PlayerSkinPacket::create($this->getUniqueId(), "", "", $typeConverter->coreSkinToNet($this->skin))
 			];
 		});
 	}
@@ -497,8 +497,20 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	protected function sendSpawnPacket(Player $player) : void{
 		$networkSession = $player->getNetworkSession();
 		$typeConverter = $networkSession->getTypeConverter();
+		$sourceProtocol = $this instanceof Player ? $this->getNetworkSession()->getProtocolId() : null;
+		$targetProtocol = $networkSession->getProtocolId();
+		$crossVersionPlayerSpawn = $this instanceof Player && $sourceProtocol !== $targetProtocol;
+		if($crossVersionPlayerSpawn){
+			$networkSession->getLogger()->debug(
+				"CrossVersion[remote-spawn-begin] source=" . $this->getName() .
+				" game=" . ($this->getNetworkSession()->getGameVersion() ?? "unknown") .
+				" protocol=$sourceProtocol -> target=" . $player->getName() .
+				" game=" . ($networkSession->getGameVersion() ?? "unknown") .
+				" protocol=$targetProtocol"
+			);
+		}
 		if(!($this instanceof Player)){
-			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->getSkinAdapter()->toSkinData($this->skin))]));
+			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]));
 		}
 
 		$networkSession->sendDataPacket(AddPlayerPacket::create(
@@ -528,13 +540,22 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			"", //device ID (we intentionally don't send this - secvuln)
 			DeviceOS::UNKNOWN //we intentionally don't send this (secvuln)
 		));
+		if($crossVersionPlayerSpawn){
+			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-add-player-queued] source=" . $this->getName());
+		}
 
 		//TODO: Hack for MCPE 1.2.13: DATA_NAMETAG is useless in AddPlayerPacket, so it has to be sent separately
 		$this->sendData([$player], [EntityMetadataProperties::NAMETAG => new StringMetadataProperty($this->getNameTag())]);
+		if($crossVersionPlayerSpawn){
+			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-metadata-queued] source=" . $this->getName());
+		}
 
 		$entityEventBroadcaster = $networkSession->getEntityEventBroadcaster();
 		$entityEventBroadcaster->onMobArmorChange([$networkSession], $this);
 		$entityEventBroadcaster->onMobOffHandItemChange([$networkSession], $this);
+		if($crossVersionPlayerSpawn){
+			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-equipment-queued] source=" . $this->getName());
+		}
 
 		if(!($this instanceof Player)){
 			$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));

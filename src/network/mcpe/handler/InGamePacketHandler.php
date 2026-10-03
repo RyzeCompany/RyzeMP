@@ -23,6 +23,12 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\handler;
 
+use pocketmine\anticheat\AntiCheatManager;
+use pocketmine\anticheat\validation\CombatValidator;
+use pocketmine\anticheat\validation\ImpulseValidator;
+use pocketmine\anticheat\validation\MiningValidator;
+use pocketmine\anticheat\validation\MovementValidator;
+use pocketmine\anticheat\validation\ProtocolGuard;
 use pocketmine\block\BaseSign;
 use pocketmine\block\Lectern;
 use pocketmine\block\tile\Sign;
@@ -155,11 +161,23 @@ class InGamePacketHandler extends PacketHandler{
 
 	protected ?string $lastRequestedFullSkinId = null;
 
+	private CombatValidator $combatValidator;
+	private ImpulseValidator $impulseValidator;
+	private MiningValidator $miningValidator;
+	private MovementValidator $movementValidator;
+	private ProtocolGuard $protocolGuard;
+
 	public function __construct(
 		private Player $player,
 		private NetworkSession $session,
 		private InventoryManager $inventoryManager
-	){}
+	){
+		$this->combatValidator = new CombatValidator();
+		$this->impulseValidator = new ImpulseValidator();
+		$this->miningValidator = new MiningValidator();
+		$this->movementValidator = new MovementValidator();
+		$this->protocolGuard = new ProtocolGuard();
+	}
 
 	public function handleText(TextPacket $packet) : bool{
 		if($packet->type === TextPacket::TYPE_CHAT){
@@ -180,6 +198,16 @@ class InGamePacketHandler extends PacketHandler{
 	}
 
 	public function handlePlayerAuthInput(PlayerAuthInputPacket $packet) : bool{
+		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
+		if(!$this->protocolGuard->validatePlayerAuthInput($this->player, $antiCheatSession, $packet, $this->session->getProtocolId())){
+			$this->session->getLogger()->debug("AntiCheat rejected invalid PlayerAuthInput");
+			return false;
+		}
+
+		$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
+
+		$this->impulseValidator->observe($this->player, $antiCheatSession, $this->session->getPing());
+
 		$rawPos = $packet->getPosition();
 		$rawYaw = $packet->getYaw();
 		$rawPitch = $packet->getPitch();
@@ -568,6 +596,18 @@ class InGamePacketHandler extends PacketHandler{
 				$this->player->interactEntity($target, $data->getClickPosition());
 				return true;
 			case UseItemOnEntityTransactionData::ACTION_ATTACK:
+				$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
+				if(!$this->combatValidator->validateAttack(
+					$this->player,
+					$target,
+					$data,
+					$antiCheatSession,
+					$this->session->getProtocolId(),
+					$this->session->getPing()
+				)){
+					$this->session->getLogger()->debug("AntiCheat rejected combat attack on entity " . $target->getId());
+					return true;
+				}
 				$this->player->attackEntity($target);
 				return true;
 		}
@@ -681,6 +721,15 @@ class InGamePacketHandler extends PacketHandler{
 
 	private function handlePlayerActionFromData(int $action, BlockPosition $blockPosition, int $face) : bool{
 		$pos = new Vector3($blockPosition->getX(), $blockPosition->getY(), $blockPosition->getZ());
+
+		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
+		if(!$this->miningValidator->validate($this->player, $antiCheatSession, $action, $pos)){
+			$this->session->getLogger()->debug("AntiCheat rejected player action $action at $pos");
+			$this->lastBlockAttacked = null;
+			$this->player->stopBreakBlock($pos);
+			$this->syncBlocksNearby($pos, null);
+			return true;
+		}
 
 		switch($action){
 			case PlayerAction::START_BREAK:

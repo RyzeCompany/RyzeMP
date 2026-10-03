@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
+use pocketmine\anticheat\AntiCheatManager;
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\block\VanillaBlocks;
@@ -632,7 +633,17 @@ abstract class Living extends Entity{
 				$motionY = $verticalLimit;
 			}
 
-			$this->setMotion(new Vector3($motionX, $motionY, $motionZ));
+			if($this instanceof Player){
+				$impulses = AntiCheatManager::getInstance()->getSession($this)->getImpulseTracker();
+				$impulses->pushSource("knockback");
+				try{
+					$this->setMotion(new Vector3($motionX, $motionY, $motionZ));
+				}finally{
+					$impulses->popSource();
+				}
+			}else{
+				$this->setMotion(new Vector3($motionX, $motionY, $motionZ));
+			}
 		}
 	}
 

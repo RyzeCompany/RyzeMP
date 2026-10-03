@@ -240,7 +240,7 @@ class LoginPacketHandler extends PacketHandler{
 		$this->session->setGameVersion($clientData->GameVersion);
 
 		try{
-			$skin = $this->session->getTypeConverter()->getSkinAdapter()->fromSkinData(ClientDataToSkinDataHelper::fromClientData($clientData));
+			$skin = $this->session->getTypeConverter()->netSkinToCore(ClientDataToSkinDataHelper::fromClientData($clientData));
 		}catch(\InvalidArgumentException | InvalidSkinException $e){
 			$this->session->disconnectWithError(
 				reason: "Invalid skin: " . $e->getMessage(),

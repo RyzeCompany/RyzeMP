@@ -25,6 +25,7 @@ namespace pocketmine\network\mcpe\convert;
 
 use pocketmine\entity\InvalidSkinException;
 use pocketmine\entity\Skin;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\network\mcpe\protocol\types\skin\SkinImage;
 use function is_array;
@@ -32,14 +33,58 @@ use function is_string;
 use function intdiv;
 use function json_decode;
 use function json_encode;
-use function random_bytes;
 use function str_repeat;
 use function substr;
 use const JSON_THROW_ON_ERROR;
 
-class LegacySkinAdapter implements SkinAdapter{
+class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
+
+	/** @phpstan-var \WeakMap<Skin, SkinData> */
+	private static ?\WeakMap $personaSkins = null;
+	/** @phpstan-var \WeakMap<Skin, int> */
+	private static ?\WeakMap $personaSourceProtocols = null;
+
+	public function __construct(){
+		self::$personaSkins ??= new \WeakMap();
+		self::$personaSourceProtocols ??= new \WeakMap();
+	}
 
 	public function toSkinData(Skin $skin) : SkinData{
+		$persona = self::$personaSkins[$skin] ?? null;
+		if($persona !== null){
+			return $persona;
+		}
+		return $this->toClassicSkinData($skin, true);
+	}
+
+	private static function getPersonaCompatibilityFamily(int $protocolId) : int{
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
+			return 2; // 2193+: 1.26.50/51/52
+		}
+		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_40){
+			return 1; // 2168/2169: 1.26.40/44/45
+		}
+		return 0; // Legacy Persona wire format (1.26.30 and older)
+	}
+
+	public function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
+		$persona = self::$personaSkins[$skin] ?? null;
+		if($persona !== null){
+			$sourceProtocol = self::$personaSourceProtocols[$skin] ?? null;
+			if(
+				$sourceProtocol !== null &&
+				self::getPersonaCompatibilityFamily($sourceProtocol) !== self::getPersonaCompatibilityFamily($targetProtocol)
+			){
+				return $this->toClassicSkinData($skin, false);
+			}
+			return $persona;
+		}
+
+		// Respect plugin overrides of the legacy method for non-Persona skins.
+		return $this->toSkinData($skin);
+	}
+
+	private function toClassicSkinData(Skin $skin, bool $trusted) : SkinData{
 		$capeData = $skin->getCapeData();
 		$capeImage = $capeData === "" ? new SkinImage(0, 0, "") : new SkinImage(32, 64, $capeData);
 		$geometryName = $skin->getGeometryName();
@@ -56,7 +101,10 @@ class LegacySkinAdapter implements SkinAdapter{
 			json_encode(["geometry" => ["default" => $geometryName]], JSON_THROW_ON_ERROR),
 			SkinImage::fromLegacy($skin->getSkinData()), [],
 			$capeImage,
-			$geometryData
+			$geometryData,
+			isVerified: $trusted,
+			trustedSkinFlag: $trusted ? "true" : "false",
+			profileHash: ""
 		);
 	}
 
@@ -79,9 +127,33 @@ class LegacySkinAdapter implements SkinAdapter{
 		return $normalized;
 	}
 
+	private static function personaToClassicSkin(SkinData $data) : Skin{
+		$skinData = self::normalizeSkinImage($data->getSkinImage());
+		try{
+			return new Skin(
+				"Standard_Custom",
+				$skinData,
+				"",
+				"geometry.humanoid.custom",
+				SkinData::GEOMETRY_DATA_NONE
+			);
+		}catch(InvalidSkinException){
+			// Keep a deterministic safe fallback for unexpected Persona image sizes.
+			return new Skin(
+				"Standard_Custom",
+				str_repeat("\x7f\x7f\x7f\xff", 64 * 64),
+				"",
+				"geometry.humanoid.custom",
+				SkinData::GEOMETRY_DATA_NONE
+			);
+		}
+	}
+
 	public function fromSkinData(SkinData $data) : Skin{
 		if($data->isPersona()){
-			return new Skin("Standard_Custom", str_repeat(random_bytes(3) . "\xff", 4096));
+			$skin = self::personaToClassicSkin($data);
+			self::$personaSkins[$skin] = $data;
+			return $skin;
 		}
 
 		$capeData = $data->isPersonaCapeOnClassic() ? "" : $data->getCapeImage()->getData();
@@ -95,4 +167,13 @@ class LegacySkinAdapter implements SkinAdapter{
 
 		return new Skin($data->getSkinId(), self::normalizeSkinImage($data->getSkinImage()), $capeData, $geometryName, $data->getGeometryData());
 	}
+	public function fromSkinDataForProtocol(SkinData $data, int $sourceProtocol) : Skin{
+		$skin = $this->fromSkinData($data);
+		if($data->isPersona()){
+			self::$personaSkins[$skin] = $data;
+			self::$personaSourceProtocols[$skin] = $sourceProtocol;
+		}
+		return $skin;
+	}
+
 }

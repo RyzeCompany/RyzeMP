@@ -1427,12 +1427,50 @@ class NetworkSession{
 	 */
 	public function syncPlayerList(array $players) : void{
 		$this->sendDataPacket(PlayerListPacket::add(array_map(function(Player $player) : PlayerListEntry{
-			return PlayerListEntry::createAdditionEntry($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $this->typeConverter->getSkinAdapter()->toSkinData($player->getSkin()), $player->getXuid());
+			$this->debugCrossVersionPlayerSync($player, "player-list");
+			return PlayerListEntry::createAdditionEntry($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $this->typeConverter->coreSkinToNet($player->getSkin()), $player->getXuid());
 		}, $players)));
 	}
 
+	private function debugCrossVersionPlayerSync(Player $source, string $phase) : void{
+		$sourceSession = $source->getNetworkSession();
+		$sourceProtocol = $sourceSession->getProtocolId();
+		$targetProtocol = $this->getProtocolId();
+		if($sourceProtocol === $targetProtocol){
+			return;
+		}
+
+		$skin = $source->getSkin();
+		$extra = $source->getPlayerInfo()->getExtraData();
+		$persona = (bool) ($extra["PersonaSkin"] ?? false);
+		$trusted = (bool) ($extra["TrustedSkin"] ?? false);
+		$profileHash = (string) ($extra["ProfileHash"] ?? "");
+		$skinWidth = (int) ($extra["SkinImageWidth"] ?? 0);
+		$skinHeight = (int) ($extra["SkinImageHeight"] ?? 0);
+		$personaPieces = is_array($extra["PersonaPieces"] ?? null) ? count($extra["PersonaPieces"]) : 0;
+		$tintColors = is_array($extra["PieceTintColors"] ?? null) ? count($extra["PieceTintColors"]) : 0;
+
+		$this->logger->debug(
+			"CrossVersion[$phase] source=" . $source->getName() .
+			" game=" . ($sourceSession->getGameVersion() ?? "unknown") .
+			" protocol=$sourceProtocol -> target=" . $this->getDisplayName() .
+			" game=" . ($this->getGameVersion() ?? "unknown") .
+			" protocol=$targetProtocol" .
+			" skinId=" . $skin->getSkinId() .
+			" skinBytes=" . strlen($skin->getSkinData()) .
+			" skinSize={$skinWidth}x{$skinHeight}" .
+			" capeBytes=" . strlen($skin->getCapeData()) .
+			" geometryName=" . $skin->getGeometryName() .
+			" geometryBytes=" . strlen($skin->getGeometryData()) .
+			" persona=" . ($persona ? "yes" : "no") .
+			" personaPieces=$personaPieces tintGroups=$tintColors" .
+			" trusted=" . ($trusted ? "yes" : "no") .
+			" profileHashBytes=" . strlen($profileHash)
+		);
+	}
+
 	public function onPlayerAdded(Player $p) : void{
-		$this->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($p->getUniqueId(), $p->getId(), $p->getDisplayName(), $this->typeConverter->getSkinAdapter()->toSkinData($p->getSkin()), $p->getXuid())]));
+		$this->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($p->getUniqueId(), $p->getId(), $p->getDisplayName(), $this->typeConverter->coreSkinToNet($p->getSkin()), $p->getXuid())]));
 	}
 
 	public function onPlayerRemoved(Player $p) : void{

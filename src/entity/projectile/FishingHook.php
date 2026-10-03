@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\entity\projectile;
 
+use pocketmine\anticheat\AntiCheatManager;
 use pocketmine\block\Block;
 use pocketmine\block\Water;
 use pocketmine\entity\animation\FishingHookBiteAnimation;
@@ -220,9 +221,16 @@ class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
 				if($this->canHook($owner, $target)){
 					$event = new FishingHookEntityEvent($owner, $this, $target, FishingHookEntityEvent::ACTION_PULL);
 					$event->call();
-					if(!$event->isCancelled() && $this->canHook($owner, $target)
-						&& $target->setMotion($this->settings->getPullMotion($owner->getPosition()->subtractVector($target->getPosition())))){
-						return 5;
+					if(!$event->isCancelled() && $this->canHook($owner, $target)){
+						$impulses = AntiCheatManager::getInstance()->getSession($target)->getImpulseTracker();
+						$impulses->pushSource("fishing_pull");
+						try{
+							if($target->setMotion($this->settings->getPullMotion($owner->getPosition()->subtractVector($target->getPosition())))){
+								return 5;
+							}
+						}finally{
+							$impulses->popSource();
+						}
 					}
 				}
 				return 0;

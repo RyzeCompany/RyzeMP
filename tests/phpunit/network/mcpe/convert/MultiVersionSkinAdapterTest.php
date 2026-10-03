@@ -90,4 +90,150 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), $protocolId);
 		self::assertSame('{}', $decoded->getGeometryData());
 	}
+	public function testLegacyPersonaFallsBackToClassicFor2193() : void{
+		$imageData = str_repeat("\x44\x55\x66\xff", 256 * 256);
+		$imageData = substr_replace($imageData, "\x11\x22\x33\xff", 0, 4);
+		$imageData = substr_replace($imageData, "\xaa\xbb\xcc\xdd", ((254 * 256) + 254) * 4, 4);
+
+		$incoming = new SkinData(
+			'legacy-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, $imageData),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("a", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertFalse($outgoing->isPersona());
+		self::assertSame("false", $outgoing->getTrustedSkinFlag());
+		self::assertSame("", $outgoing->getProfileHash());
+		self::assertSame(128, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(128, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(128 * 128 * 4, strlen($outgoing->getSkinImage()->getData()));
+		self::assertSame("\x11\x22\x33\xff", substr($outgoing->getSkinImage()->getData(), 0, 4));
+		self::assertSame("\xaa\xbb\xcc\xdd", substr($outgoing->getSkinImage()->getData(), -4));
+	}
+
+	public function testLegacyPersonaIsPreservedForLegacyRecipient() : void{
+		$incoming = new SkinData(
+			'legacy-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("a", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+
+		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_45));
+	}
+
+	public function testModernPersonaIsPreservedFor2193Recipient() : void{
+		$incoming = new SkinData(
+			'modern-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("b", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50));
+	}
+
+	public function testLegacyOverrideSignatureRemainsCompatible() : void{
+		$adapter = new class extends LegacySkinAdapter{
+			public function toSkinData(Skin $skin) : SkinData{
+				return parent::toSkinData($skin);
+			}
+
+			public function fromSkinData(SkinData $data) : Skin{
+				return parent::fromSkinData($data);
+			}
+		};
+
+		$skin = new Skin('plugin-compatible', str_repeat("\xff", 64 * 64 * 4));
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+	}
+
+	public function testUnsupportedPersonaImageFallsBackDeterministically() : void{
+		$incoming = new SkinData(
+			'odd-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(96, 96, str_repeat("\x01\x02\x03\xff", 96 * 96)),
+			geometryData: '{}',
+			persona: true
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertFalse($outgoing->isPersona());
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(str_repeat("\x7f\x7f\x7f\xff", 64 * 64), $outgoing->getSkinImage()->getData());
+	}
+
+	/** @return array<string, array{int, int, bool}> */
+	public static function personaProtocolMatrix() : array{
+		return [
+			'1.20.0 -> 1.20.80 same legacy family' => [ProtocolInfo::PROTOCOL_1_20_0, ProtocolInfo::PROTOCOL_1_20_80, false],
+			'1.21.80 -> 1.26.30 same legacy family' => [ProtocolInfo::PROTOCOL_1_21_80, ProtocolInfo::PROTOCOL_1_26_30, false],
+			'1.26.30 -> 1.26.40 crosses legacy to 2168 family' => [ProtocolInfo::PROTOCOL_1_26_30, ProtocolInfo::PROTOCOL_1_26_40, true],
+			'1.26.40 -> 1.26.45 same 2168/2169 family' => [ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45, false],
+			'1.26.45 -> 1.26.52 crosses into 2193 family' => [ProtocolInfo::PROTOCOL_1_26_45, ProtocolInfo::PROTOCOL_1_26_50, true],
+			'1.26.52 -> 1.26.45 crosses backwards out of 2193' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_45, true],
+			'1.26.52 -> 1.26.30 crosses modern to legacy' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_30, true],
+			'1.26.52 -> 1.26.52 same modern family' => [ProtocolInfo::PROTOCOL_1_26_50, ProtocolInfo::PROTOCOL_1_26_50, false],
+		];
+	}
+
+	#[DataProvider('personaProtocolMatrix')]
+	public function testPersonaCompatibilityFamilies(int $sourceProtocol, int $targetProtocol, bool $expectClassicFallback) : void{
+		$incoming = new SkinData(
+			'persona-matrix',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x21\x43\x65\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("c", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, $sourceProtocol);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, $targetProtocol);
+
+		self::assertSame(!$expectClassicFallback, $outgoing->isPersona());
+		if($expectClassicFallback){
+			self::assertSame("false", $outgoing->getTrustedSkinFlag());
+			self::assertSame("", $outgoing->getProfileHash());
+			self::assertContains($outgoing->getSkinImage()->getWidth(), [64, 128]);
+			self::assertSame($outgoing->getSkinImage()->getWidth(), $outgoing->getSkinImage()->getHeight());
+		}else{
+			self::assertSame($incoming, $outgoing);
+		}
+	}
+
 }
