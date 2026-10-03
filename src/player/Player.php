@@ -2768,7 +2768,9 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 	public function teleport(Vector3 $pos, ?float $yaw = null, ?float $pitch = null) : bool{
 		if(parent::teleport($pos, $yaw, $pitch)){
-			AntiCheatManager::getInstance()->getSession($this)->getImpulseTracker()->onTeleport();
+			$antiCheatSession = AntiCheatManager::getInstance()->getSession($this);
+			$antiCheatSession->getImpulseTracker()->onTeleport();
+			$antiCheatSession->resetMovementState();
 			$this->setFishingHook(null);
 
 			$this->removeCurrentWindow();
