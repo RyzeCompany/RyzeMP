@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\permission;
 
 final class DefaultPermissionNames{
+	public const ANTICHEAT_LOG = "log.anticheat";
 	public const BROADCAST_ADMIN = "pocketmine.broadcast.admin";
 	public const BROADCAST_USER = "pocketmine.broadcast.user";
 	public const COMMAND_BAN_IP = "pocketmine.command.ban.ip";
