@@ -26,6 +26,7 @@ final class AntiCheatSession{
 	private InputTimeline $inputTimeline;
 	private ImpulseTracker $impulseTracker;
 	private ?Vector3 $miningTarget = null;
+	private int $airTicks = 0;
 
 	/** @var list<MovementSample> */
 	private array $movementSamples = [];
@@ -70,7 +71,7 @@ final class AntiCheatSession{
 		$this->miningTarget = $target;
 	}
 
-	public function addViolation(string $check, float $weight = 1.0, string $mode = self::MODE_OBSERVE) : float{
+	public function addViolation(string $check, float $weight = 1.0, string $mode = self::MODE_OBSERVE, string $details = "") : float{
 		$total = $this->violations[$check] = ($this->violations[$check] ?? 0.0) + $weight;
 
 		$now = microtime(true);
@@ -79,7 +80,7 @@ final class AntiCheatSession{
 			$this->lastAlertAt[$alertKey] = $now;
 			$player = $this->playerRef->get();
 			if($player instanceof Player && $player->isConnected()){
-				AntiCheatManager::getInstance()->notifyViolation($player, $check, $weight, $total, $mode);
+				AntiCheatManager::getInstance()->notifyViolation($player, $check, $weight, $total, $mode, $details);
 			}
 		}
 
@@ -88,6 +89,18 @@ final class AntiCheatSession{
 
 	public function getViolationLevel(string $check) : float{
 		return $this->violations[$check] ?? 0.0;
+	}
+
+	public function getAirTicks() : int{
+		return $this->airTicks;
+	}
+
+	public function addAirTicks(int $ticks) : int{
+		return $this->airTicks += $ticks;
+	}
+
+	public function resetAirTicks() : void{
+		$this->airTicks = 0;
 	}
 	public function recordMovementSample(
 		int $protocolId,
