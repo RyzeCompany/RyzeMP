@@ -96,7 +96,7 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), $protocolId);
 		self::assertSame('{}', $decoded->getGeometryData());
 	}
-	public function testPersonaFrom2169CanBeBroadcastAsClassicSkinTo2193() : void{
+	public function testPersonaFrom2169PreservesModernSkinDataFor2193() : void{
 		$incoming = new SkinData(
 			'persona-source',
 			'',
@@ -113,18 +113,21 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame(64 * 64 * 4, strlen($coreSkin->getSkinData()));
 
 		$outgoing = $adapter->toSkinData($coreSkin);
-		self::assertFalse($outgoing->isPersona());
-		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
-		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
-		self::assertSame(64 * 64 * 4, strlen($outgoing->getSkinImage()->getData()));
+		self::assertSame($incoming, $outgoing);
+		self::assertTrue($outgoing->isPersona());
+		self::assertSame(256, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(256, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(str_repeat('a', 44), $outgoing->getProfileHash());
+		self::assertSame('true', $outgoing->getTrustedSkinFlag());
 
 		$out = new ByteBufferWriter();
 		CommonTypes::putSkin($out, $outgoing, ProtocolInfo::PROTOCOL_1_26_50);
 		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), ProtocolInfo::PROTOCOL_1_26_50);
-		self::assertFalse($decoded->isPersona());
-		self::assertSame(64, $decoded->getSkinImage()->getWidth());
-		self::assertSame(64, $decoded->getSkinImage()->getHeight());
-		self::assertSame(64 * 64 * 4, strlen($decoded->getSkinImage()->getData()));
+		self::assertTrue($decoded->isPersona());
+		self::assertSame(256, $decoded->getSkinImage()->getWidth());
+		self::assertSame(256, $decoded->getSkinImage()->getHeight());
+		self::assertSame(str_repeat('a', 44), $decoded->getProfileHash());
+		self::assertSame('true', $decoded->getTrustedSkinFlag());
 	}
 
 	public function testNormalizedPersonaPlayerListWireIsIdenticalBetween2169And2193() : void{
@@ -142,6 +145,8 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$adapter = new LegacySkinAdapter();
 		$coreSkin = $adapter->fromSkinData($incoming);
 		$outgoing = $adapter->toSkinData($coreSkin);
+		self::assertTrue($outgoing->isPersona());
+		self::assertSame($incoming, $outgoing);
 
 		$entry = PlayerListEntry::createAdditionEntry(
 			Uuid::fromString('00000000-0000-0000-0000-000000000001'),
