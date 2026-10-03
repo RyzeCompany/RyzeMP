@@ -25,6 +25,7 @@ namespace pocketmine\network\mcpe\convert;
 
 use pocketmine\entity\InvalidSkinException;
 use pocketmine\entity\Skin;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\network\mcpe\protocol\types\skin\SkinImage;
 use function is_array;
@@ -39,7 +40,35 @@ use const JSON_THROW_ON_ERROR;
 
 class LegacySkinAdapter implements SkinAdapter{
 
-	public function toSkinData(Skin $skin) : SkinData{
+	/** @phpstan-var \WeakMap<Skin, SkinData> */
+	private static ?\WeakMap $personaSkins = null;
+	/** @phpstan-var \WeakMap<Skin, int> */
+	private static ?\WeakMap $personaSourceProtocols = null;
+
+	public function __construct(){
+		self::$personaSkins ??= new \WeakMap();
+		self::$personaSourceProtocols ??= new \WeakMap();
+	}
+
+	public function toSkinData(Skin $skin, ?int $targetProtocol = null) : SkinData{
+		$persona = self::$personaSkins[$skin] ?? null;
+		if($persona !== null){
+			$sourceProtocol = self::$personaSourceProtocols[$skin] ?? null;
+			if(
+				$sourceProtocol !== null &&
+				$targetProtocol !== null &&
+				$sourceProtocol < ProtocolInfo::PROTOCOL_1_26_50 &&
+				$targetProtocol >= ProtocolInfo::PROTOCOL_1_26_50
+			){
+				return $this->toClassicSkinData($skin, false);
+			}
+			return $persona;
+		}
+
+		return $this->toClassicSkinData($skin, true);
+	}
+
+	private function toClassicSkinData(Skin $skin, bool $trusted) : SkinData{
 		$capeData = $skin->getCapeData();
 		$capeImage = $capeData === "" ? new SkinImage(0, 0, "") : new SkinImage(32, 64, $capeData);
 		$geometryName = $skin->getGeometryName();
@@ -56,7 +85,10 @@ class LegacySkinAdapter implements SkinAdapter{
 			json_encode(["geometry" => ["default" => $geometryName]], JSON_THROW_ON_ERROR),
 			SkinImage::fromLegacy($skin->getSkinData()), [],
 			$capeImage,
-			$geometryData
+			$geometryData,
+			isVerified: $trusted,
+			trustedSkinFlag: $trusted ? "true" : "false",
+			profileHash: ""
 		);
 	}
 
@@ -79,9 +111,14 @@ class LegacySkinAdapter implements SkinAdapter{
 		return $normalized;
 	}
 
-	public function fromSkinData(SkinData $data) : Skin{
+	public function fromSkinData(SkinData $data, ?int $sourceProtocol = null) : Skin{
 		if($data->isPersona()){
-			return new Skin("Standard_Custom", str_repeat(random_bytes(3) . "\xff", 4096));
+			$skin = new Skin("Standard_Custom", str_repeat(random_bytes(3) . "\xff", 4096));
+			self::$personaSkins[$skin] = $data;
+			if($sourceProtocol !== null){
+				self::$personaSourceProtocols[$skin] = $sourceProtocol;
+			}
+			return $skin;
 		}
 
 		$capeData = $data->isPersonaCapeOnClassic() ? "" : $data->getCapeImage()->getData();
