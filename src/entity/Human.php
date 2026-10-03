@@ -501,18 +501,6 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 		$sourceProtocol = $this instanceof Player ? $this->getNetworkSession()->getProtocolId() : null;
 		$targetProtocol = $networkSession->getProtocolId();
 		$crossVersionPlayerSpawn = $this instanceof Player && $sourceProtocol !== $targetProtocol;
-		if(
-			$this instanceof Player &&
-			$sourceProtocol === ProtocolInfo::PROTOCOL_1_26_45 &&
-			$targetProtocol === ProtocolInfo::PROTOCOL_1_26_50
-		){
-			$networkSession->getLogger()->debug(
-				"CrossVersion[diagnostic-skip-remote-spawn] source=" . $this->getName() .
-				" protocol=$sourceProtocol -> target=" . $player->getName() .
-				" protocol=$targetProtocol"
-			);
-			return;
-		}
 		if($crossVersionPlayerSpawn){
 			$networkSession->getLogger()->debug(
 				"CrossVersion[remote-spawn-begin] source=" . $this->getName() .
@@ -555,6 +543,18 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 		));
 		if($crossVersionPlayerSpawn){
 			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-add-player-queued] source=" . $this->getName());
+		}
+		if(
+			$this instanceof Player &&
+			$sourceProtocol === ProtocolInfo::PROTOCOL_1_26_45 &&
+			$targetProtocol === ProtocolInfo::PROTOCOL_1_26_50
+		){
+			$networkSession->getLogger()->debug(
+				"CrossVersion[diagnostic-add-player-only] source=" . $this->getName() .
+				" protocol=$sourceProtocol -> target=" . $player->getName() .
+				" protocol=$targetProtocol"
+			);
+			return;
 		}
 
 		//TODO: Hack for MCPE 1.2.13: DATA_NAMETAG is useless in AddPlayerPacket, so it has to be sent separately
