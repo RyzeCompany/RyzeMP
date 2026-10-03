@@ -549,24 +549,27 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 		if($crossVersionPlayerSpawn){
 			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-metadata-queued] source=" . $this->getName());
 		}
+		$entityEventBroadcaster = $networkSession->getEntityEventBroadcaster();
+		$entityEventBroadcaster->onMobArmorChange([$networkSession], $this);
+		if($crossVersionPlayerSpawn){
+			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-armor-queued] source=" . $this->getName());
+		}
 		if(
 			$this instanceof Player &&
 			$sourceProtocol === ProtocolInfo::PROTOCOL_1_26_45 &&
 			$targetProtocol === ProtocolInfo::PROTOCOL_1_26_50
 		){
 			$networkSession->getLogger()->debug(
-				"CrossVersion[diagnostic-add-player-plus-metadata] source=" . $this->getName() .
+				"CrossVersion[diagnostic-through-armor] source=" . $this->getName() .
 				" protocol=$sourceProtocol -> target=" . $player->getName() .
 				" protocol=$targetProtocol"
 			);
 			return;
 		}
 
-		$entityEventBroadcaster = $networkSession->getEntityEventBroadcaster();
-		$entityEventBroadcaster->onMobArmorChange([$networkSession], $this);
 		$entityEventBroadcaster->onMobOffHandItemChange([$networkSession], $this);
 		if($crossVersionPlayerSpawn){
-			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-equipment-queued] source=" . $this->getName());
+			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-offhand-queued] source=" . $this->getName());
 		}
 
 		if(!($this instanceof Player)){
