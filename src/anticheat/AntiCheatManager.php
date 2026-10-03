@@ -33,7 +33,7 @@ final class AntiCheatManager{
 	public function removeSession(Player $player) : void{
 		unset($this->sessions[$player]);
 	}
-	public function notifyViolation(Player $player, string $check, float $weight, float $total, string $mode) : void{
+	public function notifyViolation(Player $player, string $check, float $weight, float $total, string $mode, string $details = "") : void{
 		$session = $player->getNetworkSession();
 		$ping = $session->getPing();
 		$protocol = $session->getProtocolId();
@@ -47,7 +47,8 @@ final class AntiCheatManager{
 			" +" . number_format($weight, 2) .
 			" VL=" . number_format($total, 2) .
 			" ping=" . $ping . "ms" .
-			" proto=" . $protocol;
+			" proto=" . $protocol .
+			($details !== "" ? " " . $details : "");
 
 		$player->getServer()->getLogger()->warning(TextFormat::clean($message));
 		foreach($player->getServer()->getOnlinePlayers() as $recipient){
