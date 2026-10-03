@@ -90,4 +90,64 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), $protocolId);
 		self::assertSame('{}', $decoded->getGeometryData());
 	}
+	public function testLegacyPersonaFallsBackToClassicFor2193() : void{
+		$incoming = new SkinData(
+			'legacy-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("a", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+		$outgoing = $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertFalse($outgoing->isPersona());
+		self::assertSame("false", $outgoing->getTrustedSkinFlag());
+		self::assertSame("", $outgoing->getProfileHash());
+		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
+		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+		self::assertSame(64 * 64 * 4, strlen($outgoing->getSkinImage()->getData()));
+	}
+
+	public function testLegacyPersonaIsPreservedForLegacyRecipient() : void{
+		$incoming = new SkinData(
+			'legacy-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("a", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_45);
+
+		self::assertSame($incoming, $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_45));
+	}
+
+	public function testModernPersonaIsPreservedFor2193Recipient() : void{
+		$incoming = new SkinData(
+			'modern-persona',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x44\x55\x66\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("b", 44)
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinData($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame($incoming, $adapter->toSkinData($skin, ProtocolInfo::PROTOCOL_1_26_50));
+	}
+
 }
