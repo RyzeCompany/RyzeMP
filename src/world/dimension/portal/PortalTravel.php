@@ -234,7 +234,11 @@ final class PortalTravel{
 				$callback();
 			},
 			function() use($id) : void{
-				unset($this->pending[$id]);
+				unset(
+					$this->pending[$id],
+					$this->netherPortalTicks[$id],
+					$this->inEndPortal[$id]
+				);
 			}
 		);
 	}
