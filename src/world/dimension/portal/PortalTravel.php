@@ -7,7 +7,6 @@ namespace pocketmine\world\dimension\portal;
 use Closure;
 use pocketmine\world\dimension\Dimensions;
 use pocketmine\block\BlockTypeIds;
-use pocketmine\block\NetherPortal;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Location;
@@ -17,7 +16,6 @@ use pocketmine\Server;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
 use pocketmine\world\World;
-use function floor;
 use function max;
 use function min;
 
@@ -44,6 +42,10 @@ final class PortalTravel{
 	private array $inEndPortal = [];
 	/** @var array<int, true> */
 	private array $pending = [];
+	/** @var array<int, Entity> */
+	private array $netherTouches = [];
+	/** @var array<int, Entity> */
+	private array $endTouches = [];
 
 	private int $endPortalTypeId;
 
@@ -53,39 +55,12 @@ final class PortalTravel{
 		$this->endPortalTypeId = PortalContent::endPortal()->getTypeId();
 	}
 
-	public function tick(Server $server) : void{
-		foreach($server->getWorldManager()->getWorlds() as $world){
-			foreach($world->getEntities() as $entity){
-				$this->tickEntity($entity);
+	public function tick() : void{
+		foreach($this->netherTouches as $id => $entity){
+			if(!$this->canTravel($entity)){
+				$this->forget($id);
+				continue;
 			}
-		}
-	}
-
-	public function forget(int $entityId) : void{
-		unset($this->netherPortalTicks[$entityId], $this->inEndPortal[$entityId], $this->pending[$entityId]);
-	}
-
-	private function tickEntity(Entity $entity) : void{
-		$id = $entity->getId();
-		if(!$this->canTravel($entity)){
-			$this->forget($id);
-			return;
-		}
-
-		[$inNetherPortal, $inEndPortal] = $this->findPortals($entity);
-
-		if($inEndPortal){
-			if(!isset($this->inEndPortal[$id])){
-				$this->inEndPortal[$id] = true;
-				if(!isset($this->pending[$id])){
-					$this->travelThroughEndPortal($entity);
-				}
-			}
-		}else{
-			unset($this->inEndPortal[$id]);
-		}
-
-		if($inNetherPortal){
 			$ticks = $this->netherPortalTicks[$id] ?? 0;
 			if($entity instanceof Player && $entity->isCreative() && $ticks < self::NETHER_PORTAL_DELAY){
 				$ticks = self::NETHER_PORTAL_DELAY;
@@ -96,9 +71,46 @@ final class PortalTravel{
 			if($ticks === self::NETHER_PORTAL_DELAY && !isset($this->pending[$id])){
 				$this->travelThroughNetherPortal($entity);
 			}
-		}else{
-			unset($this->netherPortalTicks[$id]);
 		}
+
+		foreach(array_keys($this->netherPortalTicks) as $id){
+			if(!isset($this->netherTouches[$id])){
+				unset($this->netherPortalTicks[$id]);
+			}
+		}
+
+		foreach($this->endTouches as $id => $entity){
+			if(!$this->canTravel($entity)){
+				$this->forget($id);
+				continue;
+			}
+			if(!isset($this->inEndPortal[$id])){
+				$this->inEndPortal[$id] = true;
+				if(!isset($this->pending[$id])){
+					$this->travelThroughEndPortal($entity);
+				}
+			}
+		}
+		foreach(array_keys($this->inEndPortal) as $id){
+			if(!isset($this->endTouches[$id])){
+				unset($this->inEndPortal[$id]);
+			}
+		}
+
+		$this->netherTouches = [];
+		$this->endTouches = [];
+	}
+
+	public function touchNetherPortal(Entity $entity) : void{
+		$this->netherTouches[$entity->getId()] = $entity;
+	}
+
+	public function touchEndPortal(Entity $entity) : void{
+		$this->endTouches[$entity->getId()] = $entity;
+	}
+
+	public function forget(int $entityId) : void{
+		unset($this->netherPortalTicks[$entityId], $this->inEndPortal[$entityId], $this->pending[$entityId]);
 	}
 
 	private function canTravel(Entity $entity) : bool{
@@ -111,31 +123,6 @@ final class PortalTravel{
 		return true;
 	}
 
-	/**
-	 * @return bool[] whether the entity touches a nether portal and an end portal
-	 * @phpstan-return array{bool, bool}
-	 */
-	private function findPortals(Entity $entity) : array{
-		$world = $entity->getWorld();
-		$box = $entity->getBoundingBox();
-		$nether = false;
-		$end = false;
-		$minY = max((int) floor($box->minY + 0.001), $world->getMinY());
-		$maxY = min((int) floor($box->maxY - 0.001), $world->getMaxY() - 1);
-		for($x = (int) floor($box->minX + 0.001); $x <= (int) floor($box->maxX - 0.001); $x++){
-			for($z = (int) floor($box->minZ + 0.001); $z <= (int) floor($box->maxZ - 0.001); $z++){
-				for($y = $minY; $y <= $maxY; $y++){
-					$block = $world->getBlockAt($x, $y, $z);
-					if($block instanceof NetherPortal){
-						$nether = true;
-					}elseif($block->getTypeId() === $this->endPortalTypeId){
-						$end = true;
-					}
-				}
-			}
-		}
-		return [$nether, $end];
-	}
 
 	private function travelThroughNetherPortal(Entity $entity) : void{
 		$from = $this->dimensions->getDimension($entity->getWorld());
