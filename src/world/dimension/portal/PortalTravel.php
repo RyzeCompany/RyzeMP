@@ -12,10 +12,10 @@ use pocketmine\entity\Entity;
 use pocketmine\entity\Location;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
-use pocketmine\Server;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
 use pocketmine\world\World;
+use function floor;
 use function max;
 use function min;
 
@@ -47,13 +47,9 @@ final class PortalTravel{
 	/** @var array<int, Entity> */
 	private array $endTouches = [];
 
-	private int $endPortalTypeId;
-
 	public function __construct(
 		private Dimensions $dimensions
-	){
-		$this->endPortalTypeId = PortalContent::endPortal()->getTypeId();
-	}
+	){}
 
 	public function tick() : void{
 		foreach($this->netherTouches as $id => $entity){
@@ -110,7 +106,13 @@ final class PortalTravel{
 	}
 
 	public function forget(int $entityId) : void{
-		unset($this->netherPortalTicks[$entityId], $this->inEndPortal[$entityId], $this->pending[$entityId]);
+		unset(
+			$this->netherPortalTicks[$entityId],
+			$this->inEndPortal[$entityId],
+			$this->pending[$entityId],
+			$this->netherTouches[$entityId],
+			$this->endTouches[$entityId]
+		);
 	}
 
 	private function canTravel(Entity $entity) : bool{
