@@ -35,7 +35,8 @@ final class LavaPopulator extends SeededPopulator{
 	}
 
 	private function getHighestWorkableBlock(BlockManager $level, int $x, int $z) : int{
-		for($y = 127; $y >= 0; $y--){
+		$y = 127;
+		for(; $y >= 0; $y--){
 			if($level->getBlockIdAt($x, $y, $z) === WorldQuery::AIR){
 				break;
 			}
