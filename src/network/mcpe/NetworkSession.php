@@ -87,6 +87,7 @@ use pocketmine\network\mcpe\protocol\ServerToClientHandshakePacket;
 use pocketmine\network\mcpe\protocol\SetDifficultyPacket;
 use pocketmine\network\mcpe\protocol\SetPlayerGameTypePacket;
 use pocketmine\network\mcpe\protocol\SetSpawnPositionPacket;
+use pocketmine\network\mcpe\protocol\SpawnParticleEffectPacket;
 use pocketmine\network\mcpe\protocol\SetTimePacket;
 use pocketmine\network\mcpe\protocol\SetTitlePacket;
 use pocketmine\network\mcpe\protocol\TextPacket;
@@ -684,6 +685,9 @@ class NetworkSession{
 			}
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
+				if($evPacket instanceof SpawnParticleEffectPacket && $this->player !== null && $this->player->getPosition()->isValid()){
+					$evPacket->dimensionId = $this->server->getDimensionManager()->getDimension($this->player->getWorld());
+				}
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
 				$this->addToSendBuffer($encoded);
