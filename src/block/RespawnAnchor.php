@@ -30,7 +30,9 @@ use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
+use pocketmine\Server;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\Explosion;
 use pocketmine\world\Position;
@@ -77,7 +79,11 @@ final class RespawnAnchor extends Opaque{
 				return false;
 			}
 
-			$ev = new PlayerRespawnAnchorUseEvent($player, $this, PlayerRespawnAnchorUseEvent::ACTION_EXPLODE);
+			$dimension = Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld());
+			$defaultAction = $dimension === DimensionIds::NETHER ?
+				PlayerRespawnAnchorUseEvent::ACTION_SET_SPAWN :
+				PlayerRespawnAnchorUseEvent::ACTION_EXPLODE;
+			$ev = new PlayerRespawnAnchorUseEvent($player, $this, $defaultAction);
 			$ev->call();
 			if($ev->isCancelled()){
 				return false;
