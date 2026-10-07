@@ -62,7 +62,8 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 			$dispenserRecipes = 0;
 			foreach($recipes->recipesWithTypeIds as $recipe){
 				if($recipe instanceof ShapedRecipe || $recipe instanceof ShapelessRecipe){
-					foreach($recipe->getOutput() as $result){
+					$outputs = $recipe instanceof ShapelessRecipe ? $recipe->getOutputs() : $recipe->getOutput();
+					foreach($outputs as $result){
 						if($result->getId() === $chestMinecartId){
 							++$chestMinecartRecipes;
 							self::assertSame(1, $result->getCount());
