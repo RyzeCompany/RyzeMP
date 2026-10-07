@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace pocketmine\world\dimension;
 
+use pocketmine\entity\Entity;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\Server;
 use pocketmine\world\dimension\generator\GeneratorOptions;
@@ -50,7 +51,15 @@ final class DimensionManager{
 	}
 
 	public function tick() : void{
-		$this->portalTravel->tick($this->server);
+		$this->portalTravel->tick();
+	}
+
+	public function touchNetherPortal(Entity $entity) : void{
+		$this->portalTravel->touchNetherPortal($entity);
+	}
+
+	public function touchEndPortal(Entity $entity) : void{
+		$this->portalTravel->touchEndPortal($entity);
 	}
 
 	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
