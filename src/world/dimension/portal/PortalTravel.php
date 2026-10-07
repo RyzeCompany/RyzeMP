@@ -78,7 +78,7 @@ final class PortalTravel{
 		if($inEndPortal){
 			if(!isset($this->inEndPortal[$id])){
 				$this->inEndPortal[$id] = true;
-				if(!isset($this->pending[$id]) && $entity->getVehicle() === null && count($entity->getPassengers()) === 0){
+				if(!isset($this->pending[$id])){
 					$this->travelThroughEndPortal($entity);
 				}
 			}
