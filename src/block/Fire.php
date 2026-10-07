@@ -29,6 +29,7 @@ use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\SupportType;
 use pocketmine\event\block\BlockBurnEvent;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\Server;
 use pocketmine\world\dimension\portal\NetherPortalFrame;
 use pocketmine\math\Facing;
 use pocketmine\world\format\Chunk;
@@ -53,7 +54,7 @@ class Fire extends BaseFire implements Ageable{
 
 	public function onNearbyBlockChange() : void{
 		$world = $this->position->getWorld();
-		$dimension = $world->getServer()->getDimensionManager()->getDimension($world);
+		$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
 		if($dimension === DimensionIds::OVERWORLD || $dimension === DimensionIds::NETHER){
 			$frame = NetherPortalFrame::find($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
 			if($frame !== null){
