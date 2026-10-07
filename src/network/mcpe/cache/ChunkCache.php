@@ -101,6 +101,14 @@ class ChunkCache implements ChunkListener{
 		private int $dimensionId = DimensionIds::OVERWORLD
 	){}
 
+	/** @phpstan-param DimensionIds::* $dimensionId */
+	public function setDimensionId(int $dimensionId) : void{
+		if($this->dimensionId !== $dimensionId){
+			$this->dimensionId = $dimensionId;
+			$this->caches = [];
+		}
+	}
+
 	private function prepareChunkAsync(int $chunkX, int $chunkZ, int $chunkHash, TypeConverter $typeConverter) : CompressBatchPromise{
 		$this->world->registerChunkListener($this, $chunkX, $chunkZ);
 		$chunk = $this->world->getChunk($chunkX, $chunkZ);
