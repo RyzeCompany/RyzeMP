@@ -62,6 +62,7 @@ use pocketmine\network\mcpe\handler\SessionStartPacketHandler;
 use pocketmine\network\mcpe\handler\SpawnResponsePacketHandler;
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
 use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
+use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\DataPacket;
@@ -75,6 +76,7 @@ use pocketmine\network\mcpe\protocol\Packet;
 use pocketmine\network\mcpe\protocol\PacketDecodeException;
 use pocketmine\network\mcpe\protocol\PacketPool;
 use pocketmine\network\mcpe\protocol\PlayerListPacket;
+use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
@@ -102,6 +104,7 @@ use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
+use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\UpdateAbilitiesPacket;
 use pocketmine\network\mcpe\protocol\UpdateAdventureSettingsPacket;
 use pocketmine\network\NetworkSessionManager;
@@ -160,6 +163,9 @@ class NetworkSession{
 
 	private \PrefixedLogger $logger;
 	private ?Player $player = null;
+	/** @phpstan-var DimensionIds::* */
+	private int $clientDimension = DimensionIds::OVERWORLD;
+	private bool $pendingDimensionChangeAck = false;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -1169,6 +1175,12 @@ class NetworkSession{
 		}
 	}
 
+	/** @phpstan-param DimensionIds::* $dimension */
+	public function setClientDimension(int $dimension) : void{
+		$this->clientDimension = $dimension;
+		$this->pendingDimensionChangeAck = false;
+	}
+
 	public function syncViewAreaRadius(int $distance) : void{
 		$this->sendDataPacket(ChunkRadiusUpdatedPacket::create($distance));
 	}
@@ -1180,11 +1192,11 @@ class NetworkSession{
 	public function syncPlayerSpawnPoint(Position $newSpawn) : void{
 		$newSpawnBlockPosition = BlockPosition::fromVector3($newSpawn);
 		//TODO: respawn causing block position (bed, respawn anchor)
-		$this->sendDataPacket(SetSpawnPositionPacket::playerSpawn($newSpawnBlockPosition, DimensionIds::OVERWORLD, $newSpawnBlockPosition));
+		$this->sendDataPacket(SetSpawnPositionPacket::playerSpawn($newSpawnBlockPosition, $this->server->getDimensionManager()->getDimension($newSpawn->getWorld()), $newSpawnBlockPosition));
 	}
 
 	public function syncWorldSpawnPoint(Position $newSpawn) : void{
-		$this->sendDataPacket(SetSpawnPositionPacket::worldSpawn(BlockPosition::fromVector3($newSpawn), DimensionIds::OVERWORLD));
+		$this->sendDataPacket(SetSpawnPositionPacket::worldSpawn(BlockPosition::fromVector3($newSpawn), $this->server->getDimensionManager()->getDimension($newSpawn->getWorld())));
 	}
 
 	public function syncGameMode(GameMode $mode, bool $isRollback = false) : void{
@@ -1367,8 +1379,15 @@ class NetworkSession{
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
+		$originalCompletion = $onCompletion;
+		$onCompletion = function() use ($originalCompletion, $chunkX, $chunkZ) : void{
+			$this->acknowledgeDimensionChangeIfReady($chunkX, $chunkZ);
+			$originalCompletion();
+		};
 		$world = $this->player->getLocation()->getWorld();
-		$promiseOrPacket = ChunkCache::getInstance($world, $this->compressor)->request($chunkX, $chunkZ, $this->getTypeConverter());
+		$cache = ChunkCache::getInstance($world, $this->compressor);
+		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
+		$promiseOrPacket = $cache->request($chunkX, $chunkZ, $this->getTypeConverter());
 		if(is_string($promiseOrPacket)){
 			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
 			return;
@@ -1403,11 +1422,31 @@ class NetworkSession{
 	public function onEnterWorld() : void{
 		if($this->player !== null){
 			$world = $this->player->getWorld();
+			$dimension = $this->server->getDimensionManager()->getDimension($world);
+			$cache = ChunkCache::getInstance($world, $this->compressor);
+			$cache->setDimensionId($dimension);
+			if($dimension !== $this->clientDimension){
+				$this->clientDimension = $dimension;
+				$this->pendingDimensionChangeAck = true;
+				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, null));
+			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
 			$this->syncWorldSpawnPoint($world->getSpawnLocation());
-			//TODO: weather needs to be synced here (when implemented)
 		}
+	}
+
+	private function acknowledgeDimensionChangeIfReady(int $chunkX, int $chunkZ) : void{
+		if(!$this->pendingDimensionChangeAck || $this->player === null){
+			return;
+		}
+		$position = $this->player->getPosition();
+		if(($position->getFloorX() >> 4) !== $chunkX || ($position->getFloorZ() >> 4) !== $chunkZ){
+			return;
+		}
+		$this->pendingDimensionChangeAck = false;
+		$blockPosition = BlockPosition::fromVector3($position);
+		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
 	}
 
 	public function syncWorldTime(int $worldTime) : void{
