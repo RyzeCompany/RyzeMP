@@ -198,18 +198,18 @@ abstract class JigsawAssembler{
 				continue;
 			}
 			foreach($this->getShuffledRotations($random) as $childRotation){
-				$connection = $this->resolveConnection($parent, $sourceJigsaw, $placedJigsaw, $childTemplate, $childRotation, $random);
-				if($connection === null){
+				$resolvedConnection = $this->resolveConnection($parent, $sourceJigsaw, $placedJigsaw, $childTemplate, $childRotation, $random);
+				if($resolvedConnection === null){
 					continue;
 				}
-				[$connection, $childBox] = $connection;
-				if(isset($connected[self::key($connection[4], $connection[5], $connection[6])])){
+				[$connectionData, $childBox] = $resolvedConnection;
+				if(isset($connected[self::key($connectionData[4], $connectionData[5], $connectionData[6])])){
 					continue;
 				}
 				if($this->overlapsExistingBox($occupied, $childBox, $parent->boundingBox)){
 					continue;
 				}
-				return [$structureKey, $childTemplate, $connection];
+				return [$structureKey, $childTemplate, $connectionData];
 			}
 		}
 		return null;
