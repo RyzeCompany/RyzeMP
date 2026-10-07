@@ -117,7 +117,6 @@ use pocketmine\network\mcpe\protocol\AnimatePacket;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
 use pocketmine\network\mcpe\protocol\SetActorMotionPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataFlags;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
@@ -2723,12 +2722,12 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 		if($this->deathPosition !== null && $this->deathPosition->world === $this->location->world){
 			$properties->setBlockPos(EntityMetadataProperties::PLAYER_DEATH_POSITION, BlockPosition::fromVector3($this->deathPosition));
-			//TODO: this should be updated when dimensions are implemented
-			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, DimensionIds::OVERWORLD);
+
+			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, $this->server->getDimensionManager()->getDimension(($this->deathPosition ?? $this->location)->getWorld()));
 			$properties->setByte(EntityMetadataProperties::PLAYER_HAS_DIED, 1);
 		}else{
 			$properties->setBlockPos(EntityMetadataProperties::PLAYER_DEATH_POSITION, new BlockPosition(0, 0, 0));
-			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, DimensionIds::OVERWORLD);
+			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, $this->server->getDimensionManager()->getDimension(($this->deathPosition ?? $this->location)->getWorld()));
 			$properties->setByte(EntityMetadataProperties::PLAYER_HAS_DIED, 0);
 		}
 	}
