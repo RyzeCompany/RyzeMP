@@ -7,6 +7,7 @@ namespace pocketmine\world\dimension;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\Server;
 use pocketmine\world\dimension\generator\GeneratorOptions;
+use pocketmine\world\dimension\generator\end\EndCrystalSpawner;
 use pocketmine\world\dimension\generator\VanillaGenerators;
 use pocketmine\world\dimension\portal\PortalContent;
 use pocketmine\world\dimension\portal\PortalTravel;
@@ -21,6 +22,7 @@ final class DimensionManager{
 
 	private Dimensions $dimensions;
 	private PortalTravel $portalTravel;
+	private EndCrystalSpawner $endCrystalSpawner;
 
 	public function __construct(private Server $server){
 		VanillaGenerators::register();
@@ -30,6 +32,7 @@ final class DimensionManager{
 			DimensionIds::THE_END => self::END_WORLD
 		]);
 		$this->portalTravel = new PortalTravel($this->dimensions);
+		$this->endCrystalSpawner = new EndCrystalSpawner($this->dimensions);
 	}
 
 	public function getDimensions() : Dimensions{
@@ -48,6 +51,10 @@ final class DimensionManager{
 
 	public function tick() : void{
 		$this->portalTravel->tick($this->server);
+	}
+
+	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
+		$this->endCrystalSpawner->onChunkPopulated($world, $chunkX, $chunkZ);
 	}
 
 	private function prepareWorld(int $dimension, string $generatorName) : void{
