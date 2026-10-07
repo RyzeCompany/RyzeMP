@@ -3684,6 +3684,7 @@ class World implements ChunkManager{
 					if(ChunkPopulateEvent::hasHandlers()){
 						(new ChunkPopulateEvent($this, $x, $z, $chunk))->call();
 					}
+					$this->server->getDimensionManager()->onChunkPopulated($this, $x, $z);
 
 					foreach($this->getChunkListeners($x, $z) as $listener){
 						$listener->onChunkPopulated($x, $z, $chunk);
