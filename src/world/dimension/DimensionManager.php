@@ -36,6 +36,7 @@ final class DimensionManager{
 		return $this->dimensions;
 	}
 
+	/** @phpstan-return DimensionIds::* */
 	public function getDimension(World $world) : int{
 		return $this->dimensions->getDimension($world);
 	}
