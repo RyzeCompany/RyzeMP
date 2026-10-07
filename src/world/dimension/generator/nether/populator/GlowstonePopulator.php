@@ -53,7 +53,8 @@ final class GlowstonePopulator extends SeededPopulator{
 	}
 
 	private function getHighestWorkableBlock(ChunkManager $world, int $x, int $z) : int{
-		for($y = 125; $y >= 0; $y--){
+		$y = 125;
+		for(; $y >= 0; $y--){
 			if(WorldQuery::blockId($world, $x, $y, $z) === WorldQuery::AIR){
 				break;
 			}
