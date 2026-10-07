@@ -8,19 +8,28 @@ use pocketmine\world\dimension\generator\object\BlockManager;
 use function abs;
 
 /**
- * Bedrock frame and pillar of the end exit portal, centred on the given
- * position, with its inside cleared.
+ * Bedrock fountain and active exit portal, centred on the given position.
+ *
+ * Until the native Ender Dragon fight is implemented, the exit portal is
+ * generated active so players always have a survival path back to the
+ * Overworld. The active surface contains the vanilla 20 End Portal blocks:
+ * a 5x5 area without the four corners and central bedrock pillar.
  */
 final class ExitPortal{
 
 	private const BEDROCK = "minecraft:bedrock";
+	private const END_PORTAL = "minecraft:end_portal";
 
 	public function generate(BlockManager $level, int $x, int $y, int $z) : void{
 		for($dx = -2; $dx <= 2; $dx++){
 			for($dz = -2; $dz <= 2; $dz++){
 				if(!(abs($dx) === 2 && abs($dz) === 2)){
 					$level->setBlockStateAt($x + $dx, $y - 1, $z + $dz, self::BEDROCK);
-					$level->setBlockStateAt($x + $dx, $y, $z + $dz, "minecraft:air");
+					if($dx === 0 && $dz === 0){
+						$level->setBlockStateAt($x, $y, $z, self::BEDROCK);
+					}else{
+						$level->setBlockStateAt($x + $dx, $y, $z + $dz, self::END_PORTAL);
+					}
 					if($dx === -2){
 						$level->setBlockStateAt($x - 3, $y, $z + $dz, self::BEDROCK);
 					}
