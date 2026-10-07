@@ -249,7 +249,8 @@ final class RuinedPortalPopulator implements Populator{
 
 		$maxCornerX = $worldX + $structureWidth - 1;
 		$maxCornerZ = $worldZ + $structureDepth - 1;
-		for($y = $i; $y > $minY; --$y){
+		$y = $i;
+		for(; $y > $minY; --$y){
 			$cornersOnSolidGround = 0;
 			if(self::isOpaqueGround($world->getBlockAt($worldX, $y, $worldZ))){
 				++$cornersOnSolidGround;
