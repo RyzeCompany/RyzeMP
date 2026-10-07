@@ -86,6 +86,35 @@ jobs:
           test -s PocketMine-MP.phar
           php -r '$p = new Phar("PocketMine-MP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
 
+      - name: Setup PocketMine PHP for smoke test
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./pm-bin
+          pm-version-major: 5
+
+      - name: Smoke-test native dimensions startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pm-native-dimensions-smoke
+          mkdir -p /tmp/pm-native-dimensions-smoke/plugins
+          set +e
+          timeout 35s php PocketMine-MP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/pm-native-dimensions-smoke.log
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/pm-native-dimensions-smoke.log; then
+            echo "Fatal/critical startup error detected"
+            exit 1
+          fi
+          grep -q 'Native dimensions: created world_nether' /tmp/pm-native-dimensions-smoke.log
+          grep -q 'Native dimensions: created world_the_end' /tmp/pm-native-dimensions-smoke.log
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            echo "Unexpected PocketMine exit code: $status"
+            exit "$status"
+          fi
+
       - name: Upload build artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
