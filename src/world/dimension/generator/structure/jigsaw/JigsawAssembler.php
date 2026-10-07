@@ -243,7 +243,7 @@ abstract class JigsawAssembler{
 			$weighted[$i] = $weighted[$index];
 			$weighted[$index] = $value;
 		}
-		return $weighted;
+		return array_values($weighted);
 	}
 
 	/**
@@ -395,7 +395,7 @@ abstract class JigsawAssembler{
 			$rotations[$i] = $rotations[$index];
 			$rotations[$index] = $value;
 		}
-		return $rotations;
+		return array_values($rotations);
 	}
 
 	private function getRandomRotation(RandomSource $random) : int{
