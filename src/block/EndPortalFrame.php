@@ -26,6 +26,12 @@ namespace pocketmine\block;
 use pocketmine\block\utils\FacesOppositePlacingPlayerTrait;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\item\Item;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\dimension\portal\EndPortalActivator;
+use pocketmine\world\dimension\portal\EndPortalFrameFillSound;
+use pocketmine\world\dimension\portal\item\EnderEye;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 
@@ -53,5 +59,19 @@ class EndPortalFrame extends Opaque implements HorizontalFacing{
 
 	protected function recalculateCollisionBoxes() : array{
 		return [AxisAlignedBB::one()->trim(Facing::UP, 3 / 16)];
+	}
+
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		if(!$item instanceof EnderEye || $this->eye){
+			return false;
+		}
+		$world = $this->position->getWorld();
+		$world->setBlock($this->position, (clone $this)->setEye(true));
+		$world->addSound($this->position->add(0.5, 0.5, 0.5), new EndPortalFrameFillSound());
+		if($player === null || !$player->isCreative()){
+			$item->pop();
+		}
+		EndPortalActivator::tryActivate($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ(), $this->facing);
+		return true;
 	}
 }
