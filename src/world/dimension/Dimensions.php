@@ -23,6 +23,7 @@ final class Dimensions{
 		private array $worldNames
 	){}
 
+	/** @phpstan-return DimensionIds::* */
 	public function getDimension(World $world) : int{
 		$name = $world->getFolderName();
 		foreach($this->worldNames as $dimension => $worldName){
