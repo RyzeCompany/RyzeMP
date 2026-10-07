@@ -239,6 +239,10 @@ final class VanillaItemsInputs extends RegistrySource{
 		self::register("melon", fn(IID $id) => new Melon($id, "Melon"));
 		self::register("melon_seeds", fn(IID $id) => new MelonSeeds($id, "Melon Seeds"));
 		self::register("milk_bucket", fn(IID $id) => new MilkBucket($id, "Milk Bucket"));
+		// Inventory-only item; placing a chest minecart entity is not implemented.
+		self::register("chest_minecart", fn(IID $id) => new class($id, "Minecart with Chest") extends Item{
+			public function getMaxStackSize() : int{ return 1; }
+		});
 		self::register("minecart", fn(IID $id) => new Minecart($id, "Minecart"));
 		self::register("mushroom_stew", fn(IID $id) => new MushroomStew($id, "Mushroom Stew"));
 		self::register("name_tag", fn(IID $id) => new NameTag($id, "Name Tag"));

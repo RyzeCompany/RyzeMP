@@ -366,7 +366,9 @@ final class ItemTypeIds{
 	public const ELYTRA = 20327;
 	public const SHIELD = 20328;
 
-	public const FIRST_UNUSED_ITEM_ID = 20329;
+	public const CHEST_MINECART = 20329;
+
+	public const FIRST_UNUSED_ITEM_ID = 20330;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_ITEM_ID;
 
