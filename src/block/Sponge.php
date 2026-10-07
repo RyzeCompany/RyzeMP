@@ -24,6 +24,13 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\item\Item;
+use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\player\Player;
+use pocketmine\Server;
+use pocketmine\world\BlockTransaction;
+use pocketmine\world\sound\FizzSound;
 
 class Sponge extends Opaque{
 	protected bool $wet = false;
@@ -38,5 +45,16 @@ class Sponge extends Opaque{
 	public function setWet(bool $wet) : self{
 		$this->wet = $wet;
 		return $this;
+	}
+
+	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
+		$state = $this;
+		$world = $blockReplace->getPosition()->getWorld();
+		if($this->wet && Server::getInstance()->getDimensionManager()->getDimension($world) === DimensionIds::NETHER){
+			$state = (clone $this)->setWet(false);
+			$world->addSound($blockReplace->getPosition()->add(0.5, 0.5, 0.5), new FizzSound());
+		}
+		$tx->addBlock($blockReplace->getPosition(), $state);
+		return true;
 	}
 }
