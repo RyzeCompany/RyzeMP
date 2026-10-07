@@ -103,6 +103,8 @@ jobs:
           set -euo pipefail
           rm -rf /tmp/pm-native-dimensions-smoke
           mkdir -p /tmp/pm-native-dimensions-smoke/plugins
+          cp resources/pocketmine.yml /tmp/pm-native-dimensions-smoke/pocketmine.yml
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/pm-native-dimensions-smoke/pocketmine.yml
           set +e
           timeout 35s php PocketMine-MP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
           status=$?
