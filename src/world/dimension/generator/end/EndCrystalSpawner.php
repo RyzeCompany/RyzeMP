@@ -8,10 +8,9 @@ use pocketmine\world\dimension\Dimensions;
 use pocketmine\world\dimension\generator\end\populator\ObsidianPillarPopulator;
 use pocketmine\entity\Location;
 use pocketmine\entity\object\EndCrystal;
-use pocketmine\event\Listener;
-use pocketmine\event\world\ChunkPopulateEvent;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\utils\Random;
+use pocketmine\world\World;
 
 /**
  * Places the end crystal on top of each obsidian spike. Spikes are built on
@@ -19,7 +18,7 @@ use pocketmine\utils\Random;
  * spike is spawned on the main thread once the chunk that builds it has been
  * populated.
  */
-final class EndCrystalSpawner implements Listener{
+final class EndCrystalSpawner{
 
 	private ?int $seed = null;
 
@@ -30,11 +29,7 @@ final class EndCrystalSpawner implements Listener{
 		private Dimensions $dimensions
 	){}
 
-	/**
-	 * @priority MONITOR
-	 */
-	public function onChunkPopulate(ChunkPopulateEvent $event) : void{
-		$world = $event->getWorld();
+	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
 		if($this->dimensions->getDimension($world) !== DimensionIds::THE_END){
 			return;
 		}
@@ -43,7 +38,7 @@ final class EndCrystalSpawner implements Listener{
 			$this->spawns = ObsidianPillarPopulator::crystalSpawns($this->seed);
 		}
 		foreach($this->spawns as $spawn){
-			if($spawn["chunkX"] !== $event->getChunkX() || $spawn["chunkZ"] !== $event->getChunkZ()){
+			if($spawn["chunkX"] !== $chunkX || $spawn["chunkZ"] !== $chunkZ){
 				continue;
 			}
 			$yaw = (new Random($this->seed ^ ($spawn["chunkX"] * 31 + $spawn["chunkZ"])))->nextFloat() * 360;
