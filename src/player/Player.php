@@ -2624,6 +2624,20 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 		$this->logger->debug("Waiting for safe respawn position to be located");
 		$spawn = $this->getSpawn();
+		$spawnDimension = $this->server->getDimensionManager()->getDimension($spawn->getWorld());
+		if(
+			$spawnDimension === DimensionIds::THE_END ||
+			(
+				$spawnDimension === DimensionIds::NETHER &&
+				!$spawn->getWorld()->getBlock($spawn) instanceof RespawnAnchor
+			)
+		){
+			$overworld = $this->server->getWorldManager()->getDefaultWorld();
+			if($overworld !== null){
+				$spawn = $overworld->getSpawnLocation();
+				$this->setSpawn($spawn);
+			}
+		}
 		$spawn->getWorld()->requestSafeSpawn($spawn)->onCompletion(
 			function(Position $safeSpawn) : void{
 				if(!$this->isConnected()){
