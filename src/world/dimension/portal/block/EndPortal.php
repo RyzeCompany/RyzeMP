@@ -6,7 +6,9 @@ namespace pocketmine\world\dimension\portal\block;
 
 use pocketmine\block\Transparent;
 use pocketmine\block\utils\SupportType;
+use pocketmine\entity\Entity;
 use pocketmine\item\Item;
+use pocketmine\Server;
 
 /**
  * The end portal block: an unbreakable, non-solid light source. Entities
@@ -37,5 +39,14 @@ class EndPortal extends Transparent{
 
 	public function getDrops(Item $item) : array{
 		return [];
+	}
+
+	public function hasEntityCollision() : bool{
+		return true;
+	}
+
+	public function onEntityInside(Entity $entity) : bool{
+		Server::getInstance()->getDimensionManager()->touchEndPortal($entity);
+		return true;
 	}
 }
