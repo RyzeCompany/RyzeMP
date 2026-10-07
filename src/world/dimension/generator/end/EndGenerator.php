@@ -61,10 +61,7 @@ final class EndGenerator extends Generator{
 		$this->populators ??= EndPopulators::create($this->seed, GeneratorOptions::resourceFolder($this->preset));
 		$root = new BlockManager($world);
 		foreach($this->populators as $populator){
-			try{
-				$populator->populate($root, $world, $chunkX, $chunkZ, $this->seed);
-			}catch(\Throwable){
-			}
+			$populator->populate($root, $world, $chunkX, $chunkZ, $this->seed);
 		}
 		$root->apply();
 	}
