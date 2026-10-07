@@ -33,14 +33,19 @@ use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
+use pocketmine\event\block\BlockPreExplodeEvent;
 use pocketmine\item\Item;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
+use pocketmine\Server;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\Explosion;
+use pocketmine\world\Position;
 use pocketmine\world\World;
 
 class Bed extends Transparent implements Colored, HorizontalFacing{
@@ -121,6 +126,11 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($player !== null){
+			$dimension = Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld());
+			if($dimension === DimensionIds::NETHER || $dimension === DimensionIds::THE_END){
+				$this->explodeInInvalidDimension($player);
+				return true;
+			}
 			$other = $this->getOtherHalf();
 			$playerPos = $player->getPosition();
 			if($other === null){
@@ -155,6 +165,35 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 
 		return true;
 
+	}
+
+	private function explodeInInvalidDimension(Player $player) : void{
+		$ev = new BlockPreExplodeEvent($this, 5.0, $player);
+		$ev->setIncendiary(true);
+		$ev->call();
+		if($ev->isCancelled()){
+			return;
+		}
+
+		$world = $this->position->getWorld();
+		$other = $this->getOtherHalf();
+		$head = ($other === null || $this->isHeadPart()) ? $this : $other;
+		$center = Position::fromObject($head->getPosition()->add(0.5, 0.5, 0.5), $world);
+
+		foreach([$this, $other] as $half){
+			if($half === null){
+				continue;
+			}
+			$world->getTile($half->getPosition())?->onBlockDestroyed();
+			$world->setBlock($half->getPosition(), VanillaBlocks::AIR());
+		}
+
+		$explosion = new Explosion($center, $ev->getRadius(), $this);
+		$explosion->setFireChance($ev->getFireChance());
+		if($ev->isBlockBreaking()){
+			$explosion->explodeA();
+		}
+		$explosion->explodeB();
 	}
 
 	public function onNearbyBlockChange() : void{
