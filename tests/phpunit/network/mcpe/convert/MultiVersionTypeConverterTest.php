@@ -6,15 +6,21 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use pocketmine\block\BlockTypeIds;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\crafting\ExactRecipeIngredient;
 use pocketmine\crafting\MetaWildcardRecipeIngredient;
+use pocketmine\data\bedrock\block\BlockTypeNames;
+use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\bedrock\ItemTagToIdMap;
 use pocketmine\item\VanillaItems;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\recipe\IntIdMetaItemDescriptor;
 use pocketmine\network\mcpe\protocol\types\recipe\StringIdMetaItemDescriptor;
+use pocketmine\world\dimension\portal\PortalContent;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
+use LogicException;
+use ReflectionMethod;
 
 final class MultiVersionTypeConverterTest extends TestCase{
 
@@ -77,5 +83,48 @@ final class MultiVersionTypeConverterTest extends TestCase{
 		self::assertInstanceOf($expectedClass, $exact);
 		self::assertInstanceOf($expectedClass, $wildcard);
 		self::assertSame($expectedSchemaId, ItemTranslator::getItemSchemaId($protocolId));
+	}
+
+	/** @return array<string, array{int}> */
+	public static function allAcceptedProtocols() : array{
+		$result = [];
+		foreach(array_values(array_unique(ProtocolInfo::ACCEPTED_PROTOCOL)) as $protocolId){
+			$result[(string) $protocolId] = [$protocolId];
+		}
+		return $result;
+	}
+
+	private static function ensurePortalContentRegistered() : void{
+		try{
+			PortalContent::endPortal();
+		}catch(LogicException){
+			PortalContent::registerBlock(BlockTypeIds::newId());
+		}
+		try{
+			PortalContent::enderEye();
+		}catch(LogicException){
+			$method = new ReflectionMethod(PortalContent::class, "registerItem");
+			$method->invoke(null);
+		}
+	}
+
+	#[DataProvider('allAcceptedProtocols')]
+	public function testNativeEndPortalTranslatesAcrossAllAcceptedProtocols(int $protocolId) : void{
+		self::ensurePortalContentRegistered();
+		$translator = TypeConverter::getInstance($protocolId)->getBlockTranslator();
+		$runtimeId = $translator->internalIdToNetworkId(PortalContent::endPortal()->getStateId());
+		$networkState = $translator->getBlockStateDictionary()->generateDataFromStateId($runtimeId);
+		self::assertNotNull($networkState);
+		self::assertSame(BlockTypeNames::END_PORTAL, $networkState->getName(), "End Portal fell back or mapped incorrectly for protocol $protocolId");
+	}
+
+	#[DataProvider('allAcceptedProtocols')]
+	public function testNativeEnderEyeTranslatesAcrossAllAcceptedProtocols(int $protocolId) : void{
+		self::ensurePortalContentRegistered();
+		$converter = TypeConverter::getInstance($protocolId);
+		$network = $converter->getItemTranslator()->toNetworkIdQuiet(PortalContent::enderEye());
+		self::assertNotNull($network, "Eye of Ender is unmapped for protocol $protocolId");
+		[$runtimeId] = $network;
+		self::assertSame(ItemTypeNames::ENDER_EYE, $converter->getItemTypeDictionary()->fromIntId($runtimeId));
 	}
 }
