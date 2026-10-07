@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - fix/chest-minecart-item
     tags:
       - 'v*'
   workflow_dispatch:

@@ -15,6 +15,7 @@ use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\CraftingDataPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\recipe\ShapedRecipe;
+use pocketmine\network\mcpe\protocol\types\recipe\ShapelessRecipe;
 use pocketmine\timings\Timings;
 
 final class MultiVersionCraftingDataCacheTest extends TestCase{
@@ -41,8 +42,8 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 	#[DataProvider('supportedGameVersions')]
 	public function testEveryRecipeAndPotionEncodesAndDecodesForItsClient(int $protocolId, string $gameVersion) : void{
 		$packet = CraftingDataCache::getInstance($protocolId)->getCache(self::$craftingManager);
-		// Registering the dispenser enables one additional vanilla crafting recipe.
-		self::assertCount(2259, $packet->recipesWithTypeIds);
+		// The dispenser and chest minecart registrations each enable a vanilla recipe.
+		self::assertCount(2260, $packet->recipesWithTypeIds);
 		self::assertCount(195, $packet->potionTypeRecipes);
 
 		$out = new ByteBufferWriter();
@@ -50,14 +51,25 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 		$decoded = new CraftingDataPacket();
 		$decoded->decode(new ByteBufferReader($out->getData()), $protocolId, $gameVersion);
 
-		self::assertCount(2259, $decoded->recipesWithTypeIds);
+		self::assertCount(2260, $decoded->recipesWithTypeIds);
 		self::assertCount(195, $decoded->potionTypeRecipes);
 		self::assertSame($packet->cleanRecipes, $decoded->cleanRecipes);
 
 		$dispenserId = TypeConverter::getInstance($protocolId)->getItemTypeDictionary()->fromStringId("minecraft:dispenser");
+		$chestMinecartId = TypeConverter::getInstance($protocolId)->getItemTypeDictionary()->fromStringId("minecraft:chest_minecart");
 		foreach([$packet, $decoded] as $recipes){
+			$chestMinecartRecipes = 0;
 			$dispenserRecipes = 0;
 			foreach($recipes->recipesWithTypeIds as $recipe){
+				if($recipe instanceof ShapedRecipe || $recipe instanceof ShapelessRecipe){
+					$outputs = $recipe instanceof ShapelessRecipe ? $recipe->getOutputs() : $recipe->getOutput();
+					foreach($outputs as $result){
+						if($result->getId() === $chestMinecartId){
+							++$chestMinecartRecipes;
+							self::assertSame(1, $result->getCount());
+						}
+					}
+				}
 				if($recipe instanceof ShapedRecipe){
 					foreach($recipe->getOutput() as $result){
 						if($result->getId() === $dispenserId){
@@ -69,6 +81,7 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 					}
 				}
 			}
+			self::assertSame(1, $chestMinecartRecipes, "The chest minecart recipe must survive the protocol round trip");
 			self::assertSame(1, $dispenserRecipes, "The dispenser recipe must survive the protocol round trip");
 		}
 	}

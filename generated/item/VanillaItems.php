@@ -234,6 +234,7 @@ final class VanillaItems{
 	private static Melon $_mMELON;
 	private static MelonSeeds $_mMELON_SEEDS;
 	private static MilkBucket $_mMILK_BUCKET;
+	private static Item $_mCHEST_MINECART;
 	private static Minecart $_mMINECART;
 	private static MushroomStew $_mMUSHROOM_STEW;
 	private static NameTag $_mNAME_TAG;
@@ -592,6 +593,7 @@ final class VanillaItems{
 			"melon" => fn(Melon $v) => self::$_mMELON = $v,
 			"melon_seeds" => fn(MelonSeeds $v) => self::$_mMELON_SEEDS = $v,
 			"milk_bucket" => fn(MilkBucket $v) => self::$_mMILK_BUCKET = $v,
+			"chest_minecart" => fn(Item $v) => self::$_mCHEST_MINECART = $v,
 			"minecart" => fn(Minecart $v) => self::$_mMINECART = $v,
 			"mushroom_stew" => fn(MushroomStew $v) => self::$_mMUSHROOM_STEW = $v,
 			"name_tag" => fn(NameTag $v) => self::$_mNAME_TAG = $v,
@@ -1736,6 +1738,11 @@ final class VanillaItems{
 	public static function MILK_BUCKET() : MilkBucket{
 		if(!isset(self::$_mMILK_BUCKET)){ self::init(); }
 		return clone self::$_mMILK_BUCKET;
+	}
+
+	public static function CHEST_MINECART() : Item{
+		if(!isset(self::$_mCHEST_MINECART)){ self::init(); }
+		return clone self::$_mCHEST_MINECART;
 	}
 
 	public static function MINECART() : Minecart{
