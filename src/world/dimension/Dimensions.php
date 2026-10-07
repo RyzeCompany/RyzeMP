@@ -26,10 +26,11 @@ final class Dimensions{
 	/** @phpstan-return DimensionIds::* */
 	public function getDimension(World $world) : int{
 		$name = $world->getFolderName();
-		foreach($this->worldNames as $dimension => $worldName){
-			if($worldName === $name){
-				return $dimension;
-			}
+		if(($this->worldNames[DimensionIds::NETHER] ?? null) === $name){
+			return DimensionIds::NETHER;
+		}
+		if(($this->worldNames[DimensionIds::THE_END] ?? null) === $name){
+			return DimensionIds::THE_END;
 		}
 		return DimensionIds::OVERWORLD;
 	}
