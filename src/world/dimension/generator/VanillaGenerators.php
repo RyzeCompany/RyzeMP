@@ -21,5 +21,7 @@ final class VanillaGenerators{
 		$manager = GeneratorManager::getInstance();
 		$manager->addGenerator(NetherGenerator::class, self::NETHER, fn() => null, true);
 		$manager->addGenerator(EndGenerator::class, self::END, fn() => null, true);
+		$manager->addAlias(self::END, "end");
+		$manager->addAlias(self::END, "the_end");
 	}
 }
