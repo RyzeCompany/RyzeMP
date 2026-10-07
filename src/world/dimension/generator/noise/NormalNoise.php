@@ -26,7 +26,7 @@ final class NormalNoise{
 	private float $maxValue;
 
 	/**
-	 * @param float[] $amplitudes single precision amplitudes, one per octave
+	 * @param array<int, float> $amplitudes single precision amplitudes, one per octave
 	 */
 	public function __construct(RandomSource $random, int $firstOctave, array $amplitudes){
 		$octaveAmplitudes = [];
@@ -35,7 +35,7 @@ final class NormalNoise{
 		foreach($amplitudes as $i => $amplitude){
 			$amplitude = Float32::of((float) $amplitude);
 			$octaveAmplitudes[$i] = $amplitude;
-			if($amplitude != 0.0){
+			if($amplitude !== 0.0){
 				$minIndex = min($minIndex, $i);
 				$maxIndex = max($maxIndex, $i);
 			}
