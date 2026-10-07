@@ -96,10 +96,7 @@ final class NetherGenerator extends Generator{
 		$this->populators ??= NetherPopulators::create($this->seed, GeneratorOptions::resourceFolder($this->preset));
 		$root = new BlockManager($world);
 		foreach($this->populators as $populator){
-			try{
-				$populator->populate($root, $world, $chunkX, $chunkZ, $this->seed);
-			}catch(\Throwable){
-			}
+			$populator->populate($root, $world, $chunkX, $chunkZ, $this->seed);
 		}
 		$root->apply();
 	}
