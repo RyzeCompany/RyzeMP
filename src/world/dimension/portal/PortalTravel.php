@@ -17,7 +17,6 @@ use pocketmine\Server;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
 use pocketmine\world\World;
-use function count;
 use function floor;
 use function max;
 use function min;
@@ -233,6 +232,7 @@ final class PortalTravel{
 	 * Runs the callback once the chunk holding the destination column is
 	 * generated and populated, if the entity can still travel by then.
 	 */
+	/** @phpstan-param Closure() : void $callback */
 	private function populate(Entity $entity, World $world, int $x, int $z, Closure $callback) : void{
 		$id = $entity->getId();
 		$this->pending[$id] = true;
