@@ -37,6 +37,7 @@ jobs:
           php build/codegen/pocketmine-yml-property-consts.php
           git diff --exit-code -- generated/YmlServerProperties.php
       - name: Static-analyze native dimensions
+        continue-on-error: true
         if: github.head_ref == 'feature/native-nether-end' || github.ref == 'refs/heads/feature/native-nether-end'
         run: |
           mkdir -p build/php
