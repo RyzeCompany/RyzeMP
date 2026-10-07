@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/chest-minecart-item
+      - feature/native-nether-end
     tags:
       - 'v*'
   workflow_dispatch:
