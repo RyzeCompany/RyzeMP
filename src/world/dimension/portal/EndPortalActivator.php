@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\world\dimension\portal;
 
 use pocketmine\block\EndPortalFrame;
+use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\world\World;
 
