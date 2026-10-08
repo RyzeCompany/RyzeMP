@@ -17,6 +17,7 @@ use function abs;
 use function in_array;
 use function max;
 use function min;
+use function usort;
 
 /**
  * Finds the nether portal an entity arrives in, or builds one with its
@@ -47,9 +48,27 @@ final class NetherPortalLocator{
 		$best = null;
 		$bestHorizontal = 0;
 		$bestVertical = 0;
+
+		// Check the closest chunks first and stop once no remaining chunk could contain
+		// a closer portal. This preserves the vanilla horizontal-first result without
+		// synchronously loading up to 289 chunks when a linked portal is nearby.
+		$candidates = [];
 		for($chunkX = ($x - $radius) >> Chunk::COORD_BIT_SIZE; $chunkX <= ($x + $radius) >> Chunk::COORD_BIT_SIZE; $chunkX++){
 			for($chunkZ = ($z - $radius) >> Chunk::COORD_BIT_SIZE; $chunkZ <= ($z + $radius) >> Chunk::COORD_BIT_SIZE; $chunkZ++){
-				$chunk = $world->loadChunk($chunkX, $chunkZ);
+				$minX = $chunkX << Chunk::COORD_BIT_SIZE;
+				$minZ = $chunkZ << Chunk::COORD_BIT_SIZE;
+				$dx = max(0, $minX - $x, $x - ($minX + 15));
+				$dz = max(0, $minZ - $z, $z - ($minZ + 15));
+				$candidates[] = [$chunkX, $chunkZ, $dx * $dx + $dz * $dz];
+			}
+		}
+		usort($candidates, static fn(array $a, array $b) : int => $a[2] <=> $b[2]);
+
+		foreach($candidates as [$chunkX, $chunkZ, $minDistance]){
+			if($best !== null && $minDistance > $bestHorizontal){
+				break;
+			}
+			$chunk = $world->loadChunk($chunkX, $chunkZ);
 				if($chunk === null){
 					continue;
 				}
@@ -98,7 +117,6 @@ final class NetherPortalLocator{
 						}
 					}
 				}
-			}
 		}
 		return $best;
 	}
