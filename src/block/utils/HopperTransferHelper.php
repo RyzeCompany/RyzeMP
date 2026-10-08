@@ -26,13 +26,15 @@ final class HopperTransferHelper{
         if(self::overlaps($source, $destination)){
             return false;
         }
-        $sourceId = spl_object_id($source);
-        $destinationId = spl_object_id($destination);
-        if(isset(self::$busy[$sourceId]) || isset(self::$busy[$destinationId])){
-            return false;
+        $lockIds = self::lockIds($source, $destination);
+        foreach($lockIds as $id){
+            if(isset(self::$busy[$id])){
+                return false;
+            }
         }
-
-        self::$busy[$sourceId] = self::$busy[$destinationId] = true;
+        foreach($lockIds as $id){
+            self::$busy[$id] = true;
+        }
         try{
             for($sourceSlot = 0, $size = $source->getSize(); $sourceSlot < $size; ++$sourceSlot){
                 $originalSource = $source->getItem($sourceSlot);
@@ -104,10 +106,29 @@ final class HopperTransferHelper{
             }
             return false;
         }finally{
-            unset(self::$busy[$sourceId], self::$busy[$destinationId]);
+            foreach($lockIds as $id){
+                unset(self::$busy[$id]);
+            }
         }
     }
 
+
+    /**
+     * Lock both sides of paired containers, not only the double-inventory
+     * wrapper. A listener might otherwise reenter via a single-chest alias.
+     *
+     * @return list<int>
+     */
+    private static function lockIds(Inventory $source, Inventory $destination) : array{
+        $all = [$source, $destination];
+        foreach([$source, $destination] as $inventory){
+            if($inventory instanceof DoubleChestInventory){
+                $all[] = $inventory->getLeftSide();
+                $all[] = $inventory->getRightSide();
+            }
+        }
+        return array_values(array_unique(array_map(spl_object_id(...), $all)));
+    }
 
     /**
      * A double chest may be exposed as a double inventory or as either half.
