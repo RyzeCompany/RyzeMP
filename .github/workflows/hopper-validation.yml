@@ -1,0 +1,48 @@
+name: Hopper PM5 build validation
+
+on:
+  push:
+    branches:
+      - feature/native-hoppers-automation-pm5
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zlib
+          ini-values: phar.readonly=Off
+          tools: composer
+      - name: Install locked runtime dependencies
+        run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
+      - name: CLI syntax validation
+        run: find src generated -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+      - name: Build PocketMine PHAR using CLI
+        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP.phar
+      - name: Validate PHAR archive
+        run: |
+          test -s PocketMine-MP.phar
+          php -r '$p = new Phar("PocketMine-MP.phar"); if($p->count() < 100){throw new RuntimeException("PHAR unexpectedly small");} echo "PHAR VALID: ".$p->count()." entries, ".filesize("PocketMine-MP.phar")." bytes\n";'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PocketMine-MP-native-hopper-${{ github.sha }}
+          path: PocketMine-MP.phar
+          if-no-files-found: error
