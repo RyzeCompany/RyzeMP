@@ -48,7 +48,7 @@ final class EndPortalActivatorTest extends TestCase{
 			);
 		$world->expects(self::once())->method("addSound");
 
-		self::assertTrue(EndPortalActivator::tryActivate($world, -2, $y, 0, Facing::EAST));
+		self::assertTrue(EndPortalActivator::tryActivate($world, -2, $y, 0));
 		self::assertCount(9, $placed);
 		foreach($placed as $block){
 			self::assertInstanceOf(EndPortal::class, $block);
