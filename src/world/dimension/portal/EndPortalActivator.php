@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace pocketmine\world\dimension\portal;
 
 use pocketmine\block\EndPortalFrame;
-use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\world\World;
 
@@ -22,15 +21,21 @@ final class EndPortalActivator{
 	 * Tries every ring the given frame can belong to and activates the first
 	 * complete one.
 	 */
-	public static function tryActivate(World $world, int $x, int $y, int $z, int $facing) : bool{
-		[$fx, , $fz] = Facing::OFFSET[$facing];
-		[$px, , $pz] = Facing::OFFSET[Facing::rotateY($facing, true)];
-		for($k = -1; $k <= 1; $k++){
-			$cx = $x + $fx * 2 + $px * $k;
-			$cz = $z + $fz * 2 + $pz * $k;
-			if(self::isComplete($world, $cx, $y, $cz)){
-				self::fill($world, $cx, $y, $cz);
-				return true;
+	public static function tryActivate(World $world, int $x, int $y, int $z) : bool{
+		// Do not derive the centre from the clicked frame's facing. Placement
+		// facing describes block state, while the ring geometry is authoritative.
+		// Scan every possible 5x5 ring centre that can contain this frame.
+		for($cx = $x - 2; $cx <= $x + 2; ++$cx){
+			for($cz = $z - 2; $cz <= $z + 2; ++$cz){
+				$dx = abs($x - $cx);
+				$dz = abs($z - $cz);
+				if(!(($dx === 2 && $dz <= 1) || ($dz === 2 && $dx <= 1))){
+					continue;
+				}
+				if(self::isComplete($world, $cx, $y, $cz)){
+					self::fill($world, $cx, $y, $cz);
+					return true;
+				}
 			}
 		}
 		return false;
@@ -45,7 +50,7 @@ final class EndPortalActivator{
 				[$cx + $i, $cz + 2, Facing::NORTH]
 			] as [$bx, $bz, $expected]){
 				$block = $world->getBlockAt($bx, $y, $bz);
-				if(!$block instanceof EndPortalFrame || !$block->hasEye() || $block->getFacing() !== $expected){
+				if(!$block instanceof EndPortalFrame || !$block->hasEye()){
 					return false;
 				}
 			}
