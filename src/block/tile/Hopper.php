@@ -25,6 +25,7 @@ namespace pocketmine\block\tile;
 
 use pocketmine\block\inventory\HopperInventory;
 use pocketmine\block\utils\HopperTransferHelper;
+use pocketmine\block\utils\HopperTransferCooldown;
 use pocketmine\block\Hopper as HopperBlock;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\inventory\Inventory;
@@ -43,11 +44,12 @@ class Hopper extends Spawnable implements Container, Nameable{
 	public const TRANSFER_INTERVAL_TICKS = 8;
 
 	private HopperInventory $inventory;
-	private int $transferCooldown = 0;
+	private HopperTransferCooldown $transferCooldown;
 
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new HopperInventory($this->position);
+		$this->transferCooldown = new HopperTransferCooldown(self::TRANSFER_INTERVAL_TICKS);
 		$world->scheduleDelayedBlockUpdate($pos, self::TRANSFER_INTERVAL_TICKS);
 	}
 
@@ -55,14 +57,14 @@ class Hopper extends Spawnable implements Container, Nameable{
 		$this->loadItems($nbt);
 		$this->loadName($nbt);
 
-		$this->transferCooldown = $nbt->getInt(self::TAG_TRANSFER_COOLDOWN, 0);
+		$this->transferCooldown->loadRemainingTicks($nbt->getInt(self::TAG_TRANSFER_COOLDOWN, 0));
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
 		$this->saveItems($nbt);
 		$this->saveName($nbt);
 
-		$nbt->setInt(self::TAG_TRANSFER_COOLDOWN, $this->transferCooldown);
+		$nbt->setInt(self::TAG_TRANSFER_COOLDOWN, $this->transferCooldown->getRemainingTicks($this->position->getWorld()->getServer()->getTick()));
 	}
 
 	public function close() : void{
@@ -93,14 +95,12 @@ class Hopper extends Spawnable implements Container, Nameable{
 		if($this->closed || $block->isPowered()){
 			return;
 		}
-		if($this->transferCooldown > 0){
-			$this->transferCooldown = max(0, $this->transferCooldown - self::TRANSFER_INTERVAL_TICKS);
-		}
-		if($this->transferCooldown > 0){
+		$world = $this->position->getWorld();
+		$currentTick = $world->getServer()->getTick();
+		if(!$this->transferCooldown->canTransfer($currentTick)){
 			return;
 		}
 
-		$world = $this->position->getWorld();
 		$pushed = false;
 		$target = $this->position->getSide($block->getFacing());
 		if($world->isChunkLoaded($target->getFloorX() >> 4, $target->getFloorZ() >> 4)){
@@ -120,7 +120,7 @@ class Hopper extends Spawnable implements Container, Nameable{
 			}
 		}
 		if($pushed || $pulled){
-			$this->transferCooldown = self::TRANSFER_INTERVAL_TICKS;
+			$this->transferCooldown->markTransferred($currentTick);
 		}
 	}
 
