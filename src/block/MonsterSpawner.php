@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\SupportType;
+use pocketmine\block\tile\MonsterSpawner as TileMonsterSpawner;
 use pocketmine\item\Item;
 use function mt_rand;
 
@@ -37,8 +38,19 @@ class MonsterSpawner extends Transparent{
 		return mt_rand(15, 43);
 	}
 
+	public function onPostPlace() : void{
+		parent::onPostPlace();
+		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
+	}
+
 	public function onScheduledUpdate() : void{
-		//TODO
+		$world = $this->position->getWorld();
+		$tile = $world->getTile($this->position);
+		if(!$tile instanceof TileMonsterSpawner || $tile->isClosed()){
+			return;
+		}
+		$tile->tickSpawner();
+		$world->scheduleDelayedBlockUpdate($this->position, TileMonsterSpawner::TICK_INTERVAL);
 	}
 
 	public function getSupportType(int $facing) : SupportType{
