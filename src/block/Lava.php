@@ -28,6 +28,8 @@ use pocketmine\event\entity\EntityCombustByBlockEvent;
 use pocketmine\event\entity\EntityDamageByBlockEvent;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\math\Facing;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\Server;
 use pocketmine\world\sound\BucketEmptyLavaSound;
 use pocketmine\world\sound\BucketFillLavaSound;
 use pocketmine\world\sound\Sound;
@@ -47,11 +49,17 @@ class Lava extends Liquid{
 	}
 
 	public function tickRate() : int{
+		if($this->position->isValid() && Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld()) === DimensionIds::NETHER){
+			return 10;
+		}
 		return 30;
 	}
 
 	public function getFlowDecayPerBlock() : int{
-		return 2; //TODO: this is 1 in the nether
+		if($this->position->isValid() && Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld()) === DimensionIds::NETHER){
+			return 1;
+		}
+		return 2;
 	}
 
 	/**

@@ -720,6 +720,10 @@ class InGamePacketHandler extends PacketHandler{
 	}
 
 	private function handlePlayerActionFromData(int $action, BlockPosition $blockPosition, int $face) : bool{
+		if($action === PlayerAction::DIMENSION_CHANGE_ACK){
+			return true;
+		}
+
 		$pos = new Vector3($blockPosition->getX(), $blockPosition->getY(), $blockPosition->getZ());
 
 		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);

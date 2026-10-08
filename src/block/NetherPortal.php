@@ -28,6 +28,8 @@ use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\Entity;
 use pocketmine\item\Item;
 use pocketmine\math\Axis;
+use pocketmine\Server;
+use pocketmine\world\dimension\portal\NetherPortalFrame;
 
 class NetherPortal extends Transparent{
 
@@ -73,8 +75,19 @@ class NetherPortal extends Transparent{
 		return [];
 	}
 
-	public function onEntityInside(Entity $entity) : bool{
-		//TODO
+	public function hasEntityCollision() : bool{
 		return true;
+	}
+
+	public function onEntityInside(Entity $entity) : bool{
+		Server::getInstance()->getDimensionManager()->touchNetherPortal($entity);
+		return true;
+	}
+
+	public function onNearbyBlockChange() : void{
+		$world = $this->position->getWorld();
+		if(!NetherPortalFrame::isPortalBlockSupported($world, $this, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ())){
+			$world->setBlock($this->position, VanillaBlocks::AIR());
+		}
 	}
 }

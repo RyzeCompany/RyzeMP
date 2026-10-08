@@ -2625,6 +2625,20 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 		$this->logger->debug("Waiting for safe respawn position to be located");
 		$spawn = $this->getSpawn();
+		$spawnDimension = $this->server->getDimensionManager()->getDimension($spawn->getWorld());
+		if(
+			$spawnDimension === DimensionIds::THE_END ||
+			(
+				$spawnDimension === DimensionIds::NETHER &&
+				!$spawn->getWorld()->getBlock($spawn) instanceof RespawnAnchor
+			)
+		){
+			$overworld = $this->server->getWorldManager()->getDefaultWorld();
+			if($overworld !== null){
+				$spawn = $overworld->getSpawnLocation();
+				$this->setSpawn($spawn);
+			}
+		}
 		$spawn->getWorld()->requestSafeSpawn($spawn)->onCompletion(
 			function(Position $safeSpawn) : void{
 				if(!$this->isConnected()){
@@ -2723,12 +2737,12 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 
 		if($this->deathPosition !== null && $this->deathPosition->world === $this->location->world){
 			$properties->setBlockPos(EntityMetadataProperties::PLAYER_DEATH_POSITION, BlockPosition::fromVector3($this->deathPosition));
-			//TODO: this should be updated when dimensions are implemented
-			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, DimensionIds::OVERWORLD);
+
+			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, $this->server->getDimensionManager()->getDimension(($this->deathPosition ?? $this->location)->getWorld()));
 			$properties->setByte(EntityMetadataProperties::PLAYER_HAS_DIED, 1);
 		}else{
 			$properties->setBlockPos(EntityMetadataProperties::PLAYER_DEATH_POSITION, new BlockPosition(0, 0, 0));
-			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, DimensionIds::OVERWORLD);
+			$properties->setInt(EntityMetadataProperties::PLAYER_DEATH_DIMENSION, $this->server->getDimensionManager()->getDimension(($this->deathPosition ?? $this->location)->getWorld()));
 			$properties->setByte(EntityMetadataProperties::PLAYER_HAS_DIED, 0);
 		}
 	}

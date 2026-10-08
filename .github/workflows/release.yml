@@ -1,10 +1,15 @@
 name: Build and Release Phar
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - main
       - fix/chest-minecart-item
+      - feature/native-nether-end
     tags:
       - 'v*'
   workflow_dispatch:
@@ -31,6 +36,37 @@ jobs:
           ini-values: phar.readonly=Off
           tools: composer
 
+      - name: Vendor VanillaAltay structure templates
+        if: github.ref == 'refs/heads/feature/native-nether-end'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f resources/dimension/structures/structures.nbt ]; then
+            mkdir -p resources/dimension/structures
+            curl -L --fail --retry 3 -o /tmp/VanillaAltay.phar \
+              https://github.com/NaySurGithub/VanillaAltay/releases/download/latest/Vanilla-Altay-0.4.0.phar
+            php -d phar.readonly=0 -r '
+              $p = new Phar("/tmp/VanillaAltay.phar");
+              $paths = [
+                "resources/dimension/structures/structures.nbt",
+                "dimension/structures/structures.nbt"
+              ];
+              foreach($paths as $path){
+                if(isset($p[$path])){
+                  file_put_contents("resources/dimension/structures/structures.nbt", $p[$path]->getContent());
+                  exit(0);
+                }
+              }
+              fwrite(STDERR, "structures.nbt not found in VanillaAltay PHAR\n");
+              exit(1);
+            '
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add resources/dimension/structures/structures.nbt
+            git commit -m "Vendor VanillaAltay dimension structure templates"
+            git push origin HEAD:feature/native-nether-end
+          fi
+
       - name: Verify PHAR compression support
         run: |
           php -r 'if(!extension_loaded("zlib") || !Phar::canCompress(Phar::GZ)){fwrite(STDERR, "Gzip PHAR compression is unavailable\\n"); exit(1);} echo "zlib + Phar::GZ compression available\\n";'
@@ -53,6 +89,37 @@ jobs:
         run: |
           test -s PocketMine-MP.phar
           php -r '$p = new Phar("PocketMine-MP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
+
+      - name: Setup PocketMine PHP for smoke test
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./pm-bin
+          pm-version-major: 5
+
+      - name: Smoke-test native dimensions startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/pm-native-dimensions-smoke
+          mkdir -p /tmp/pm-native-dimensions-smoke/plugins
+          cp resources/pocketmine.yml /tmp/pm-native-dimensions-smoke/pocketmine.yml
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/pm-native-dimensions-smoke/pocketmine.yml
+          set +e
+          timeout 35s php PocketMine-MP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/pm-native-dimensions-smoke.log
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/pm-native-dimensions-smoke.log; then
+            echo "Fatal/critical startup error detected"
+            exit 1
+          fi
+          grep -q 'Native dimensions: created world_nether' /tmp/pm-native-dimensions-smoke.log
+          grep -q 'Native dimensions: created world_the_end' /tmp/pm-native-dimensions-smoke.log
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            echo "Unexpected PocketMine exit code: $status"
+            exit "$status"
+          fi
 
       - name: Upload build artifact
         continue-on-error: true

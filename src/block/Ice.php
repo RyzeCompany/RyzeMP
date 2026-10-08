@@ -26,7 +26,9 @@ namespace pocketmine\block;
 use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Item;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
+use pocketmine\Server;
 
 class Ice extends Transparent{
 
@@ -40,7 +42,9 @@ class Ice extends Transparent{
 
 	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
 		if(($player === null || $player->isSurvival()) && !$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH())){
-			$this->position->getWorld()->setBlock($this->position, VanillaBlocks::WATER());
+			$world = $this->position->getWorld();
+			$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
+			$world->setBlock($this->position, $dimension === DimensionIds::NETHER ? VanillaBlocks::AIR() : VanillaBlocks::WATER());
 			return true;
 		}
 		return parent::onBreak($item, $player, $returnedItems);
@@ -52,8 +56,9 @@ class Ice extends Transparent{
 
 	public function onRandomTick() : void{
 		$world = $this->position->getWorld();
-		if($world->getHighestAdjacentBlockLight($this->position->x, $this->position->y, $this->position->z) >= 12){
-			BlockEventHelper::melt($this, VanillaBlocks::WATER());
+		if($world->getHighestAdjacentBlockLight($this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ()) >= 12){
+			$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
+			BlockEventHelper::melt($this, $dimension === DimensionIds::NETHER ? VanillaBlocks::AIR() : VanillaBlocks::WATER());
 		}
 	}
 

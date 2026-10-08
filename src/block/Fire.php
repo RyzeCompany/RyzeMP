@@ -28,6 +28,9 @@ use pocketmine\block\utils\AgeableTrait;
 use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\SupportType;
 use pocketmine\event\block\BlockBurnEvent;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\Server;
+use pocketmine\world\dimension\portal\NetherPortalFrame;
 use pocketmine\math\Facing;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\World;
@@ -51,6 +54,15 @@ class Fire extends BaseFire implements Ageable{
 
 	public function onNearbyBlockChange() : void{
 		$world = $this->position->getWorld();
+		$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
+		if($dimension === DimensionIds::OVERWORLD || $dimension === DimensionIds::NETHER){
+			$frame = NetherPortalFrame::find($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
+			if($frame !== null){
+				$frame->light();
+				return;
+			}
+		}
+
 		$down = $this->getSide(Facing::DOWN);
 		if(SoulFire::canBeSupportedBy($down)){
 			$world->setBlock($this->position, VanillaBlocks::SOUL_FIRE());

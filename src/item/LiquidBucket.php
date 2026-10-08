@@ -26,9 +26,13 @@ namespace pocketmine\item;
 use pocketmine\block\Block;
 use pocketmine\block\Lava;
 use pocketmine\block\Liquid;
+use pocketmine\block\Water;
 use pocketmine\event\player\PlayerBucketEmptyEvent;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
+use pocketmine\Server;
+use pocketmine\world\sound\FizzSound;
 
 class LiquidBucket extends Item{
 	private Liquid $liquid;
@@ -65,8 +69,17 @@ class LiquidBucket extends Item{
 		$ev = new PlayerBucketEmptyEvent($player, $blockReplace, $face, $this, VanillaItems::BUCKET());
 		$ev->call();
 		if(!$ev->isCancelled()){
-			$player->getWorld()->setBlock($blockReplace->getPosition(), $resultBlock->getFlowingForm());
-			$player->getWorld()->addSound($blockReplace->getPosition()->add(0.5, 0.5, 0.5), $resultBlock->getBucketEmptySound());
+			$world = $player->getWorld();
+			$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
+			if($resultBlock instanceof Water && $dimension === DimensionIds::NETHER){
+				$world->addSound($blockReplace->getPosition()->add(0.5, 0.5, 0.5), new FizzSound());
+				$this->pop();
+				$returnedItems[] = $ev->getItem();
+				return ItemUseResult::SUCCESS;
+			}
+
+			$world->setBlock($blockReplace->getPosition(), $resultBlock->getFlowingForm());
+			$world->addSound($blockReplace->getPosition()->add(0.5, 0.5, 0.5), $resultBlock->getBucketEmptySound());
 
 			$this->pop();
 			$returnedItems[] = $ev->getItem();

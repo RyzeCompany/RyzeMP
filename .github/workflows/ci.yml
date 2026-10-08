@@ -36,5 +36,12 @@ jobs:
         run: |
           php build/codegen/pocketmine-yml-property-consts.php
           git diff --exit-code -- generated/YmlServerProperties.php
+      - name: Static-analyze native dimensions
+        continue-on-error: true
+        if: github.head_ref == 'feature/native-nether-end' || github.ref == 'refs/heads/feature/native-nether-end'
+        run: |
+          mkdir -p build/php
+          php -d memory_limit=2G vendor/bin/phpstan analyse --no-progress src/world/dimension src/block/Fire.php src/block/EndPortalFrame.php src/block/NetherPortal.php src/network/mcpe/cache/ChunkCache.php src/network/mcpe/NetworkSession.php src/network/mcpe/handler/PreSpawnPacketHandler.php src/network/mcpe/handler/InGamePacketHandler.php src/player/Player.php
+
       - name: Run PHPUnit
         run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
