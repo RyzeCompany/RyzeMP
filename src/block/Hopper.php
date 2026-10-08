@@ -92,9 +92,25 @@ class Hopper extends Transparent implements PoweredByRedstone{
 		return false;
 	}
 
-	public function onScheduledUpdate() : void{
-		//TODO
+	public function onPostPlace() : void{
+		parent::onPostPlace();
+		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
 	}
 
-	//TODO: redstone logic, sucking logic
+	public function onNearbyBlockChange() : void{
+		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
+	}
+
+	public function onScheduledUpdate() : void{
+		$world = $this->position->getWorld();
+		$tile = $world->getTile($this->position);
+		if(!$tile instanceof TileHopper){
+			return;
+		}
+		$tile->tickHopper($this);
+		$world->scheduleDelayedBlockUpdate($this->position, TileHopper::TRANSFER_INTERVAL_TICKS);
+	}
+
+	// Redstone signal propagation is owned by the server redstone subsystem.
+	// Hoppers honor the current powered block state when attempting transfers.
 }
