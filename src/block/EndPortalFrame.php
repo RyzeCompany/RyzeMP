@@ -71,7 +71,7 @@ class EndPortalFrame extends Opaque implements HorizontalFacing{
 		if($player === null || !$player->isCreative()){
 			$item->pop();
 		}
-		EndPortalActivator::tryActivate($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ(), $this->facing);
+		EndPortalActivator::tryActivate($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
 		return true;
 	}
 }
