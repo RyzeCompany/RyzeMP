@@ -7,6 +7,7 @@ namespace pocketmine\block\utils;
 use pocketmine\block\Hopper;
 use pocketmine\event\inventory\HopperTransferItemEvent;
 use pocketmine\inventory\Inventory;
+use pocketmine\block\inventory\DoubleChestInventory;
 use pocketmine\item\Item;
 use Throwable;
 
@@ -22,7 +23,7 @@ final class HopperTransferHelper{
     private function __construct(){}
 
     public static function transfer(Hopper $hopper, Inventory $source, Inventory $destination) : bool{
-        if($source === $destination){
+        if(self::overlaps($source, $destination)){
             return false;
         }
         $sourceId = spl_object_id($source);
@@ -105,6 +106,27 @@ final class HopperTransferHelper{
         }finally{
             unset(self::$busy[$sourceId], self::$busy[$destinationId]);
         }
+    }
+
+
+    /**
+     * A double chest may be exposed as a double inventory or as either half.
+     * Such aliases must not be used as both source and destination.
+     */
+    private static function overlaps(Inventory $a, Inventory $b) : bool{
+        if($a === $b){
+            return true;
+        }
+        $partsA = $a instanceof DoubleChestInventory ? [$a->getLeftSide(), $a->getRightSide()] : [$a];
+        $partsB = $b instanceof DoubleChestInventory ? [$b->getLeftSide(), $b->getRightSide()] : [$b];
+        foreach($partsA as $one){
+            foreach($partsB as $two){
+                if($one === $two){
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static function findSlot(Inventory $destination, Item $item) : ?int{
