@@ -102,7 +102,7 @@ class Hopper extends Spawnable implements Container, Nameable{
 
 		$world = $this->position->getWorld();
 		$pushed = false;
-		$target = $block->getSide($block->getFacing())->getPosition();
+		$target = $this->position->getSide($block->getFacing());
 		if($world->isChunkLoaded($target->getFloorX() >> 4, $target->getFloorZ() >> 4)){
 			$targetTile = $world->getTile($target);
 			if($targetTile instanceof Container){
@@ -110,7 +110,7 @@ class Hopper extends Spawnable implements Container, Nameable{
 			}
 		}
 		$pulled = false;
-		$above = $block->getSide(Facing::UP)->getPosition();
+		$above = $this->position->getSide(Facing::UP);
 		if($world->isChunkLoaded($above->getFloorX() >> 4, $above->getFloorZ() >> 4)){
 			$aboveTile = $world->getTile($above);
 			if($aboveTile instanceof Container){
