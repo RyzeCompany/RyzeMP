@@ -11,8 +11,16 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 
 final class MonsterSpawnerTest extends TestCase{
-	public function testLegacyEntityIdentifierAndSettings() : void{
+	private static function makeDetachedTile() : MonsterSpawnerTile{
 		$tile = (new \ReflectionClass(MonsterSpawnerTile::class))->newInstanceWithoutConstructor();
+		// Tile::__destruct() calls close(), which accesses $position.
+		// The NBT parser tests intentionally do not create a real World.
+		(new \ReflectionProperty(\pocketmine\block\tile\Tile::class, "position"))
+			->setValue($tile, new \pocketmine\world\Position(0, 64, 0, null));
+		return $tile;
+	}
+	public function testLegacyEntityIdentifierAndSettings() : void{
+		$tile = self::makeDetachedTile();
 		$nbt = CompoundTag::create()
 			->setString("EntityIdentifier", "minecraft:enderman")
 			->setTag("Delay", new IntTag(100))
@@ -26,7 +34,7 @@ final class MonsterSpawnerTest extends TestCase{
 	}
 
 	public function testSpawnerBoundsBadValues() : void{
-		$tile = (new \ReflectionClass(MonsterSpawnerTile::class))->newInstanceWithoutConstructor();
+		$tile = self::makeDetachedTile();
 		$nbt = CompoundTag::create()
 			->setString("EntityIdentifier", "minecraft:enderman")
 			->setShort("Delay", -300)
