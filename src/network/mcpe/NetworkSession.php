@@ -63,6 +63,8 @@ use pocketmine\network\mcpe\handler\SpawnResponsePacketHandler;
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
 use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
+use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
+use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\DataPacket;
@@ -167,6 +169,10 @@ class NetworkSession{
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
 	private bool $pendingDimensionChangeAck = false;
+	/** Each dimension transition gets a unique screen ID (uint32, nonzero). */
+	private int $nextDimensionLoadingScreenId = 1;
+	private ?int $activeDimensionLoadingScreenId = null;
+	private float $dimensionLoadingStartedAt = 0.0;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -1428,12 +1434,38 @@ class NetworkSession{
 			if($dimension !== $this->clientDimension){
 				$this->clientDimension = $dimension;
 				$this->pendingDimensionChangeAck = true;
-				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, null));
+				// In protocol 712-2193 this field is a required uint32, not an optional value.
+				// Use a nonzero unique ID so the client can match its START/STOP reports.
+				$loadingScreenId = $this->nextDimensionLoadingScreenId++;
+				if($this->nextDimensionLoadingScreenId > 0xffffffff){
+					$this->nextDimensionLoadingScreenId = 1;
+				}
+				$this->activeDimensionLoadingScreenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? $loadingScreenId : null;
+				$this->dimensionLoadingStartedAt = microtime(true);
+				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
+				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
+				// Retain the immediate ACK behaviour that earlier portal tests depended on.
 				$this->acknowledgeDimensionChange();
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
 			$this->syncWorldSpawnPoint($world->getSpawnLocation());
+		}
+	}
+
+	/**
+	 * Client reports when its dimension loading screen has opened or closed.
+	 * Never block gameplay on a missing STOP report: older client versions may not report it.
+	 */
+	public function onClientLoadingScreen(ServerboundLoadingScreenPacket $packet) : void{
+		$screenId = $packet->getLoadingScreenId();
+		if($screenId === null || $screenId !== $this->activeDimensionLoadingScreenId){
+			return;
+		}
+		if($packet->getLoadingScreenType() === LoadingScreenType::STOP_LOADING_SCREEN){
+			$duration = microtime(true) - $this->dimensionLoadingStartedAt;
+			$this->logger->debug(sprintf("Dimension loading screen %d closed after %.3f seconds", $screenId, $duration));
+			$this->activeDimensionLoadingScreenId = null;
 		}
 	}
 
