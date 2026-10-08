@@ -113,6 +113,11 @@ class BrewingStand extends Spawnable implements Container, Nameable{
 		}
 	}
 
+	/** True while an existing potion recipe is actively being processed. */
+	public function isBrewing() : bool{
+		return $this->brewTime > 0;
+	}
+
 	public function getInventory() : BrewingStandInventory{
 		return $this->inventory;
 	}

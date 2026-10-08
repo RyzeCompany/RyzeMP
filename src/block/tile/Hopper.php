@@ -24,6 +24,13 @@ declare(strict_types=1);
 namespace pocketmine\block\tile;
 
 use pocketmine\block\inventory\HopperInventory;
+use pocketmine\block\utils\HopperTransferHelper;
+use pocketmine\block\utils\HopperTransferCooldown;
+use pocketmine\block\Hopper as HopperBlock;
+use pocketmine\entity\object\ItemEntity;
+use pocketmine\inventory\Inventory;
+use pocketmine\math\AxisAlignedBB;
+use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\World;
@@ -34,27 +41,30 @@ class Hopper extends Spawnable implements Container, Nameable{
 	use NameableTrait;
 
 	private const TAG_TRANSFER_COOLDOWN = "TransferCooldown";
+	public const TRANSFER_INTERVAL_TICKS = 8;
 
 	private HopperInventory $inventory;
-	private int $transferCooldown = 0;
+	private HopperTransferCooldown $transferCooldown;
 
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new HopperInventory($this->position);
+		$this->transferCooldown = new HopperTransferCooldown(self::TRANSFER_INTERVAL_TICKS);
+		$world->scheduleDelayedBlockUpdate($pos, self::TRANSFER_INTERVAL_TICKS);
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
 		$this->loadItems($nbt);
 		$this->loadName($nbt);
 
-		$this->transferCooldown = $nbt->getInt(self::TAG_TRANSFER_COOLDOWN, 0);
+		$this->transferCooldown->loadRemainingTicks($nbt->getInt(self::TAG_TRANSFER_COOLDOWN, 0));
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
 		$this->saveItems($nbt);
 		$this->saveName($nbt);
 
-		$nbt->setInt(self::TAG_TRANSFER_COOLDOWN, $this->transferCooldown);
+		$nbt->setInt(self::TAG_TRANSFER_COOLDOWN, $this->transferCooldown->getRemainingTicks($this->position->getWorld()->getServer()->getTick()));
 	}
 
 	public function close() : void{
@@ -75,5 +85,71 @@ class Hopper extends Spawnable implements Container, Nameable{
 
 	public function getRealInventory() : HopperInventory{
 		return $this->inventory;
+	}
+
+	/**
+	 * Runs on the server thread only. At most one push and one pull per interval.
+	 * Container inventory rules are implemented by HopperTransferItemEvent listeners.
+	 */
+	public function tickHopper(HopperBlock $block) : void{
+		if($this->closed || $block->isPowered()){
+			return;
+		}
+		$world = $this->position->getWorld();
+		$currentTick = $world->getServer()->getTick();
+		if(!$this->transferCooldown->canTransfer($currentTick)){
+			return;
+		}
+
+		$pushed = false;
+		$target = $this->position->getSide($block->getFacing());
+		if($world->isChunkLoaded($target->getFloorX() >> 4, $target->getFloorZ() >> 4)){
+			$targetTile = $world->getTile($target);
+			if($targetTile instanceof Container){
+				$pushed = HopperTransferHelper::transfer($block, $this->inventory, $targetTile->getInventory());
+			}
+		}
+		$pulled = false;
+		$above = $this->position->getSide(Facing::UP);
+		if($world->isChunkLoaded($above->getFloorX() >> 4, $above->getFloorZ() >> 4)){
+			$aboveTile = $world->getTile($above);
+			if($aboveTile instanceof Container){
+				$pulled = HopperTransferHelper::transfer($block, $aboveTile->getInventory(), $this->inventory);
+			}else{
+				$pulled = $this->pickupNearbyItems();
+			}
+		}
+		if($pushed || $pulled){
+			$this->transferCooldown->markTransferred($currentTick);
+		}
+	}
+
+	private function pickupNearbyItems() : bool{
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$box = new AxisAlignedBB($x, $y, $z, $x + 1, $y + 1.5, $z + 1);
+		foreach($world->getNearbyEntities($box) as $entity){
+			if(!$entity instanceof ItemEntity || $entity->isFlaggedForDespawn()){
+				continue;
+			}
+			$item = $entity->getItem();
+			if($item->isNull() || $this->inventory->getAddableItemQuantity($item) < 1){
+				continue;
+			}
+			$one = clone $item;
+			$one->setCount(1);
+			if($this->inventory->addItem($one) !== []){
+				continue;
+			}
+			if($item->getCount() <= 1){
+				$entity->flagForDespawn();
+			}else{
+				$entity->setStackSize($item->getCount() - 1);
+			}
+			return true;
+		}
+		return false;
 	}
 }

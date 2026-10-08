@@ -92,9 +92,72 @@ class Hopper extends Transparent implements PoweredByRedstone{
 		return false;
 	}
 
-	public function onScheduledUpdate() : void{
-		//TODO
+	public function onPostPlace() : void{
+		parent::onPostPlace();
+		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
 	}
 
-	//TODO: redstone logic, sucking logic
+	public function onNearbyBlockChange() : void{
+		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
+	}
+
+	/**
+	 * Detects the direct power sources supported by the current PM5 fork.
+	 * This is intentionally not a general redstone graph solver: indirect
+	 * strong power through an opaque block is not currently implemented.
+	 *
+	 * @param int $directionFromHopper Direction of the neighbour.
+	 */
+	public static function isDirectPowerSource(Block $neighbour, int $directionFromHopper) : bool{
+		if($neighbour instanceof Lever){
+			return $neighbour->isActivated();
+		}
+		if($neighbour instanceof Button){
+			return $neighbour->isPressed();
+		}
+		if($neighbour instanceof RedstoneTorch){
+			return $neighbour->isLit();
+		}
+		if($neighbour instanceof RedstoneWire){
+			return $neighbour->getOutputSignalStrength() > 0;
+		}
+		if($neighbour instanceof RedstoneRepeater){
+			return $neighbour->isPowered() && $neighbour->getFacing() === Facing::opposite($directionFromHopper);
+		}
+		if($neighbour instanceof RedstoneComparator){
+			return $neighbour->getOutputSignalStrength() > 0 && $neighbour->getFacing() === Facing::opposite($directionFromHopper);
+		}
+		return false;
+	}
+
+	/** Read the current adjacent block states without loading unloaded chunks. */
+	private function hasDirectPower() : bool{
+		$world = $this->position->getWorld();
+		foreach([Facing::UP, Facing::DOWN, Facing::NORTH, Facing::SOUTH, Facing::WEST, Facing::EAST] as $facing){
+			$neighbourPos = $this->position->getSide($facing);
+			if(!$world->isChunkLoaded($neighbourPos->getFloorX() >> 4, $neighbourPos->getFloorZ() >> 4)){
+				continue;
+			}
+			if(self::isDirectPowerSource($world->getBlock($neighbourPos), $facing)){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function onScheduledUpdate() : void{
+		$world = $this->position->getWorld();
+		$powered = $this->hasDirectPower();
+		if($powered !== $this->powered){
+			$this->powered = $powered;
+			$world->setBlock($this->position, $this);
+		}
+		$tile = $world->getTile($this->position);
+		if(!$tile instanceof TileHopper){
+			return;
+		}
+		$tile->tickHopper($this);
+		$world->scheduleDelayedBlockUpdate($this->position, TileHopper::TRANSFER_INTERVAL_TICKS);
+	}
+
 }
