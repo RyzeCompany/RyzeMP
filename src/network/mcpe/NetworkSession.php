@@ -1383,11 +1383,7 @@ class NetworkSession{
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
-		$originalCompletion = $onCompletion;
-		$onCompletion = function() use ($originalCompletion, $chunkX, $chunkZ) : void{
-			$this->acknowledgeDimensionChangeIfReady($chunkX, $chunkZ);
-			$originalCompletion();
-		};
+
 		$world = $this->player->getLocation()->getWorld();
 		$cache = ChunkCache::getInstance($world, $this->compressor);
 		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
@@ -1433,6 +1429,7 @@ class NetworkSession{
 				$this->clientDimension = $dimension;
 				$this->pendingDimensionChangeAck = true;
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, null));
+				$this->acknowledgeDimensionChange();
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
@@ -1440,16 +1437,12 @@ class NetworkSession{
 		}
 	}
 
-	private function acknowledgeDimensionChangeIfReady(int $chunkX, int $chunkZ) : void{
+	private function acknowledgeDimensionChange() : void{
 		if(!$this->pendingDimensionChangeAck || $this->player === null){
 			return;
 		}
-		$position = $this->player->getPosition();
-		if(($position->getFloorX() >> 4) !== $chunkX || ($position->getFloorZ() >> 4) !== $chunkZ){
-			return;
-		}
 		$this->pendingDimensionChangeAck = false;
-		$blockPosition = BlockPosition::fromVector3($position);
+		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
 		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
 	}
 
