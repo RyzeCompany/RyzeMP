@@ -14,6 +14,7 @@ on:
       - diagnostic/block-dimension-packet-trace
       - diagnostic/dimension-chunk-packet-validation
       - diagnostic/2193-pre-encryption-capture
+      - fix/2193-ordered-dimension-transfer
     tags:
       - 'v*'
   workflow_dispatch:
