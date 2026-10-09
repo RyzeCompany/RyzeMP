@@ -78,7 +78,6 @@ use pocketmine\network\mcpe\protocol\Packet;
 use pocketmine\network\mcpe\protocol\PacketDecodeException;
 use pocketmine\network\mcpe\protocol\PacketPool;
 use pocketmine\network\mcpe\protocol\PlayerListPacket;
-use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
@@ -107,7 +106,6 @@ use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
-use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\UpdateAbilitiesPacket;
 use pocketmine\network\mcpe\protocol\UpdateAdventureSettingsPacket;
 use pocketmine\network\NetworkSessionManager;
@@ -169,6 +167,7 @@ class NetworkSession{
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
 	private bool $pendingDimensionChangeAck = false;
+	private bool $firstDestinationChunkQueued = false;
 	/** Each dimension transition gets a unique screen ID (uint32, nonzero). */
 	private int $nextDimensionLoadingScreenId = 1;
 	private ?int $activeDimensionLoadingScreenId = null;
@@ -1394,7 +1393,7 @@ class NetworkSession{
 		$originalCompletion = $onCompletion;
 		$onCompletion = function() use ($originalCompletion, $chunkX, $chunkZ, $world) : void{
 			// The destination chunk was queued before this callback runs.
-			$this->acknowledgeDimensionChangeIfReady($chunkX, $chunkZ, $world);
+			$this->onDestinationChunkQueued($chunkX, $chunkZ, $world);
 			$originalCompletion();
 		};
 		$cache = ChunkCache::getInstance($world, $this->compressor);
@@ -1440,6 +1439,7 @@ class NetworkSession{
 			if($dimension !== $this->clientDimension){
 				$this->clientDimension = $dimension;
 				$this->pendingDimensionChangeAck = true;
+				$this->firstDestinationChunkQueued = false;
 				// In protocol 712-2193 this field is a required uint32, not an optional value.
 				// Use a nonzero unique ID so the client can match its START/STOP reports.
 				$loadingScreenId = $this->nextDimensionLoadingScreenId++;
@@ -1450,7 +1450,8 @@ class NetworkSession{
 				$this->dimensionLoadingStartedAt = microtime(true);
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
-				// Wait until the first destination chunk is queued before sending ACK.
+				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
+				// PlayerActionPacket is client-originated; Bedrock sends this once it changes dimension.
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
@@ -1477,18 +1478,29 @@ class NetworkSession{
 		}
 	}
 
-	private function acknowledgeDimensionChangeIfReady(int $chunkX, int $chunkZ, World $world) : void{
-		if(!$this->pendingDimensionChangeAck || $this->player === null || $this->player->getWorld() !== $world){
+	/**
+	 * Called after the destination chunk was put on the outgoing queue. This
+	 * is a tracepoint, NOT a client acknowledgement or proof of terrain rendering.
+	 */
+	private function onDestinationChunkQueued(int $chunkX, int $chunkZ, World $world) : void{
+		if(!$this->pendingDimensionChangeAck || $this->firstDestinationChunkQueued || $this->player === null || $this->player->getWorld() !== $world){
 			return;
 		}
 		$position = $this->player->getPosition();
 		if(($position->getFloorX() >> 4) !== $chunkX || ($position->getFloorZ() >> 4) !== $chunkZ){
 			return;
 		}
+		$this->firstDestinationChunkQueued = true;
+		$this->logger->debug(sprintf("Destination chunk %d %d queued after %.3f seconds", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
+	}
+
+	/** The client (not the server) confirms that it has switched dimensions. */
+	public function onClientDimensionChangeAck() : void{
+		if(!$this->pendingDimensionChangeAck){
+			return;
+		}
 		$this->pendingDimensionChangeAck = false;
-		$blockPosition = BlockPosition::fromVector3($position);
-		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
-		$this->logger->debug(sprintf("Dimension ACK sent after destination chunk %d %d (%.3f s since change)", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
+		$this->logger->debug(sprintf("Client dimension ACK received after %.3f seconds", microtime(true) - $this->dimensionLoadingStartedAt));
 	}
 
 	public function syncWorldTime(int $worldTime) : void{
