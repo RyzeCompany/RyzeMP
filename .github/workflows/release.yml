@@ -10,6 +10,7 @@ on:
       - main
       - fix/chest-minecart-item
       - feature/native-nether-end
+      - fix/dimension-loading-screen-hcf
     tags:
       - 'v*'
   workflow_dispatch:
