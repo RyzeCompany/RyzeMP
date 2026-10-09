@@ -43,5 +43,10 @@ jobs:
           mkdir -p build/php
           php -d memory_limit=2G vendor/bin/phpstan analyse --no-progress src/world/dimension src/block/Fire.php src/block/EndPortalFrame.php src/block/NetherPortal.php src/network/mcpe/cache/ChunkCache.php src/network/mcpe/NetworkSession.php src/network/mcpe/handler/PreSpawnPacketHandler.php src/network/mcpe/handler/InGamePacketHandler.php src/player/Player.php
 
+      - name: Verify protocol 2193 offline capture decoder
+        run: |
+          python3 -m py_compile tools/analyze_dimension_capture.py
+          python3 -m unittest discover -s tools/tests -p 'test_dimension_capture.py' -v
+
       - name: Run PHPUnit
         run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
