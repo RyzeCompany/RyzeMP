@@ -28,6 +28,7 @@ use pocketmine\network\mcpe\cache\CraftingDataCache;
 use pocketmine\network\mcpe\cache\StaticPacketCache;
 use pocketmine\network\mcpe\InventoryManager;
 use pocketmine\network\mcpe\NetworkSession;
+use pocketmine\network\mcpe\protocol\DimensionDataPacket;
 use pocketmine\network\mcpe\protocol\ItemRegistryPacket;
 use pocketmine\network\mcpe\protocol\JigsawStructureDataPacket;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
@@ -35,6 +36,7 @@ use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
 use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\StartGamePacket;
+use pocketmine\network\mcpe\protocol\VoxelShapesPacket;
 use pocketmine\network\mcpe\protocol\SetLocalPlayerAsInitializedPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
@@ -98,11 +100,29 @@ class PreSpawnPacketHandler extends PacketHandler{
 
 			$typeConverter = $this->session->getTypeConverter();
 
+			if($protocolId === ProtocolInfo::PROTOCOL_1_26_52){
+				// Allay's working 2193 handshake sends dimension definitions
+				// before JigsawStructureDataPacket and StartGamePacket. The
+				// vanilla dimension bounds match the client defaults, therefore
+				// there are no custom definitions to publish (empty registry).
+				$this->session->getLogger()->debug("Sending 2193 dimension definitions before StartGame");
+				$this->session->sendDataPacket(DimensionDataPacket::create([]));
+			}
+
 			if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
 				// Minecraft 1.26.50+ requires the real jigsaw structure definitions before StartGamePacket.
 				// 1.26.50 and 1.26.51 share protocol 2193, so the 1.26.50 fixture applies to both.
 				$this->session->getLogger()->debug("Sending jigsaw structure data");
 				$this->session->sendDataPacket(self::jigsawStructureData());
+			}
+
+			if($protocolId === ProtocolInfo::PROTOCOL_1_26_52){
+				// The v2193 Allay encoder sends one empty voxel-shape registry
+				// before StartGame, even when no custom shapes were registered.
+				// This must not be confused with sending the vanilla collision
+				// geometry: the stock client supplies vanilla shapes itself.
+				$this->session->getLogger()->debug("Sending 2193 voxel-shape registry before StartGame");
+				$this->session->sendDataPacket(VoxelShapesPacket::create([], [], 0));
 			}
 
 			$this->session->getLogger()->debug("Preparing StartGamePacket");
