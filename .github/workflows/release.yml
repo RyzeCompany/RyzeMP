@@ -13,6 +13,7 @@ on:
       - fix/dimension-loading-screen-hcf
       - diagnostic/block-dimension-packet-trace
       - experiment/legacy-2193-dimension-ack
+      - experiment/legacy-2193-zero-screen-id
     tags:
       - 'v*'
   workflow_dispatch:
