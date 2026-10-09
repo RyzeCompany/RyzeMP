@@ -20,7 +20,7 @@ def uvar(x):
         b.append((x & 0x7f) | 0x80)
         x >>= 7
     b.append(x)
-    return bytes(b + bytes([x]))
+    return bytes(b)
 
 
 def signed(x):
