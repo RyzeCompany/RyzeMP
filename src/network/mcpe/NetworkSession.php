@@ -72,6 +72,7 @@ use pocketmine\network\mcpe\protocol\PacketViolationWarningPacket;
 use pocketmine\network\mcpe\protocol\DisconnectPacket;
 use pocketmine\network\mcpe\protocol\ModalFormRequestPacket;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
+use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\NetworkChunkPublisherUpdatePacket;
 use pocketmine\network\mcpe\protocol\OpenSignPacket;
 use pocketmine\network\mcpe\protocol\Packet;
@@ -97,6 +98,7 @@ use pocketmine\network\mcpe\protocol\TransferPacket;
 use pocketmine\network\mcpe\protocol\types\AbilitiesData;
 use pocketmine\network\mcpe\protocol\types\AbilitiesLayer;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
+use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\types\command\CommandData;
 use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
 use pocketmine\network\mcpe\protocol\types\command\CommandOverload;
@@ -1499,8 +1501,8 @@ class NetworkSession{
 				$this->dimensionPacketTraceDropped = 0;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
-				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
-				// PlayerActionPacket is client-originated; Bedrock sends this once it changes dimension.
+				// Experimental compatibility ACK is sent later, once the first destination chunk is queued.
+				// Do not send it before the target terrain is available.
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
@@ -1541,6 +1543,15 @@ class NetworkSession{
 		}
 		$this->firstDestinationChunkQueued = true;
 		$this->traceDimensionPacket("destination chunk $chunkX $chunkZ queued");
+		// EXPERIMENT: Previously, the outbound ACK used the modern numeric action (14),
+		// which is StartGliding in protocol 2193. Now the BedrockProtocol serializer
+		// translates DIMENSION_CHANGE_ACK to the 2193 wire action 13.
+		// Restrict this compatibility probe to 2193 until confirmed on real clients.
+		if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52){
+			$blockPos = BlockPosition::fromVector3($position);
+			$this->traceDimensionPacket("experimental dimension ACK outbound after destination chunk (legacy action 13)");
+			$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPos, $blockPos, 0), true);
+		}
 		$this->logger->debug(sprintf("Destination chunk %d %d queued after %.3f seconds", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
 	}
 
