@@ -85,6 +85,7 @@ final class DimensionWire2193Test extends TestCase{
             $subCount = ChunkSerializer::getSubChunkCount($chunk, $dimension);
             $payload = ChunkSerializer::serializeFullChunk($chunk, $dimension, TypeConverter::getInstance(self::PROTOCOL), '');
             $reader = new ByteBufferReader($payload);
+            $dictionary = TypeConverter::getInstance(self::PROTOCOL)->getBlockTranslator()->getBlockStateDictionary();
             for($index = 0; $index < $subCount; ++$index){
                 self::assertSame(8, Byte::readUnsigned($reader), 'Subchunk version');
                 $layers = Byte::readUnsigned($reader);
@@ -93,19 +94,19 @@ final class DimensionWire2193Test extends TestCase{
                 self::assertGreaterThanOrEqual(0, $layers);
                 self::assertLessThanOrEqual(2, $layers);
                 for($i=0; $i<$layers; ++$i){
-                    self::readNetworkPalette($reader, 4096);
+                    self::readNetworkPalette($reader, 4096, $dictionary);
                 }
             }
             [$minY, $maxY] = ChunkSerializer::getDimensionChunkBounds($dimension);
             for($index=$minY; $index<=$maxY; ++$index){
-                self::readNetworkPalette($reader, 64);
+                self::readNetworkPalette($reader, 64, null);
             }
             self::assertSame(0, Byte::readUnsigned($reader), 'Zero border-block count');
             self::assertSame(0, $reader->getUnreadLength(), 'Chunk has trailing bytes or missing palettes');
         }
     }
 
-    private static function readNetworkPalette(ByteBufferReader $reader, int $cells) : void{
+    private static function readNetworkPalette(ByteBufferReader $reader, int $cells, ?\pocketmine\network\mcpe\convert\BlockStateDictionary $dictionary) : void{
         $header = Byte::readUnsigned($reader);
         self::assertSame(1, $header & 1, 'Network palette bit');
         $bits = $header >> 1;
@@ -120,7 +121,14 @@ final class DimensionWire2193Test extends TestCase{
             $count = 1;
         }
         for($i=0; $i<$count; ++$i){
-            self::assertGreaterThanOrEqual(0, VarInt::readSignedInt($reader));
+            $id = VarInt::readSignedInt($reader);
+            if($dictionary !== null){
+                // Since 1.26.50, hashed runtime block IDs can be negative as signed 32-bit values.
+                // Validate against the versioned dictionary, not a naive positivity check.
+                self::assertNotNull($dictionary->generateDataFromStateId($id), "Unknown 2193 block-state hash " . $id);
+            }else{
+                self::assertGreaterThanOrEqual(0, $id, "Invalid negative biome ID");
+            }
         }
     }
 }
