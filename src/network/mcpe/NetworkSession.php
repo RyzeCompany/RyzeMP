@@ -42,6 +42,7 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\FilterNoisyPacketException;
 use pocketmine\network\mcpe\cache\ChunkCache;
+use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\network\mcpe\compression\CompressBatchPromise;
 use pocketmine\network\mcpe\compression\Compressor;
 use pocketmine\network\mcpe\compression\DecompressionException;
@@ -77,6 +78,7 @@ use pocketmine\network\mcpe\protocol\OpenSignPacket;
 use pocketmine\network\mcpe\protocol\Packet;
 use pocketmine\network\mcpe\protocol\PacketDecodeException;
 use pocketmine\network\mcpe\protocol\PacketPool;
+use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\network\mcpe\protocol\PlayerListPacket;
 use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
@@ -175,6 +177,7 @@ class NetworkSession{
 	/** @var list<string> Metadata-only ring buffer; never stores packet bodies or credentials. */
 	private array $dimensionPacketTrace = [];
 	private int $dimensionPacketTraceDropped = 0;
+	private int $dimensionInboundMovementCount = 0;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -550,6 +553,17 @@ class NetworkSession{
 	 * @throws FilterNoisyPacketException
 	 */
 	public function handleDataPacket(Packet $packet, string $buffer) : void{
+		if($this->dimensionLoadingStartedAt > 0.0){
+			if($packet instanceof PlayerAuthInputPacket){
+				++$this->dimensionInboundMovementCount;
+				if($this->dimensionInboundMovementCount <= 3 || $this->dimensionInboundMovementCount % 20 === 0){
+					$this->traceDimensionPacket("in pid=" . $packet->pid() . " type=PlayerAuthInputPacket count=" . $this->dimensionInboundMovementCount);
+				}
+			}else{
+				// Only packet ID, type and length: never persist packet bodies, chat, tokens or positions.
+				$this->traceDimensionPacket("in pid=" . $packet->pid() . " type=" . $packet->getName() . " size=" . strlen($buffer));
+			}
+		}
 		if(!($packet instanceof ServerboundPacket)){
 			throw new PacketHandlingException("Unexpected non-serverbound packet");
 		}
@@ -1023,7 +1037,7 @@ class NetworkSession{
 		if($this->dimensionLoadingStartedAt <= 0.0 || microtime(true) - $this->dimensionLoadingStartedAt > 8.0){
 			return;
 		}
-		$this->logger->debug(sprintf("[DimensionTrace] Client disconnected %.3fs after dimension change; last %d packet events, %d older events omitted", microtime(true) - $this->dimensionLoadingStartedAt, count($this->dimensionPacketTrace), $this->dimensionPacketTraceDropped));
+		$this->logger->debug(sprintf("[DimensionTrace] Client disconnected %.3fs after dimension change; last %d packet events, %d older events omitted; inbound movement packets=%d", microtime(true) - $this->dimensionLoadingStartedAt, count($this->dimensionPacketTrace), $this->dimensionPacketTraceDropped, $this->dimensionInboundMovementCount));
 		foreach($this->dimensionPacketTrace as $event){
 			$this->logger->debug("[DimensionTrace] " . $event);
 		}
@@ -1443,8 +1457,19 @@ class NetworkSession{
 			$this->onDestinationChunkQueued($chunkX, $chunkZ, $world);
 			$originalCompletion();
 		};
+		$dimensionId = $this->server->getDimensionManager()->getDimension($world);
+		if($this->pendingDimensionChangeAck && $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52){
+			$position = $this->player->getPosition();
+			if(($position->getFloorX() >> 4) === $chunkX && ($position->getFloorZ() >> 4) === $chunkZ){
+				$chunk = $world->getChunk($chunkX, $chunkZ);
+				if($chunk !== null){
+					[$minY, $maxY] = ChunkSerializer::getDimensionChunkBounds($dimensionId);
+					$this->traceDimensionPacket("target chunk metadata world=" . $world->getFolderName() . " dim=" . $dimensionId . " cx=" . $chunkX . " cz=" . $chunkZ . " yRange=" . $minY . ".." . $maxY . " subCount=" . ChunkSerializer::getSubChunkCount($chunk, $dimensionId));
+				}
+			}
+		}
 		$cache = ChunkCache::getInstance($world, $this->compressor);
-		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
+		$cache->setDimensionId($dimensionId);
 		$promiseOrPacket = $cache->request($chunkX, $chunkZ, $this->getTypeConverter());
 		if(is_string($promiseOrPacket)){
 			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
@@ -1497,6 +1522,7 @@ class NetworkSession{
 				$this->dimensionLoadingStartedAt = microtime(true);
 				$this->dimensionPacketTrace = [];
 				$this->dimensionPacketTraceDropped = 0;
+				$this->dimensionInboundMovementCount = 0;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
 				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
@@ -1514,6 +1540,7 @@ class NetworkSession{
 	 */
 	public function onClientLoadingScreen(ServerboundLoadingScreenPacket $packet) : void{
 		$screenId = $packet->getLoadingScreenId();
+		$this->traceDimensionPacket("in loading-screen type=" . $packet->getLoadingScreenType()->value . " id=" . ($screenId === null ? "null" : (string) $screenId) . " expected=" . ($this->activeDimensionLoadingScreenId === null ? "null" : (string) $this->activeDimensionLoadingScreenId));
 		if($screenId === null || $screenId !== $this->activeDimensionLoadingScreenId){
 			return;
 		}
