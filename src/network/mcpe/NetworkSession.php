@@ -42,6 +42,7 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\FilterNoisyPacketException;
 use pocketmine\network\mcpe\cache\ChunkCache;
+use pocketmine\network\mcpe\diagnostic\DimensionWireCapture;
 use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\network\mcpe\compression\CompressBatchPromise;
 use pocketmine\network\mcpe\compression\Compressor;
@@ -178,6 +179,7 @@ class NetworkSession{
 	private array $dimensionPacketTrace = [];
 	private int $dimensionPacketTraceDropped = 0;
 	private int $dimensionInboundMovementCount = 0;
+	private ?DimensionWireCapture $dimensionWireCapture = null;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -882,6 +884,9 @@ class NetworkSession{
 	 * @phpstan-param list<PromiseResolver<true>> $ackPromises
 	 */
 	private function sendEncoded(string $payload, bool $immediate, array $ackPromises) : void{
+		// The last point where outbound batches are visible before game encryption.
+		// Disabled by default, never records inbound credentials or chat packets.
+		$this->dimensionWireCapture?->recordOutboundBatch($payload);
 		if($this->cipher !== null){
 			Timings::$playerNetworkSendEncrypt->startTiming();
 			$payload = $this->cipher->encrypt($payload);
@@ -911,6 +916,8 @@ class NetworkSession{
 			$this->disconnectGuard = false;
 			$this->flushGamePacketQueue();
 			$this->sender->close("");
+			$this->dimensionWireCapture?->close("session_closed");
+			$this->dimensionWireCapture = null;
 			foreach($this->disposeHooks as $callback){
 				$callback();
 			}
@@ -1044,6 +1051,7 @@ class NetworkSession{
 	}
 
 	public function onClientDisconnect(Translatable|string $reason) : void{
+		$this->dimensionWireCapture?->markClientDisconnect();
 		$this->dumpDimensionTraceOnDisconnect();
 		$this->tryDisconnect(function() use ($reason) : void{
 			if($this->player !== null){
@@ -1523,6 +1531,9 @@ class NetworkSession{
 				$this->dimensionPacketTrace = [];
 				$this->dimensionPacketTraceDropped = 0;
 				$this->dimensionInboundMovementCount = 0;
+				$this->dimensionWireCapture?->close("next_dimension_change");
+				$this->dimensionWireCapture = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52 ?
+					DimensionWireCapture::create($this->server->getDataPath(), $dimension) : null;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
 				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
