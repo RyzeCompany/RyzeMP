@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe;
 
+use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
 use pocketmine\network\mcpe\compression\CompressBatchPromise;
 use pocketmine\network\mcpe\compression\Compressor;
@@ -78,6 +79,26 @@ class ChunkRequestTask extends AsyncTask{
 
 		$stream = new ByteBufferWriter();
 		PacketBatch::encodePackets($stream, $this->mappingProtocol, [LevelChunkPacket::create(new ChunkPosition($this->chunkX, $this->chunkZ), $dimensionId, $subCount, false, null, $payload)]);
+
+		// DIAGNOSTIC ONLY (2193): validate the uncompressed wire packet in
+		// the worker before compression. Catches header layout errors, byte
+		// truncation and mismatched dimension/subchunk fields. This does NOT
+		// prove that every block/biome runtime ID in the payload is client-valid.
+		if($this->mappingProtocol === ProtocolInfo::PROTOCOL_1_26_52){
+			$found = 0;
+			foreach(PacketBatch::decodeRaw(new ByteBufferReader($stream->getData())) as $packetBytes){
+				++$found;
+				$in = new ByteBufferReader($packetBytes);
+				$decoded = new LevelChunkPacket();
+				$decoded->decode($in, $this->mappingProtocol);
+				if($in->getUnreadLength() !== 0 || $decoded->getDimensionId() !== $dimensionId || $decoded->getSubChunkCount() !== $subCount || $decoded->getExtraPayload() !== $payload || $decoded->isClientSubChunkRequestsEnabled() || $decoded->isCacheEnabled()){
+					throw new \UnexpectedValueException("2193 LevelChunk roundtrip mismatch for chunk {$this->chunkX} {$this->chunkZ}, dimension={$dimensionId}, subCount={$subCount}");
+				}
+			}
+			if($found !== 1){
+				throw new \UnexpectedValueException("2193 LevelChunk expected exactly one packet for chunk {$this->chunkX} {$this->chunkZ}; got {$found}");
+			}
+		}
 
 		$compressor = $this->compressor->deserialize();
 		$protocolAddition = $this->mappingProtocol >= ProtocolInfo::PROTOCOL_1_20_60 ? chr($compressor->getNetworkId()) : '';
