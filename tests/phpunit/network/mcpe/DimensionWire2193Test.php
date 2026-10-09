@@ -99,7 +99,8 @@ final class DimensionWire2193Test extends TestCase{
             }
             [$minY, $maxY] = ChunkSerializer::getDimensionChunkBounds($dimension);
             for($index=$minY; $index<=$maxY; ++$index){
-                self::readNetworkPalette($reader, 64, null);
+                // PMMP's biome PalettedBlockArray stores a full 16x16x16 palette (4096 entries).
+                self::readNetworkPalette($reader, 4096, null);
             }
             self::assertSame(0, Byte::readUnsigned($reader), 'Zero border-block count');
             self::assertSame(0, $reader->getUnreadLength(), 'Chunk has trailing bytes or missing palettes');
