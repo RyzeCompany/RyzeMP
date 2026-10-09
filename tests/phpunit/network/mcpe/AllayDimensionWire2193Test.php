@@ -25,10 +25,12 @@ final class AllayDimensionWire2193Test extends TestCase{
 
     public function testChangeDimensionUsesHeadPositionGoldenWire() : void{
         // Captured destination feet position was (0.5, 74, -14.5).
-        // Mykoss/Allay sends the network origin (+1.62) at y=75.62.
+        // Allay uses an eye-height origin (+1.62); the captured PocketMine
+        // MovePlayer origin is y=75.621, so ChangeDimension must use that
+        // same player-specific network position, not feet y=74.
         $packet = ChangeDimensionPacket::create(
             DimensionIds::OVERWORLD,
-            new Vector3(0.5, 75.62, -14.5),
+            new Vector3(0.5, 75.621, -14.5),
             false,
             1
         );
