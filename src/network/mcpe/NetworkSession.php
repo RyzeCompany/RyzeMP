@@ -172,6 +172,9 @@ class NetworkSession{
 	private int $nextDimensionLoadingScreenId = 1;
 	private ?int $activeDimensionLoadingScreenId = null;
 	private float $dimensionLoadingStartedAt = 0.0;
+	/** @var list<string> Metadata-only ring buffer; never stores packet bodies or credentials. */
+	private array $dimensionPacketTrace = [];
+	private int $dimensionPacketTraceDropped = 0;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -747,6 +750,18 @@ class NetworkSession{
 	 * @internal
 	 */
 	public function addToSendBuffer(string $buffer) : void{
+		if($this->dimensionLoadingStartedAt > 0.0){
+			// Extract only the unsigned varint packet header. Do not log packet bodies.
+			$header = 0;
+			for($i = 0, $shift = 0; $i < 3 && $i < strlen($buffer); ++$i, $shift += 7){
+				$byte = ord($buffer[$i]);
+				$header |= ($byte & 0x7f) << $shift;
+				if(($byte & 0x80) === 0){
+					break;
+				}
+			}
+			$this->traceDimensionPacket("out pid=" . ($header & 0x3ff) . " size=" . strlen($buffer));
+		}
 		$this->sendBuffer[] = $buffer;
 	}
 
@@ -984,7 +999,38 @@ class NetworkSession{
 	 * Called by the network interface to close the session when the client disconnects without server input, for
 	 * example in a timeout condition or voluntary client disconnect.
 	 */
+	/**
+	 * Metadata-only network trace for short-lived post-portal client disconnects.
+	 * Enabled only for the first 8 seconds after a dimension change; bounded to
+	 * 100 events to avoid affecting production traffic or storing sensitive data.
+	 */
+	private function traceDimensionPacket(string $entry) : void{
+		if($this->dimensionLoadingStartedAt <= 0.0){
+			return;
+		}
+		$elapsed = microtime(true) - $this->dimensionLoadingStartedAt;
+		if($elapsed > 8.0){
+			return;
+		}
+		$this->dimensionPacketTrace[] = sprintf("+%.3fs %s", $elapsed, $entry);
+		if(count($this->dimensionPacketTrace) > 100){
+			array_shift($this->dimensionPacketTrace);
+			++$this->dimensionPacketTraceDropped;
+		}
+	}
+
+	private function dumpDimensionTraceOnDisconnect() : void{
+		if($this->dimensionLoadingStartedAt <= 0.0 || microtime(true) - $this->dimensionLoadingStartedAt > 8.0){
+			return;
+		}
+		$this->logger->debug(sprintf("[DimensionTrace] Client disconnected %.3fs after dimension change; last %d packet events, %d older events omitted", microtime(true) - $this->dimensionLoadingStartedAt, count($this->dimensionPacketTrace), $this->dimensionPacketTraceDropped));
+		foreach($this->dimensionPacketTrace as $event){
+			$this->logger->debug("[DimensionTrace] " . $event);
+		}
+	}
+
 	public function onClientDisconnect(Translatable|string $reason) : void{
+		$this->dumpDimensionTraceOnDisconnect();
 		$this->tryDisconnect(function() use ($reason) : void{
 			if($this->player !== null){
 				$this->player->onPostDisconnect($reason, null);
@@ -1373,6 +1419,7 @@ class NetworkSession{
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
 	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world) : void{
+		$this->traceDimensionPacket("out compressed-chunk size=" . strlen($chunkPacket) . " world=" . $world->getFolderName());
 		$world->timings->syncChunkSend->startTiming();
 		try{
 			$this->queueCompressed($chunkPacket);
@@ -1448,6 +1495,8 @@ class NetworkSession{
 				}
 				$this->activeDimensionLoadingScreenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? $loadingScreenId : null;
 				$this->dimensionLoadingStartedAt = microtime(true);
+				$this->dimensionPacketTrace = [];
+				$this->dimensionPacketTraceDropped = 0;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
 				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
@@ -1491,6 +1540,7 @@ class NetworkSession{
 			return;
 		}
 		$this->firstDestinationChunkQueued = true;
+		$this->traceDimensionPacket("destination chunk $chunkX $chunkZ queued");
 		$this->logger->debug(sprintf("Destination chunk %d %d queued after %.3f seconds", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
 	}
 
