@@ -155,12 +155,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Mykoss/BedrockProtocol.git",
-                "reference": "6c15ecf417d3bb0730c75c94583f5c6bcab09c26"
+                "reference": "3e10a78165b60781d2cbe96b5ed5092448be7e3e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/6c15ecf417d3bb0730c75c94583f5c6bcab09c26",
-                "reference": "6c15ecf417d3bb0730c75c94583f5c6bcab09c26",
+                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/3e10a78165b60781d2cbe96b5ed5092448be7e3e",
+                "reference": "3e10a78165b60781d2cbe96b5ed5092448be7e3e",
                 "shasum": ""
             },
             "require": {
