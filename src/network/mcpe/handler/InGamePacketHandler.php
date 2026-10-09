@@ -732,6 +732,7 @@ class InGamePacketHandler extends PacketHandler{
 
 	private function handlePlayerActionFromData(int $action, BlockPosition $blockPosition, int $face) : bool{
 		if($action === PlayerAction::DIMENSION_CHANGE_ACK){
+			$this->session->onClientDimensionChangeAck();
 			return true;
 		}
 
