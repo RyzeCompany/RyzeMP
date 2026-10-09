@@ -88,7 +88,9 @@ final class DimensionWire2193Test extends TestCase{
             for($index = 0; $index < $subCount; ++$index){
                 self::assertSame(8, Byte::readUnsigned($reader), 'Subchunk version');
                 $layers = Byte::readUnsigned($reader);
-                self::assertGreaterThanOrEqual(1, $layers);
+                // Empty subchunks may legitimately have zero storage layers.
+                // Only nonempty storage layers include a following palette.
+                self::assertGreaterThanOrEqual(0, $layers);
                 self::assertLessThanOrEqual(2, $layers);
                 for($i=0; $i<$layers; ++$i){
                     self::readNetworkPalette($reader, 4096);
