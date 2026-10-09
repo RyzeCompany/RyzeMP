@@ -1495,7 +1495,14 @@ class NetworkSession{
 				if($this->nextDimensionLoadingScreenId > 0xffffffff){
 					$this->nextDimensionLoadingScreenId = 1;
 				}
-				$this->activeDimensionLoadingScreenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? $loadingScreenId : null;
+				// EXPERIMENT (2193 only): 0 is the legacy wire sentinel used by
+				// VanillaAltay when no independent loading-screen token is supplied.
+				// Keep the legacy post-chunk ACK experiment unchanged so the only
+				// difference from the previous real-client test is this uint32.
+				if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52){
+					$loadingScreenId = 0;
+				}
+				$this->activeDimensionLoadingScreenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 && $loadingScreenId !== 0 ? $loadingScreenId : null;
 				$this->dimensionLoadingStartedAt = microtime(true);
 				$this->dimensionPacketTrace = [];
 				$this->dimensionPacketTraceDropped = 0;
