@@ -6,7 +6,9 @@ namespace pocketmine\tests\network\mcpe;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\network\mcpe\NetworkSession;
+use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
+use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use ReflectionClass;
 
@@ -35,5 +37,9 @@ final class DimensionTransferRuntimeSymbolsTest extends TestCase{
         );
         self::assertTrue(class_exists(PlayerActionPacket::class));
         self::assertIsInt(PlayerAction::DIMENSION_CHANGE_ACK);
+        $position = new BlockPosition(0, 0, 0);
+        $ack = PlayerActionPacket::create(1, PlayerAction::DIMENSION_CHANGE_ACK, $position, $position, 0);
+        self::assertInstanceOf(ClientboundPacket::class, $ack);
+        self::assertSame(PlayerAction::DIMENSION_CHANGE_ACK, $ack->action);
     }
 }
