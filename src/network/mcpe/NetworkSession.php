@@ -1391,6 +1391,12 @@ class NetworkSession{
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
 
 		$world = $this->player->getLocation()->getWorld();
+		$originalCompletion = $onCompletion;
+		$onCompletion = function() use ($originalCompletion, $chunkX, $chunkZ, $world) : void{
+			// The destination chunk was queued before this callback runs.
+			$this->acknowledgeDimensionChangeIfReady($chunkX, $chunkZ, $world);
+			$originalCompletion();
+		};
 		$cache = ChunkCache::getInstance($world, $this->compressor);
 		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
 		$promiseOrPacket = $cache->request($chunkX, $chunkZ, $this->getTypeConverter());
@@ -1444,8 +1450,7 @@ class NetworkSession{
 				$this->dimensionLoadingStartedAt = microtime(true);
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
-				// Retain the immediate ACK behaviour that earlier portal tests depended on.
-				$this->acknowledgeDimensionChange();
+				// Wait until the first destination chunk is queued before sending ACK.
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
@@ -1462,6 +1467,9 @@ class NetworkSession{
 		if($screenId === null || $screenId !== $this->activeDimensionLoadingScreenId){
 			return;
 		}
+		if($packet->getLoadingScreenType() === LoadingScreenType::START_LOADING_SCREEN){
+			$this->logger->debug("Dimension loading screen $screenId opened");
+		}
 		if($packet->getLoadingScreenType() === LoadingScreenType::STOP_LOADING_SCREEN){
 			$duration = microtime(true) - $this->dimensionLoadingStartedAt;
 			$this->logger->debug(sprintf("Dimension loading screen %d closed after %.3f seconds", $screenId, $duration));
@@ -1469,13 +1477,18 @@ class NetworkSession{
 		}
 	}
 
-	private function acknowledgeDimensionChange() : void{
-		if(!$this->pendingDimensionChangeAck || $this->player === null){
+	private function acknowledgeDimensionChangeIfReady(int $chunkX, int $chunkZ, World $world) : void{
+		if(!$this->pendingDimensionChangeAck || $this->player === null || $this->player->getWorld() !== $world){
+			return;
+		}
+		$position = $this->player->getPosition();
+		if(($position->getFloorX() >> 4) !== $chunkX || ($position->getFloorZ() >> 4) !== $chunkZ){
 			return;
 		}
 		$this->pendingDimensionChangeAck = false;
-		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
+		$blockPosition = BlockPosition::fromVector3($position);
 		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
+		$this->logger->debug(sprintf("Dimension ACK sent after destination chunk %d %d (%.3f s since change)", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
 	}
 
 	public function syncWorldTime(int $worldTime) : void{
