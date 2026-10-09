@@ -172,7 +172,10 @@ def decode_frame(encoded):
         try:
             raw = zlib.decompress(encoded[1:], -15)
         except zlib.error:
-            raw = zlib.decompress(encoded[1:])
+            try:
+                raw = zlib.decompress(encoded[1:])
+            except zlib.error as exc:
+                raise DecodeError("Truncated or invalid zlib-compressed frame") from exc
     elif codec == 255:
         raw = encoded[1:]
     elif codec == 1:
