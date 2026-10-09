@@ -12,6 +12,7 @@ on:
       - feature/native-nether-end
       - fix/dimension-loading-screen-hcf
       - diagnostic/block-dimension-packet-trace
+      - experiment/legacy-2193-dimension-ack
     tags:
       - 'v*'
   workflow_dispatch:
