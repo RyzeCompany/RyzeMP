@@ -43,6 +43,7 @@ use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\FilterNoisyPacketException;
 use pocketmine\network\mcpe\cache\ChunkCache;
 use pocketmine\network\mcpe\diagnostic\DimensionWireCapture;
+use pocketmine\network\mcpe\dimension\DimensionTransferSequence;
 use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\network\mcpe\compression\CompressBatchPromise;
 use pocketmine\network\mcpe\compression\Compressor;
@@ -170,6 +171,7 @@ class NetworkSession{
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
 	private bool $pendingDimensionChangeAck = false;
+	private ?DimensionTransferSequence $dimensionTransferSequence = null;
 	private bool $firstDestinationChunkQueued = false;
 	/** Each dimension transition gets a unique screen ID (uint32, nonzero). */
 	private int $nextDimensionLoadingScreenId = 1;
@@ -916,6 +918,8 @@ class NetworkSession{
 			$this->disconnectGuard = false;
 			$this->flushGamePacketQueue();
 			$this->sender->close("");
+			$this->dimensionTransferSequence?->cancel();
+			$this->dimensionTransferSequence = null;
 			$this->dimensionWireCapture?->close("session_closed");
 			$this->dimensionWireCapture = null;
 			foreach($this->disposeHooks as $callback){
@@ -1234,6 +1238,14 @@ class NetworkSession{
 			$yaw = $yaw ?? $location->getYaw();
 			$pitch = $pitch ?? $location->getPitch();
 
+			// The 2193 client must finish changing dimension before the final
+			// teleport is sent. A full destination chunk is queued first, then
+			// the server sends the dimension-success action and teleport.
+			if($mode === MovePlayerPacket::MODE_TELEPORT && $this->dimensionTransferSequence?->deferTeleport()){
+				$this->completeDimensionTransferIfReady();
+				return;
+			}
+
 			$this->sendDataPacket(MovePlayerPacket::simple(
 				$this->player->getId(),
 				$this->player->getOffsetPosition($pos),
@@ -1256,6 +1268,8 @@ class NetworkSession{
 	public function setClientDimension(int $dimension) : void{
 		$this->clientDimension = $dimension;
 		$this->pendingDimensionChangeAck = false;
+		$this->dimensionTransferSequence?->cancel();
+		$this->dimensionTransferSequence = null;
 	}
 
 	public function syncViewAreaRadius(int $distance) : void{
@@ -1520,6 +1534,10 @@ class NetworkSession{
 				$this->clientDimension = $dimension;
 				$this->pendingDimensionChangeAck = true;
 				$this->firstDestinationChunkQueued = false;
+				// Keep other protocols' established transfer behavior unchanged.
+				$this->dimensionTransferSequence = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52 ?
+					new DimensionTransferSequence() : null;
+				$this->dimensionTransferSequence?->begin();
 				// In protocol 712-2193 this field is a required uint32, not an optional value.
 				// Use a nonzero unique ID so the client can match its START/STOP reports.
 				$loadingScreenId = $this->nextDimensionLoadingScreenId++;
@@ -1536,8 +1554,8 @@ class NetworkSession{
 					DimensionWireCapture::create($this->server->getDataPath(), $dimension) : null;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
-				// Never manufacture a PlayerAction::DIMENSION_CHANGE_ACK here.
-				// PlayerActionPacket is client-originated; Bedrock sends this once it changes dimension.
+				// Dimension-success is server-originated on modern Bedrock.
+				// For 2193, wait for the first destination chunk and deferred final teleport. 
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncWorldDifficulty($world->getDifficulty());
@@ -1580,10 +1598,41 @@ class NetworkSession{
 		$this->firstDestinationChunkQueued = true;
 		$this->traceDimensionPacket("destination chunk $chunkX $chunkZ queued");
 		$this->logger->debug(sprintf("Destination chunk %d %d queued after %.3f seconds", $chunkX, $chunkZ, microtime(true) - $this->dimensionLoadingStartedAt));
+		$this->dimensionTransferSequence?->targetChunkQueued();
+		$this->completeDimensionTransferIfReady();
 	}
 
-	/** The client (not the server) confirms that it has switched dimensions. */
+	/**
+	 * Completes an actual 2193 transition when BOTH the final teleport and
+	 * destination player chunk are ready. This is not a client receipt ACK.
+	 * The success action is sent by the server after chunk queuing, followed by
+	 * a single final positional sync, matching the modern Allay transfer order.
+	 */
+	private function completeDimensionTransferIfReady() : void{
+		if($this->dimensionTransferSequence?->takeReady() !== true || !$this->connected || $this->player === null){
+			return;
+		}
+		$this->pendingDimensionChangeAck = false;
+		$this->dimensionTransferSequence = null;
+		$location = $this->player->getLocation();
+		$blockPos = BlockPosition::fromVector3($location);
+		$this->traceDimensionPacket("out dimension-success after destination chunk, before final teleport");
+		$this->sendDataPacket(PlayerActionPacket::create(
+			$this->player->getId(),
+			PlayerAction::DIMENSION_CHANGE_ACK,
+			$blockPos,
+			$blockPos,
+			0
+		));
+		$this->syncMovement($location, $location->getYaw(), $location->getPitch(), MovePlayerPacket::MODE_TELEPORT);
+	}
+
+	/** Handles a client ACK if supported; it is not required to finish 2193. */
 	public function onClientDimensionChangeAck() : void{
+		if($this->dimensionTransferSequence?->isWaiting()){
+			$this->traceDimensionPacket("in early client dimension ACK; waiting for server completion");
+			return;
+		}
 		if(!$this->pendingDimensionChangeAck){
 			return;
 		}
