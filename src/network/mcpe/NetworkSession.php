@@ -1555,7 +1555,12 @@ class NetworkSession{
 				$this->dimensionWireCapture = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52 ?
 					DimensionWireCapture::create($this->server->getDataPath(), $dimension) : null;
 				$this->getLogger()->debug("Dimension change started: dimension=$dimension, screen=$loadingScreenId, protocol=" . $this->getProtocolId());
-				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $loadingScreenId));
+				// Match Mykoss/Allay's 2193 dimension-change position: the network
+				// player origin is eye-offset (+1.62), just like MovePlayerPacket.
+				$dimensionPosition = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_26_52 ?
+					$this->player->getOffsetPosition($this->player->getPosition()) :
+					$this->player->getPosition();
+				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $dimensionPosition, false, $loadingScreenId));
 				// Dimension-success is server-originated on modern Bedrock.
 				// For 2193, wait for the first destination chunk and deferred final teleport. 
 			}
@@ -1617,7 +1622,10 @@ class NetworkSession{
 		$this->pendingDimensionChangeAck = false;
 		$this->dimensionTransferSequence = null;
 		$location = $this->player->getLocation();
-		$blockPos = BlockPosition::fromVector3($location);
+		// Allay 2193 uses zero coordinates in the server's dimension-success
+		// action. The actor runtime ID and legacy wire action 13 carry the
+		// meaning of this acknowledgement, not destination block coordinates.
+		$blockPos = new BlockPosition(0, 0, 0);
 		$this->traceDimensionPacket("out dimension-success after destination chunk, before final teleport");
 		$this->sendDataPacket(PlayerActionPacket::create(
 			$this->player->getId(),
