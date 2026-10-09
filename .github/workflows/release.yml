@@ -15,6 +15,7 @@ on:
       - diagnostic/dimension-chunk-packet-validation
       - diagnostic/2193-pre-encryption-capture
       - fix/2193-ordered-dimension-transfer
+      - fix/2193-allay-prespawn-contract
     tags:
       - 'v*'
   workflow_dispatch:
