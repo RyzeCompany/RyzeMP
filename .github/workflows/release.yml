@@ -11,6 +11,7 @@ on:
       - fix/chest-minecart-item
       - feature/native-nether-end
       - fix/dimension-loading-screen-hcf
+      - diagnostic/block-dimension-packet-trace
     tags:
       - 'v*'
   workflow_dispatch:
