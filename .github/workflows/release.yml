@@ -12,6 +12,7 @@ on:
       - feature/native-nether-end
       - fix/dimension-loading-screen-hcf
       - diagnostic/block-dimension-packet-trace
+      - diagnostic/dimension-chunk-packet-validation
     tags:
       - 'v*'
   workflow_dispatch:
