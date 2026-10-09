@@ -207,7 +207,7 @@ def analyze(path):
     }
     counts = collections.Counter()
     first_time = None
-    for number, raw_line in enumerate(path.open(encoding="utf-8"), start=1):
+    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         try:
             row = json.loads(raw_line)
             kind = row.get("kind")
