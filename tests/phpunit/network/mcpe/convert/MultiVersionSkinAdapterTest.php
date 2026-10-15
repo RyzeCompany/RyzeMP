@@ -236,4 +236,76 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		}
 	}
 
+
+	public function testModernClassicSkinRetainsLoginMetadataFor2193Viewers() : void{
+		$incoming = new SkinData(
+			"hd-custom-2193",
+			"playfab-identity",
+			'{"geometry":{"default":"geometry.humanoid.customSlim"}}',
+			new SkinImage(64, 64, str_repeat("\x21\x43\x65\xff", 64 * 64)),
+			geometryData: '{"format_version":"1.12.0","minecraft:geometry":[]}',
+			geometryDataEngineVersion: "1.26.52",
+			fullSkinId: "modern-full-skin-identifier",
+			armSize: SkinData::ARM_SIZE_SLIM,
+			skinColor: "#FFFFFFFF",
+			isVerified: false,
+			trustedSkinFlag: "false",
+			profileHash: "modern-profile-hash"
+		);
+
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+		$after = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+		self::assertSame($incoming, $after, "All fields from the login must survive for same-protocol viewers");
+		self::assertSame("modern-profile-hash", $after->getProfileHash());
+		self::assertSame("modern-full-skin-identifier", $after->getFullSkinId());
+		self::assertSame(SkinData::ARM_SIZE_SLIM, $after->getArmSize());
+
+		$out = new ByteBufferWriter();
+		CommonTypes::putSkin($out, $after, ProtocolInfo::PROTOCOL_1_26_50);
+		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), ProtocolInfo::PROTOCOL_1_26_50);
+		self::assertSame("modern-profile-hash", $decoded->getProfileHash());
+		self::assertSame("modern-full-skin-identifier", $decoded->getFullSkinId());
+	}
+
+	public function test2193SkinIsDowngradedFor121114WithoutMutating2193Original() : void{
+		$incoming = new SkinData(
+			"modern-classic",
+			"playfab-identity",
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(64, 64, str_repeat("\x45\x55\x65\xff", 64 * 64)),
+			geometryData: "{}",
+			geometryDataEngineVersion: "1.26.52",
+			fullSkinId: "source-full-id",
+			isVerified: true,
+			profileHash: "modern-profile-hash"
+		);
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+		$legacy = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+
+		self::assertNotSame($incoming, $legacy);
+		self::assertSame("1.20.0", $legacy->getGeometryDataEngineVersion());
+		self::assertSame("", $legacy->getProfileHash());
+		self::assertSame($incoming->getSkinImage()->getData(), $legacy->getSkinImage()->getData());
+
+		$out = new ByteBufferWriter();
+		CommonTypes::putSkin($out, $legacy, ProtocolInfo::PROTOCOL_1_21_111);
+		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), ProtocolInfo::PROTOCOL_1_21_111);
+		self::assertSame("1.20.0", $decoded->getGeometryDataEngineVersion());
+		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50));
+	}
+
+	public function testPluginSkinUsesBackwardCompatibleEngineVersionForOldClients() : void{
+		$adapter = new LegacySkinAdapter();
+		$skin = new Skin("plugin-classic", str_repeat("\x22\x33\x44\xff", 64 * 64));
+		$skinData = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+
+		self::assertSame("1.20.0", $skinData->getGeometryDataEngineVersion());
+		$out = new ByteBufferWriter();
+		CommonTypes::putSkin($out, $skinData, ProtocolInfo::PROTOCOL_1_21_111);
+		$decoded = CommonTypes::getSkin(new ByteBufferReader($out->getData()), ProtocolInfo::PROTOCOL_1_21_111);
+		self::assertSame("1.20.0", $decoded->getGeometryDataEngineVersion());
+	}
+
 }
