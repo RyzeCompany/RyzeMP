@@ -916,8 +916,16 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 						(new PlayerPostChunkSendEvent($this, $X, $Z))->call();
 					});
 				},
-				static function() : void{
-					//NOOP: we'll re-request this if it fails anyway
+				function() use ($X, $Z, $index, $world) : void{
+					if(!$this->isConnected() || $world !== $this->getWorld() || ($this->usedChunks[$index] ?? null) !== UsedChunkStatus::REQUESTED_GENERATION){
+						return;
+					}
+					unset($this->activeChunkGenerationRequests[$index]);
+					$this->unloadChunk($X, $Z);
+					// A failed population request must not leave this chunk stuck in REQUESTED_GENERATION.
+					// Wait one second before asking for it again to avoid busy-looping on broken worlds.
+					$this->nextChunkOrderRun = min($this->nextChunkOrderRun, 20);
+					$this->logger->debug("Chunk population failed at $X,$Z; scheduling retry");
 				}
 			);
 		}
