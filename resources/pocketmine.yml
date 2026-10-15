@@ -143,7 +143,7 @@ ticks-per:
 
 auto-report:
   #Send crash reports for processing
-  enabled: true
+  enabled: false
   send-code: true
   send-settings: true
   send-phpinfo: false
@@ -156,7 +156,7 @@ anonymous-statistics:
   host: stats.pocketmine.net
 
 auto-updater:
-  enabled: true
+  enabled: false
   on-update:
     warn-console: true
   #Can be development, alpha, beta or stable.
