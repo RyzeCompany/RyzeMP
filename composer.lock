@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d86911e9ed256daeeca8203d54eb3ba4",
+    "content-hash": "d8799cbc113277dfc936f01b335b41f2",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -126,17 +126,17 @@
             "time": "2025-03-29T13:50:30+00:00"
         },
         {
-            "name": "nethergamesmc/bedrock-data",
-            "version": "dev-main",
+            "name": "ryzemcbe/bedrock-data",
+            "version": "dev-feature/ryzemcbe-package-identity",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeMCBE/BedrockData.git",
-                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200"
+                "reference": "044f462cbbc1d1a0aeadf6040de792c2c4bd83da"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
-                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/044f462cbbc1d1a0aeadf6040de792c2c4bd83da",
+                "reference": "044f462cbbc1d1a0aeadf6040de792c2c4bd83da",
                 "shasum": ""
             },
             "type": "library",
@@ -145,22 +145,22 @@
             ],
             "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "support": {
-                "source": "https://github.com/RyzeMCBE/BedrockData/tree/main"
+                "source": "https://github.com/RyzeMCBE/BedrockData/tree/feature/ryzemcbe-package-identity"
             },
-            "time": "2026-09-22T04:21:40+00:00"
+            "time": "2026-10-15T23:43:03+00:00"
         },
         {
-            "name": "nethergamesmc/bedrock-protocol",
-            "version": "dev-main",
+            "name": "ryzemcbe/bedrock-protocol",
+            "version": "dev-feature/ryzemcbe-package-identity",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeMCBE/BedrockProtocol.git",
-                "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15"
+                "reference": "3159d65ae19259311576c5b14a1eac146d398210"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
-                "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/3159d65ae19259311576c5b14a1eac146d398210",
+                "reference": "3159d65ae19259311576c5b14a1eac146d398210",
                 "shasum": ""
             },
             "require": {
@@ -200,9 +200,9 @@
             ],
             "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
             "support": {
-                "source": "https://github.com/RyzeMCBE/BedrockProtocol/tree/main"
+                "source": "https://github.com/RyzeMCBE/BedrockProtocol/tree/feature/ryzemcbe-package-identity"
             },
-            "time": "2026-08-22T15:48:17+00:00"
+            "time": "2026-10-15T23:38:04+00:00"
         },
         {
             "name": "netresearch/jsonmapper",
@@ -2784,8 +2784,8 @@
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
-        "nethergamesmc/bedrock-data": 20,
-        "nethergamesmc/bedrock-protocol": 20
+        "ryzemcbe/bedrock-data": 20,
+        "ryzemcbe/bedrock-protocol": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,
