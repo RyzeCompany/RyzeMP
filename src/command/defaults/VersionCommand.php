@@ -29,11 +29,9 @@ use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\plugin\Plugin;
 use pocketmine\utils\TextFormat;
-use pocketmine\utils\Utils;
 use pocketmine\VersionInfo;
 use function count;
 use function implode;
-use function sprintf;
 use function stripos;
 use function strtolower;
 use const PHP_VERSION;
@@ -52,33 +50,14 @@ class VersionCommand extends VanillaCommand{
 
 	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
-			$sender->sendMessage(TextFormat::colorize("&r&l&6SERVER INFO&r" . PHP_EOL . "&r&4Software MultiVersion" . PHP_EOL . "&r&gVersion&7: &f1.20.0 - 1.26.51" . PHP_EOL . "&2Creador" . PHP_EOL . "&1Discord: milo_best"));
-			/*$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_serverSoftwareName(
-				TextFormat::GREEN . VersionInfo::NAME . TextFormat::RESET
-			));
-			$versionColor = VersionInfo::IS_DEVELOPMENT_BUILD ? TextFormat::YELLOW : TextFormat::GREEN;
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_serverSoftwareVersion(
-				$versionColor . VersionInfo::VERSION()->getFullVersion() . TextFormat::RESET,
-				TextFormat::GREEN . VersionInfo::GIT_HASH() . TextFormat::RESET
-			));
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_minecraftVersion(
-				TextFormat::GREEN . ProtocolInfo::MINECRAFT_VERSION_NETWORK . TextFormat::RESET,
-				TextFormat::GREEN . ProtocolInfo::CURRENT_PROTOCOL . TextFormat::RESET
-			));
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_phpVersion(TextFormat::GREEN . PHP_VERSION . TextFormat::RESET));
-
-			$jitMode = Utils::getOpcacheJitMode();
-			if($jitMode !== null){
-				if($jitMode !== 0){
-					$jitStatus = KnownTranslationFactory::pocketmine_command_version_phpJitEnabled(sprintf("CRTO: %d", $jitMode));
-				}else{
-					$jitStatus = KnownTranslationFactory::pocketmine_command_version_phpJitDisabled();
-				}
-			}else{
-				$jitStatus = KnownTranslationFactory::pocketmine_command_version_phpJitNotSupported();
-			}
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_phpJitStatus($jitStatus->format(TextFormat::GREEN, TextFormat::RESET)));
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_operatingSystem(TextFormat::GREEN . Utils::getOS() . TextFormat::RESET));*/
+			$sender->sendMessage(TextFormat::GOLD . "---- " . VersionInfo::NAME . " ----");
+			$sender->sendMessage(TextFormat::GREEN . "Software: " . TextFormat::WHITE . VersionInfo::NAME);
+			$sender->sendMessage(TextFormat::GREEN . "Version: " . TextFormat::WHITE . VersionInfo::VERSION()->getFullVersion(true));
+			$sender->sendMessage(TextFormat::GREEN . "Commit: " . TextFormat::WHITE . VersionInfo::GIT_HASH());
+			$sender->sendMessage(TextFormat::GREEN . "Bedrock: " . TextFormat::WHITE . ProtocolInfo::MINECRAFT_VERSION_NETWORK . " (protocol " . ProtocolInfo::CURRENT_PROTOCOL . ")");
+			$sender->sendMessage(TextFormat::GREEN . "Accepted protocol IDs: " . TextFormat::WHITE . count(ProtocolInfo::ACCEPTED_PROTOCOL));
+			$sender->sendMessage(TextFormat::GREEN . "Plugin API: " . TextFormat::WHITE . "PocketMine-MP 5 compatible");
+			$sender->sendMessage(TextFormat::GREEN . "PHP: " . TextFormat::WHITE . PHP_VERSION);
 		}else{
 			$pluginName = implode(" ", $args);
 			$exactPlugin = $sender->getServer()->getPluginManager()->getPlugin($pluginName);

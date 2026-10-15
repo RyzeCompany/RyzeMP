@@ -338,7 +338,7 @@ class Server{
 	}
 
 	public function getApiVersion() : string{
-		return VersionInfo::BASE_VERSION;
+		return VersionInfo::PLUGIN_API_VERSION;
 	}
 
 	public function getFilePath() : string{
