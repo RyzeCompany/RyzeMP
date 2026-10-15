@@ -65,6 +65,7 @@ class DeathPacketHandler extends PacketHandler{
 
 	public function handlePlayerAction(PlayerActionPacket $packet) : bool{
 		if($packet->action === PlayerAction::RESPAWN){
+			$this->session->getLogger()->debug("Received respawn action in death phase");
 			$this->player->respawn();
 			return true;
 		}
