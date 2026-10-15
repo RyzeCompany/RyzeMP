@@ -1,6 +1,6 @@
 # RyzeMP: identity and compatibility contract
 
-RyzeMP is a Minecraft Bedrock server software maintained by Mykoss, built on the PocketMine-MP 5 codebase.
+RyzeMP is a Minecraft Bedrock server software maintained by RyzeMCBE, built on the PocketMine-MP 5 codebase.
 
 ## Stable compatibility boundaries
 
@@ -8,8 +8,8 @@ RyzeMP is a Minecraft Bedrock server software maintained by Mykoss, built on the
 - **Software release:** `VersionInfo::BASE_VERSION` is a RyzeMP-owned version, starting at `1.0.0-beta.1`.
 - **Plugin API:** `Server::getApiVersion()` returns `VersionInfo::PLUGIN_API_VERSION`, currently `5.44.2`. Never derive it from the RyzeMP release version.
 - **PHP namespaces:** retain `pocketmine\`, `pocketmine\network\mcpe\protocol\`, and all existing plugin-facing classes and interfaces.
-- **Composer package identity:** intentionally retain `mykoss/pocketmine-mp` and its `pocketmine/pocketmine-mp` replacement for the beta, because the root package is coupled to Composer and startup revision checking. A later package rename requires a coordinated lockfile/bootstrap update.
-- **Protocol:** use the checked-in Composer lockfile references to `Mykoss/BedrockProtocol` and `Mykoss/BedrockData`; do not silently update `dev-main` dependencies during rebranding.
+- **Composer package identity:** use `ryzemcbe/ryzemp` for the root package, retain its `pocketmine/pocketmine-mp` replacement, and keep Composer's installed-reference lookup aligned with the root package.
+- **Protocol:** use the checked-in Composer lockfile references to `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData`; retain pinned dependency commits and legacy Composer dependency names until a separately tested package-name migration is complete.
 - **World data:** preserve `PMMPDataVersion` and existing world storage identifiers to avoid corrupting or orphaning worlds.
 - **Distribution:** new releases generate `RyzeMP.phar`; the shell and Docker launchers prefer it while keeping the older PHAR name as a migration fallback.
 - **Provenance:** preserve the source license, notices, original copyright holders, and the LGPL-3.0-or-later conditions. RyzeMP is a derivative, not a clean-room rewrite.
