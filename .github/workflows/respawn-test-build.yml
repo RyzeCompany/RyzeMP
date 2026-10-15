@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -37,10 +37,13 @@ jobs:
           test -s PocketMine-MP-respawn-test.phar
           php -r '$p = new Phar("PocketMine-MP-respawn-test.phar"); if($p->count() < 100){throw new RuntimeException("PHAR unexpectedly small");} echo "PHAR VALID: ".$p->count()." entries; ".filesize("PocketMine-MP-respawn-test.phar")." bytes\n";'
           sha256sum PocketMine-MP-respawn-test.phar
-      - name: Upload PHAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: PocketMine-MP-respawn-test-${{ github.sha }}
-          path: PocketMine-MP-respawn-test.phar
-          if-no-files-found: error
-          retention-days: 14
+      - name: Publish isolated test prerelease (Actions artifact storage quota workaround)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create test-respawn-20261015 \
+            PocketMine-MP-respawn-test.phar \
+            --target "$GITHUB_SHA" \
+            --title "Respawn + Chunk Recovery (test build)" \
+            --notes "Unstable testing build from fix/respawn-chunk-recovery-26x. Includes late respawn action guard and chunk population retry recovery. Not merged to main. Test before using in production." \
+            --prerelease
