@@ -130,7 +130,9 @@ jobs:
             exit "$status"
           fi
 
-      - name: Upload build artifact
+      - name: Upload build artifact (best effort, Actions quota dependent)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: RyzeMP-phar-${{ github.sha }}
