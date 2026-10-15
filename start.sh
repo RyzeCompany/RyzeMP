@@ -33,11 +33,14 @@ if [ "$PHP_BINARY" == "" ]; then
 fi
 
 if [ "$POCKETMINE_FILE" == "" ]; then
-	if [ -f ./PocketMine-MP.phar ]; then
+	if [ -f ./RyzeMP.phar ]; then
+		POCKETMINE_FILE="./RyzeMP.phar"
+	elif [ -f ./PocketMine-MP.phar ]; then
+		# Compatibility with older installs during migration
 		POCKETMINE_FILE="./PocketMine-MP.phar"
 	else
-		echo "PocketMine-MP.phar not found"
-		echo "Downloads can be found at https://github.com/pmmp/PocketMine-MP/releases"
+		echo "RyzeMP.phar not found"
+		echo "Downloads can be found at https://github.com/Mykoss/PocketMine-MP/releases"
 		exit 1
 	fi
 fi
