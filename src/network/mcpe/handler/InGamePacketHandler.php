@@ -716,6 +716,15 @@ class InGamePacketHandler extends PacketHandler{
 	}
 
 	public function handlePlayerAction(PlayerActionPacket $packet) : bool{
+		if($packet->action === PlayerAction::RESPAWN){
+			// A late respawn action may arrive after the death handler has been replaced.
+			// Do not allow a duplicate action to respawn a living player.
+			$this->session->getLogger()->debug("Received respawn action in in-game phase (alive=" . ($this->player->isAlive() ? "yes" : "no") . ")");
+			if(!$this->player->isAlive()){
+				$this->player->respawn();
+			}
+			return true;
+		}
 		return $this->handlePlayerActionFromData($packet->action, $packet->blockPosition, $packet->face);
 	}
 
