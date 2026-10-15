@@ -1,9 +1,9 @@
-name: Respawn test PHAR
+name: Multiversion skin test PHAR
 
 on:
   push:
     branches:
-      - fix/respawn-chunk-recovery-26x
+      - fix/multiversion-skins-visibility
   workflow_dispatch:
 
 permissions:
@@ -31,19 +31,19 @@ jobs:
         env:
           COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
       - name: Build PHAR
-        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP-respawn-test.phar
+        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP-skins-test.phar
       - name: Validate PHAR and print checksum
         run: |
-          test -s PocketMine-MP-respawn-test.phar
-          php -r '$p = new Phar("PocketMine-MP-respawn-test.phar"); if($p->count() < 100){throw new RuntimeException("PHAR unexpectedly small");} echo "PHAR VALID: ".$p->count()." entries; ".filesize("PocketMine-MP-respawn-test.phar")." bytes\n";'
-          sha256sum PocketMine-MP-respawn-test.phar
+          test -s PocketMine-MP-skins-test.phar
+          php -r '$p = new Phar("PocketMine-MP-skins-test.phar"); if($p->count() < 100){throw new RuntimeException("PHAR unexpectedly small");} echo "PHAR VALID: ".$p->count()." entries; ".filesize("PocketMine-MP-skins-test.phar")." bytes\n";'
+          sha256sum PocketMine-MP-skins-test.phar
       - name: Publish isolated test prerelease (Actions artifact storage quota workaround)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create test-respawn-20261015 \
-            PocketMine-MP-respawn-test.phar \
+          gh release create test-multiversion-skins-20261015 \
+            PocketMine-MP-skins-test.phar \
             --target "$GITHUB_SHA" \
-            --title "Respawn + Chunk Recovery (test build)" \
-            --notes "Unstable testing build from fix/respawn-chunk-recovery-26x. Includes late respawn action guard and chunk population retry recovery. Not merged to main. Test before using in production." \
+            --title "Multiversion Skins + Respawn Recovery (test build)" \
+            --notes "Unstable test build from fix/multiversion-skins-visibility. Preserves original classic skin metadata for compatible peers and emits recipient-safe fallback for older peers. Includes prior respawn and chunk recovery patches. Use for cross-version in-game testing, not production." \
             --prerelease
