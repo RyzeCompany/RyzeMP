@@ -12,6 +12,7 @@ on:
       - feature/native-nether-end
     tags:
       - 'v*'
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -21,6 +22,7 @@ jobs:
   build:
     needs: tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,12 +85,12 @@ jobs:
           find src generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Build phar
-        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP.phar
+        run: php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
 
       - name: Validate phar
         run: |
-          test -s PocketMine-MP.phar
-          php -r '$p = new Phar("PocketMine-MP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("PocketMine-MP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
+          test -s RyzeMP.phar
+          php -r '$p = new Phar("RyzeMP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("RyzeMP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
 
       - name: Setup PocketMine PHP for smoke test
         uses: pmmp/setup-php-action@3.2.0
@@ -96,6 +98,13 @@ jobs:
           php-version: '8.4'
           install-path: ./pm-bin
           pm-version-major: 5
+
+      - name: Smoke-test RyzeMP identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          php RyzeMP.phar --version | tee /tmp/ryzemp-version.txt
+          grep -q 'RyzeMP 1.0.0-beta.1' /tmp/ryzemp-version.txt
 
       - name: Smoke-test native dimensions startup
         shell: bash
@@ -106,7 +115,7 @@ jobs:
           cp resources/pocketmine.yml /tmp/pm-native-dimensions-smoke/pocketmine.yml
           sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/pm-native-dimensions-smoke/pocketmine.yml
           set +e
-          timeout 35s php PocketMine-MP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
+          timeout 35s php RyzeMP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
           status=$?
           set -e
           cat /tmp/pm-native-dimensions-smoke.log
@@ -122,22 +131,21 @@ jobs:
           fi
 
       - name: Upload build artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: PocketMine-MP-phar-${{ github.sha }}
-          path: PocketMine-MP.phar
+          name: RyzeMP-phar-${{ github.sha }}
+          path: RyzeMP.phar
           if-no-files-found: error
 
       - name: Rename phar
         if: startsWith(github.ref, 'refs/tags/v')
-        run: mv PocketMine-MP.phar PocketMine-MP_${{ github.ref_name }}.phar
+        run: mv RyzeMP.phar RyzeMP_${{ github.ref_name }}.phar
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: PocketMine-MP_${{ github.ref_name }}.phar
+          files: RyzeMP_${{ github.ref_name }}.phar
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
