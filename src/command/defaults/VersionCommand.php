@@ -59,14 +59,6 @@ class VersionCommand extends VanillaCommand{
 			$sender->sendMessage(TextFormat::GREEN . "Plugin API: " . TextFormat::WHITE . "PocketMine-MP 5 compatible");
 			$sender->sendMessage(TextFormat::GREEN . "PHP: " . TextFormat::WHITE . PHP_VERSION);
 		}else{
-					$jitStatus = KnownTranslationFactory::pocketmine_command_version_phpJitDisabled();
-				}
-			}else{
-				$jitStatus = KnownTranslationFactory::pocketmine_command_version_phpJitNotSupported();
-			}
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_phpJitStatus($jitStatus->format(TextFormat::GREEN, TextFormat::RESET)));
-			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_version_operatingSystem(TextFormat::GREEN . Utils::getOS() . TextFormat::RESET));*/
-		}else{
 			$pluginName = implode(" ", $args);
 			$exactPlugin = $sender->getServer()->getPluginManager()->getPlugin($pluginName);
 
