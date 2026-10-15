@@ -1,12 +1,12 @@
 # RyzeMP
 
-**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by Mykoss and based on PocketMine-MP 5.
+**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeMCBE and based on PocketMine-MP 5.
 
 > Development status: **1.0.0-beta.1**. This is a development branch; no stable RyzeMP release has been published yet.
 
 ## Features and purpose
 
-- Multiversion Bedrock network support through customized `Mykoss/BedrockProtocol` and `Mykoss/BedrockData` dependencies.
+- Multiversion Bedrock network support through customized `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData` dependencies.
 - PocketMine-MP 5 plugin API compatibility. The PHP namespace remains `pocketmine\` intentionally.
 - Multiple worlds, game entities, inventory mechanics, native hopper and dimension-related work.
 - PHAR packaging and CI checks for code syntax, unit tests, and startup verification.
@@ -27,9 +27,9 @@ Read [RyzeMP compatibility and rebranding contract](docs/RYZEMP_COMPATIBILITY.md
 
 ## Development and releases
 
-- [Source repository](https://github.com/Mykoss/PocketMine-MP)
-- [GitHub Actions](https://github.com/Mykoss/PocketMine-MP/actions)
-- [Releases](https://github.com/Mykoss/PocketMine-MP/releases)
+- [Source repository](https://github.com/RyzeMCBE/RyzeMP)
+- [GitHub Actions](https://github.com/RyzeMCBE/RyzeMP/actions)
+- [Releases](https://github.com/RyzeMCBE/RyzeMP/releases)
 
 The source repository currently retains its historical GitHub path. Branding the software does not itself rename the repository.
 
