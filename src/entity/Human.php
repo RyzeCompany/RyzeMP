@@ -500,6 +500,23 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 		$sourceProtocol = $this instanceof Player ? $this->getNetworkSession()->getProtocolId() : null;
 		$targetProtocol = $networkSession->getProtocolId();
 		$crossVersionPlayerSpawn = $this instanceof Player && $sourceProtocol !== $targetProtocol;
+		if($this instanceof Player){
+			// Logged once per actual player spawn (only in debug mode): distinguishes skin translation
+			// problems from a missing AddPlayerPacket or an explicitly invisible entity.
+			$networkSkin = $typeConverter->coreSkinToNet($this->skin);
+			$networkSession->getLogger()->debug(
+				"PlayerAppearance[remote-spawn] source=" . $this->getName() .
+				" protocol=$sourceProtocol -> recipient=" . $player->getName() .
+				" protocol=$targetProtocol" .
+				" entityId=" . $this->getId() .
+				" invisible=" . ($this->isInvisible() ? "yes" : "no") .
+				" armorSlots=" . \count($this->armorInventory->getContents()) .
+				" persona=" . ($networkSkin->isPersona() ? "yes" : "no") .
+				" trusted=" . $networkSkin->getTrustedSkinFlag() .
+				" geometryEngine=" . $networkSkin->getGeometryDataEngineVersion() .
+				" skinBytes=" . \strlen($networkSkin->getSkinImage()->getData())
+			);
+		}
 		if($crossVersionPlayerSpawn){
 			$networkSession->getLogger()->debug(
 				"CrossVersion[remote-spawn-begin] source=" . $this->getName() .
