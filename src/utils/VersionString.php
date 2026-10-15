@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace pocketmine\utils;
 
-use function count;
 use function preg_match;
 
 /**
@@ -40,8 +39,7 @@ class VersionString{
 		private bool $isDevBuild = false,
 		private int $buildNumber = 0
 	){
-		preg_match('/^(\d+)\.(\d+)\.(\d+)(?:-(.*))?$/', $this->baseVersion, $matches);
-		if(count($matches) < 4){
+		if(preg_match('/^(\d+)\.(\d+)\.(\d+)(?:-(.*))?$/', $this->baseVersion, $matches) !== 1){
 			throw new \InvalidArgumentException("Invalid base version \"$baseVersion\", should contain at least 3 version digits");
 		}
 
