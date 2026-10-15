@@ -135,7 +135,7 @@
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockData/zipball/52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
                 "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
                 "shasum": ""
             },
@@ -159,7 +159,7 @@
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Mykoss/BedrockProtocol/zipball/c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
                 "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
                 "shasum": ""
             },
