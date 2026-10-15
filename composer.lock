@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d86911e9ed256daeeca8203d54eb3ba4",
+    "content-hash": "32321921f70e624d3535af6e907bc8a8",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -126,17 +126,17 @@
             "time": "2025-03-29T13:50:30+00:00"
         },
         {
-            "name": "nethergamesmc/bedrock-data",
+            "name": "ryzemcbe/bedrock-data",
             "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeMCBE/BedrockData.git",
-                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200"
+                "reference": "101371f542627f7f74ee1a2a86927ecd5d8bd553"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
-                "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/101371f542627f7f74ee1a2a86927ecd5d8bd553",
+                "reference": "101371f542627f7f74ee1a2a86927ecd5d8bd553",
                 "shasum": ""
             },
             "type": "library",
@@ -147,20 +147,20 @@
             "support": {
                 "source": "https://github.com/RyzeMCBE/BedrockData/tree/main"
             },
-            "time": "2026-09-22T04:21:40+00:00"
+            "time": "2026-10-15T23:49:10+00:00"
         },
         {
-            "name": "nethergamesmc/bedrock-protocol",
+            "name": "ryzemcbe/bedrock-protocol",
             "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeMCBE/BedrockProtocol.git",
-                "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15"
+                "reference": "05143c5ae5cdaff546d9f937896da4b7ad72588a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
-                "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/05143c5ae5cdaff546d9f937896da4b7ad72588a",
+                "reference": "05143c5ae5cdaff546d9f937896da4b7ad72588a",
                 "shasum": ""
             },
             "require": {
@@ -202,7 +202,7 @@
             "support": {
                 "source": "https://github.com/RyzeMCBE/BedrockProtocol/tree/main"
             },
-            "time": "2026-08-22T15:48:17+00:00"
+            "time": "2026-10-15T23:49:05+00:00"
         },
         {
             "name": "netresearch/jsonmapper",
@@ -2784,8 +2784,8 @@
     "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
-        "nethergamesmc/bedrock-data": 20,
-        "nethergamesmc/bedrock-protocol": 20
+        "ryzemcbe/bedrock-data": 20,
+        "ryzemcbe/bedrock-protocol": 20
     },
     "prefer-stable": false,
     "prefer-lowest": false,
