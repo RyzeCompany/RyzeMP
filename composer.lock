@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "31ad0ee6f717284c8a2fb0ecbe96afc7",
+    "content-hash": "d86911e9ed256daeeca8203d54eb3ba4",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -130,7 +130,7 @@
             "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "https://github.com/Mykoss/BedrockData.git",
+                "url": "https://github.com/RyzeMCBE/BedrockData.git",
                 "reference": "52fe12c625d6d7d6cbc6be9e3b763375df7fe200"
             },
             "dist": {
@@ -145,7 +145,7 @@
             ],
             "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "support": {
-                "source": "https://github.com/Mykoss/BedrockData/tree/main"
+                "source": "https://github.com/RyzeMCBE/BedrockData/tree/main"
             },
             "time": "2026-09-22T04:21:40+00:00"
         },
@@ -154,7 +154,7 @@
             "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "https://github.com/Mykoss/BedrockProtocol.git",
+                "url": "https://github.com/RyzeMCBE/BedrockProtocol.git",
                 "reference": "c4cd3532e329d99f532cc0f4ab0740a4ef6dec15"
             },
             "dist": {
@@ -200,7 +200,7 @@
             ],
             "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
             "support": {
-                "source": "https://github.com/Mykoss/BedrockProtocol/tree/main"
+                "source": "https://github.com/RyzeMCBE/BedrockProtocol/tree/main"
             },
             "time": "2026-08-22T15:48:17+00:00"
         },
