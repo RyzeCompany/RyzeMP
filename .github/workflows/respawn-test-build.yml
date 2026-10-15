@@ -1,0 +1,46 @@
+name: Respawn test PHAR
+
+on:
+  push:
+    branches:
+      - fix/respawn-chunk-recovery-26x
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: zlib
+          ini-values: phar.readonly=Off
+          tools: composer
+      - name: Install locked production dependencies
+        run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
+      - name: Build PHAR
+        run: php -d phar.readonly=0 build/server-phar.php --out=PocketMine-MP-respawn-test.phar
+      - name: Validate PHAR and print checksum
+        run: |
+          test -s PocketMine-MP-respawn-test.phar
+          php -r '$p = new Phar("PocketMine-MP-respawn-test.phar"); if($p->count() < 100){throw new RuntimeException("PHAR unexpectedly small");} echo "PHAR VALID: ".$p->count()." entries; ".filesize("PocketMine-MP-respawn-test.phar")." bytes\n";'
+          sha256sum PocketMine-MP-respawn-test.phar
+      - name: Upload PHAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketMine-MP-respawn-test-${{ github.sha }}
+          path: PocketMine-MP-respawn-test.phar
+          if-no-files-found: error
+          retention-days: 14
