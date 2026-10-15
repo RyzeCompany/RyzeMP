@@ -40,7 +40,7 @@ if [ "$POCKETMINE_FILE" == "" ]; then
 		POCKETMINE_FILE="./PocketMine-MP.phar"
 	else
 		echo "RyzeMP.phar not found"
-		echo "Downloads can be found at https://github.com/Mykoss/PocketMine-MP/releases"
+		echo "Downloads can be found at https://github.com/RyzeMCBE/RyzeMP/releases"
 		exit 1
 	fi
 fi
