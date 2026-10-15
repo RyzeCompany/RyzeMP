@@ -204,7 +204,7 @@ class Internet{
 		}
 
 		curl_setopt_array($ch, $extraOpts + [
-			CURLOPT_SSL_VERIFYPEER => false,
+			CURLOPT_SSL_VERIFYPEER => true,
 			CURLOPT_SSL_VERIFYHOST => 2,
 			CURLOPT_FORBID_REUSE => 1,
 			CURLOPT_FRESH_CONNECT => 1,
