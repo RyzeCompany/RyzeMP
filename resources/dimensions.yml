@@ -3,10 +3,14 @@
 nether:
   enabled: true
   world: world_nether
+  # auto: prefer native Nether chunks; otherwise keep separate-world storage.
+  # Options: auto, overworld, nether, end. No conversion or renaming of chunks.
+  source-dimension: auto
 
 end:
   enabled: true
   world: world_the_end
+  source-dimension: auto
   arrival:
     # Enable for a custom map whose level.dat contains its intended spawn.
     use-world-spawn: false

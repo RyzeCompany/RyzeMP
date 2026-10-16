@@ -17,6 +17,13 @@ final class DimensionSettingsTest extends TestCase{
 		self::assertSame(600, $settings->portalLoadTimeoutTicks);
 		self::assertSame([100, 49, 0], [$settings->endX, $settings->endY, $settings->endZ]);
 		self::assertFalse($settings->endUseWorldSpawn);
+		self::assertNull($settings->getSourceDimension(DimensionIds::NETHER));
+	}
+
+	public function testExplicitStorageDimensions() : void{
+		$settings = DimensionSettings::fromArray(["nether" => ["source-dimension" => "nether"], "end" => ["source-dimension" => "overworld"]]);
+		self::assertSame(1, $settings->getSourceDimension(DimensionIds::NETHER));
+		self::assertSame(0, $settings->getSourceDimension(DimensionIds::THE_END));
 	}
 
 	public function testCustomWorldAndDisabledDimension() : void{
@@ -36,6 +43,8 @@ final class DimensionSettingsTest extends TestCase{
 		yield "same world" => [["nether" => ["world" => "same"], "end" => ["world" => "same"]]];
 		yield "string boolean" => [["end" => ["enabled" => "false"]]];
 		yield "wrong section" => [["end" => true]];
+		yield "unknown source" => [["end" => ["source-dimension" => "unknown"]]];
+		yield "numeric source" => [["nether" => ["source-dimension" => 1]]];
 		yield "wrong arrival section" => [["end" => ["arrival" => "spawn"]]];
 		yield "low End arrival" => [["end" => ["arrival" => ["y" => 0]]]];
 		yield "high End arrival" => [["end" => ["arrival" => ["y" => 254]]]];

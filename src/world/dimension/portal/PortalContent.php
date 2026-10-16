@@ -104,7 +104,12 @@ final class PortalContent{
 				StringToItemParser::getInstance()->override($name, fn() => clone $item);
 			}
 		}
-		CreativeInventory::getInstance()->add($item);
+		// Initializing the creative inventory already loads this item from BedrockData
+		// through the deserializer registered above. Add only when the data omits it.
+		$creative = CreativeInventory::getInstance();
+		if(!$creative->contains($item)){
+			$creative->add($item);
+		}
 		self::$enderEye = $item;
 	}
 
@@ -119,3 +124,4 @@ final class PortalContent{
 		));
 	}
 }
+

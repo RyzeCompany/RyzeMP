@@ -15,6 +15,9 @@ use pocketmine\world\dimension\portal\PortalContent;
 use pocketmine\world\dimension\portal\PortalLinkManager;
 use pocketmine\world\dimension\portal\PortalTravel;
 use pocketmine\world\generator\GeneratorManager;
+use pocketmine\world\format\io\WorldProvider;
+use pocketmine\world\format\io\data\BedrockWorldData;
+use pocketmine\world\format\io\leveldb\LevelDB;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
 use function copy;
@@ -57,6 +60,25 @@ final class DimensionManager{
 	/** @phpstan-return DimensionIds::* */
 	public function getDimension(World $world) : int{
 		return $this->dimensions->getDimension($world);
+	}
+
+	/** @internal Select storage before World can load or generate any chunks. */
+	public function configureWorldProvider(string $name, WorldProvider $provider) : void{
+		foreach($this->settings->getWorldNames() as $dimension => $folder){
+			if($name !== $folder){ continue; }
+			if($provider instanceof LevelDB){
+				$provider->configureDimension($dimension, $this->settings->getSourceDimension($dimension));
+				$this->server->getLogger()->info("Native dimensions: $name uses LevelDB source dimension " . $provider->getStorageDimension());
+				$data = $provider->getWorldData();
+				// Imported level.dat describes its Overworld generator, even for a native Nether/End DB.
+				// Preserve plugin generators; replace only the generic vanilla import defaults.
+				if($data instanceof BedrockWorldData && in_array(strtolower($data->getGenerator()), ["default", "normal", "flat"], true)){
+					$data->getCompoundTag()->setString("generatorName", $dimension === DimensionIds::NETHER ? VanillaGenerators::NETHER : VanillaGenerators::END);
+					$data->getCompoundTag()->setString("generatorOptions", GeneratorOptions::encode(\pocketmine\RESOURCE_PATH));
+				}
+			}
+			return;
+		}
 	}
 
 	public function prepareWorlds() : void{

@@ -9,9 +9,11 @@ convierten. Reinicia el servidor después de cambiar esta configuración.
 nether:
   enabled: true
   world: world_nether
+  source-dimension: auto
 end:
   enabled: true
   world: world_the_end
+  source-dimension: auto
   arrival:
     use-world-spawn: false
     x: 100
@@ -39,9 +41,36 @@ de 5×5, únicamente cuando toda la zona está vacía. Nunca despeja construccio
 ni reemplaza bloques. Si no existe una llegada segura, cancela el viaje y registra
 el motivo. Con `create-platform: false`, tampoco construye sobre el vacío.
 
-Esto **no añade soporte de importación de dimensiones LevelDB nativas**: el lector
-actual sigue esperando chunks en las claves de Overworld de cada carpeta. Cambiar
-el nombre de una carpeta no convierte los chunks de un Nether o End original.
+## Mapas Bedrock con dimensiones nativas
+
+El proveedor LevelDB puede leer y guardar los chunks nativos del Nether (ID 1) y
+End (ID 2). No renombra claves ni convierte el mapa. Cada carpeta sigue siendo un
+mundo independiente; no compartas la misma base de datos entre mundos cargados.
+
+`source-dimension: auto` detecta los registros de chunks antes de cargar el mundo:
+
+- Prefiere la dimension nativa correspondiente cuando existe, incluso si una
+  ejecucion anterior genero accidentalmente chunks de Overworld en esa carpeta.
+- Si no existe, usa la seccion Overworld (ID 0), como los mapas separados antiguos
+  de PocketMine/RyzeMP. Una base vacia conserva ese formato.
+- Si solo hay datos de otra dimension, rechaza la carga para evitar generar
+  terreno sobre un mapa cuya seccion no se ha seleccionado correctamente.
+
+Puedes fijar `source-dimension` a `overworld`, `nether` o `end` para seleccionar
+explicitamente el almacenamiento. Una seccion inexistente en una base con chunks
+se rechaza. Los cambios requieren reinicio. Esta opcion selecciona los datos del
+mapa; la dimension que recibe el cliente sigue dependiendo de `nether.world` y
+`end.world`.
+
+Lectura, guardado, entidades/bloques con NBT, biomas, conteo y enumeracion de chunks
+usan la misma seccion. La lectura 3D de biomas respeta los rangos nativos de Nether
+y End. Los generadores genericos importados (`normal`/`flat`) se sustituyen por el
+generador de la dimension para los chunks nuevos; se preservan generadores de
+plugins. No recupera construcciones que ya hayan sido sobrescritas, ni cambia las
+coordenadas de llegada: usa PortalLink si necesitas el spawn HCF en `0,46,0`.
+
+El ojo de Ender funcional usa la entrada del inventario creativo de BedrockData;
+solo se agrega manualmente si ese recurso no incluye el item.
 
 ## Seguridad del viaje
 
@@ -136,7 +165,7 @@ La implementación usa las entidades, eventos, promesas y tareas de generación 
 RyzeMP/PocketMine. No incorpora el tick de dimensiones en paralelo de Allay.
 
 Quedan para cambios independientes: protección y confirmación de carga por
-cliente Bedrock, lectura de dimensiones nativas en LevelDB, asociación entre
+cliente Bedrock, asociación entre
 varios Overworlds y sus dimensiones, y búsqueda de portales sin recorrer hasta
 289 posiciones de chunks de forma síncrona.
 

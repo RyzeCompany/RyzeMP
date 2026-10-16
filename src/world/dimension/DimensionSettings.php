@@ -24,14 +24,24 @@ final class DimensionSettings{
 		public readonly int $endX,
 		public readonly int $endY,
 		public readonly int $endZ,
-		public readonly bool $endCreatePlatform
+		public readonly bool $endCreatePlatform,
+		/** @var array<int, int|null> */
+		private array $sourceDimensions = []
 	){}
 
 	/** @param mixed[] $config */
 	public static function fromArray(array $config) : self{
 		$worldNames = [];
+		$sourceDimensions = [];
 		foreach(["nether" => DimensionIds::NETHER, "end" => DimensionIds::THE_END] as $key => $id){
 			$section = self::section($config, $key);
+			$sourceDimensions[$id] = match($section["source-dimension"] ?? "auto"){
+				"auto" => null,
+				"overworld" => DimensionIds::OVERWORLD,
+				"nether" => DimensionIds::NETHER,
+				"end" => DimensionIds::THE_END,
+				default => throw new InvalidArgumentException("dimensions.yml: $key.source-dimension must be auto, overworld, nether or end")
+			};
 			$name = $section["world"] ?? ($key === "nether" ? "world_nether" : "world_the_end");
 			if(!is_string($name) || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/D', $name) !== 1){
 				throw new InvalidArgumentException("dimensions.yml: $key.world must be a world folder name without a path");
@@ -56,7 +66,12 @@ final class DimensionSettings{
 		if($timeout < 20 || $timeout > 12000){
 			throw new InvalidArgumentException("dimensions.yml: portal.load-timeout-ticks must be between 20 and 12000");
 		}
-		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true));
+		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true), $sourceDimensions);
+	}
+
+	/** null means automatic detection; this is storage identity, not the client's dimension. */
+	public function getSourceDimension(int $dimension) : ?int{
+		return $this->sourceDimensions[$dimension] ?? null;
 	}
 
 	/** @return array<int, string> */
