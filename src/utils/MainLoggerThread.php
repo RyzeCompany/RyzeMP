@@ -29,6 +29,7 @@ use function clearstatcache;
 use function date;
 use function fclose;
 use function file_exists;
+use function filesize;
 use function fopen;
 use function fstat;
 use function fwrite;
@@ -56,10 +57,27 @@ final class MainLoggerThread extends Thread{
 		private readonly int $maxFileSize = 32 * 1024 * 1024 //32 MB
 	){
 		$this->buffer = new ThreadSafeArray();
-		touch($this->logFile);
-		if($this->archiveDir !== null && !@mkdir($this->archiveDir) && !is_dir($this->archiveDir)){
-			throw new \RuntimeException("Unable to create archive directory: " . (
-				is_file($this->archiveDir) ? "it already exists and is not a directory" : "permission denied"));
+		if($this->archiveDir !== null){
+			if(!@mkdir($this->archiveDir) && !is_dir($this->archiveDir)){
+				throw new \RuntimeException("Unable to create archive directory: " . (
+					is_file($this->archiveDir) ? "it already exists and is not a directory" : "permission denied"));
+			}
+
+			// A previous server.log is still present after both clean stops and crashes.
+			// Archive it before starting the asynchronous writer, never truncating it on failure.
+			if(is_file($this->logFile)){
+				clearstatcache(true, $this->logFile);
+				$previousSize = filesize($this->logFile);
+				if($previousSize === false){
+					throw new \RuntimeException("Unable to determine the size of the previous log file: " . $this->logFile);
+				}
+				if($previousSize > 0){
+					$this->moveLogFileToArchive($this->archiveDir);
+				}
+			}
+		}
+		if(!@touch($this->logFile)){
+			throw new \RuntimeException("Unable to create log file: " . $this->logFile);
 		}
 	}
 
@@ -105,12 +123,14 @@ final class MainLoggerThread extends Thread{
 	}
 
 	/**
-	 * @param resource $logResource
-	 * @return resource
+	 * Moves the current log into the archive, preserving existing archives with a numeric suffix.
+	 * The caller ensures that no writer still has this log open.
 	 */
-	private function archiveLogFile($logResource, int &$size, string $archiveDir){
-		fclose($logResource);
-
+	private function moveLogFileToArchive(string $archiveDir) : string{
+		// The archive directory may have been removed while the server was running.
+		if(!@mkdir($archiveDir) && !is_dir($archiveDir)){
+			throw new \RuntimeException("Unable to create log archive directory: " . $archiveDir);
+		}
 		clearstatcache();
 
 		$i = 0;
@@ -118,15 +138,24 @@ final class MainLoggerThread extends Thread{
 		$baseName = pathinfo($this->logFile, PATHINFO_FILENAME);
 		$extension = pathinfo($this->logFile, PATHINFO_EXTENSION);
 		do{
-			//this shouldn't be necessary, but in case the user messes with the system time for some reason ...
 			$fileName = "$baseName.$date.$i.$extension";
-			$out = $this->archiveDir . "/" . $fileName;
+			$out = $archiveDir . "/" . $fileName;
 			$i++;
 		}while(file_exists($out));
 
-		//the user may have externally deleted the whole directory - make sure it exists before we do anything
-		@mkdir($archiveDir);
-		rename($this->logFile, $out);
+		if(!@rename($this->logFile, $out)){
+			throw new \RuntimeException("Unable to archive log file " . $this->logFile . " to " . $out);
+		}
+		return $fileName;
+	}
+
+	/**
+	 * @param resource $logResource
+	 * @return resource
+	 */
+	private function archiveLogFile($logResource, int &$size, string $archiveDir){
+		fclose($logResource);
+		$fileName = $this->moveLogFileToArchive($archiveDir);
 
 		$logResource = $this->openLogFile($this->logFile, $size);
 		fwrite($logResource, "--- Starting new log file - old log file archived as $fileName ---\n");
