@@ -43,7 +43,7 @@ final class PortalTravel{
 	private array $netherPortalTicks = [];
 	/** @var array<int, true> */
 	private array $inEndPortal = [];
-	/** @var array<int, array{token: int, entity: Entity, source: World, nether: bool, deadline: int}> */
+	/** @var array<int, array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int}> */
 	private array $pending = [];
 	private int $requestSequence = 0;
 	private int $currentTick = 0;
@@ -229,11 +229,12 @@ final class PortalTravel{
 		}
 	}
 
-	/** @param array{token: int, entity: Entity, source: World, nether: bool, deadline: int} $request */
+	/** @param array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int} $request */
 	private function requestIsValid(array $request) : bool{
 		$entity = $request["entity"];
 		return $this->currentTick < $request["deadline"] && $request["source"]->isLoaded() &&
-			$this->canTravel($entity) && $entity->getWorld() === $request["source"] &&
+			$this->canTravel($entity) && $entity->getPortalTravelVersion() === $request["version"] &&
+			$entity->getWorld() === $request["source"] &&
 			$this->isTouchingPortal($entity, $request["nether"]);
 	}
 
@@ -265,6 +266,7 @@ final class PortalTravel{
 		$this->pending[$id] = [
 			"token" => $token,
 			"entity" => $entity,
+			"version" => $entity->getPortalTravelVersion(),
 			"source" => $entity->getWorld(),
 			"nether" => $nether,
 			"deadline" => $this->currentTick + $this->settings->portalLoadTimeoutTicks

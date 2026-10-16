@@ -32,6 +32,7 @@ final class PortalTravelTest extends TestCase{
 	private bool $alive = true;
 	private bool $targetLoaded = true;
 	private int $arrivalReads = 0;
+	private int $entityVersion = 0;
 	/** @var list<PromiseResolver> */
 	private array $loads = [];
 	/** @var list<array{int, int}> */
@@ -71,6 +72,7 @@ final class PortalTravelTest extends TestCase{
 		// Entity::close() is final; keep the unconstructed mock safe during destruction.
 		(new \ReflectionProperty(Entity::class, "closed"))->setValue($this->entity, true);
 		$this->entity->method("getId")->willReturn(123);
+		$this->entity->method("getPortalTravelVersion")->willReturnCallback(fn() : int => $this->entityVersion);
 		$this->entity->method("isAlive")->willReturnCallback(fn() : bool => $this->alive);
 		$this->entity->method("getWorld")->willReturnCallback(fn() : World => $this->currentWorld);
 		$this->entity->method("getBoundingBox")->willReturn(new AxisAlignedBB(0.2, 64, 0.2, 0.8, 65.8, 0.8));
@@ -121,7 +123,7 @@ final class PortalTravelTest extends TestCase{
 	public function testExternalTeleportInvalidatesPendingTravel() : void{
 		$this->entity->expects(self::never())->method("teleport");
 		$this->enter();
-		$this->travel->cancelPending($this->entity->getId());
+		++$this->entityVersion;
 		$this->resolveLoads();
 	}
 
@@ -129,6 +131,14 @@ final class PortalTravelTest extends TestCase{
 		$this->entity->expects(self::never())->method("teleport");
 		$this->enter();
 		$this->alive = false;
+		$this->resolveLoads();
+	}
+
+	public function testDeathAndRespawnBeforeCompletionStillInvalidateRequest() : void{
+		$this->entity->expects(self::never())->method("teleport");
+		$this->enter();
+		++$this->entityVersion;
+		$this->alive = true;
 		$this->resolveLoads();
 	}
 

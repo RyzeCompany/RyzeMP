@@ -72,16 +72,6 @@ final class DimensionManager{
 		$this->portalTravel->touchEndPortal($entity);
 	}
 
-	/** Invalidates delayed portal callbacks after a successful external teleport. */
-	public function cancelPendingPortalTravel(Entity $entity) : void{
-		$this->portalTravel->cancelPending($entity->getId());
-	}
-
-	/** Releases portal state when an entity dies or is disposed. */
-	public function forgetEntity(Entity $entity) : void{
-		$this->portalTravel->forget($entity->getId());
-	}
-
 	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
 		$this->endCrystalSpawner->onChunkPopulated($world, $chunkX, $chunkZ);
 	}
