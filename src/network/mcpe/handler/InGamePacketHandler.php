@@ -81,6 +81,7 @@ use pocketmine\network\mcpe\protocol\PlayerInputPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
+use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\serializer\BitSet;
 use pocketmine\network\mcpe\protocol\SetActorMotionPacket;
 use pocketmine\network\mcpe\protocol\SetPlayerGameTypePacket;
@@ -177,6 +178,11 @@ class InGamePacketHandler extends PacketHandler{
 		$this->miningValidator = new MiningValidator();
 		$this->movementValidator = new MovementValidator();
 		$this->protocolGuard = new ProtocolGuard();
+	}
+
+	public function handleServerboundLoadingScreen(ServerboundLoadingScreenPacket $packet) : bool{
+		$this->session->onClientLoadingScreen($packet->getLoadingScreenType(), $packet->getLoadingScreenId());
+		return true;
 	}
 
 	public function handleText(TextPacket $packet) : bool{
@@ -1075,3 +1081,4 @@ class InGamePacketHandler extends PacketHandler{
 		return true;
 	}
 }
+

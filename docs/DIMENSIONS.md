@@ -239,3 +239,21 @@ comprobarse con el log y un cliente conectado.
 Antes de actualizar mundos importados, conserva una copia de sus datos originales.
 El lector no puede reconstruir bloques que una versión anterior ya haya guardado
 como `INFO_UPDATE`; esas zonas requieren recuperarse del mapa original.
+
+### Diagnóstico de recepción de terreno
+
+Las trazas `Dimension trace #N` distinguen tres etapas: los chunks preparados y
+encolados, sus confirmaciones de recepción RakNet y los avisos START/STOP de la
+pantalla enviados por el cliente. Se observan únicamente los nueve chunks de
+llegada, con coordenadas, tamaño comprimido y SHA-256. Una confirmación RakNet
+acredita la recepción del paquete, no su interpretación ni renderizado. Los avisos
+de pantalla son observaciones; no completan el viaje ni alteran los paquetes de
+juego. Las confirmaciones de un viaje anterior no se atribuyen al siguiente.
+
+Prueba con la misma compilación y el mismo cliente dos idas y vueltas en el mapa
+custom. Conserva el log completo. Si es posible, repite en un servidor de prueba
+con el Nether generado, conservando las mismas opciones de red y distancia de
+visión. Si aparecen nueve recepciones rápidas y el STOP sigue a los 30 segundos,
+la investigación se concentra en la interpretación del terreno y la transición;
+si faltan recepciones, se revisa el envío y transporte de esos chunks concretos.
+Esta instrumentación no constituye una corrección confirmada de la espera.
