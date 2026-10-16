@@ -1432,6 +1432,7 @@ class NetworkSession{
 				$this->acknowledgeDimensionChange();
 			}
 			$this->syncWorldTime($world->getTime());
+			$this->syncGameRules($world);
 			$this->syncWorldDifficulty($world->getDifficulty());
 			$this->syncWorldSpawnPoint($world->getSpawnLocation());
 		}
@@ -1444,6 +1445,10 @@ class NetworkSession{
 		$this->pendingDimensionChangeAck = false;
 		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
 		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
+	}
+
+	public function syncGameRules(World $world) : void{
+		$this->sendDataPacket(\pocketmine\network\mcpe\protocol\GameRulesChangedPacket::create($world->getGameRules()->toNetwork()));
 	}
 
 	public function syncWorldTime(int $worldTime) : void{
@@ -1589,3 +1594,4 @@ class NetworkSession{
 		$this->flushGamePacketQueue();
 	}
 }
+

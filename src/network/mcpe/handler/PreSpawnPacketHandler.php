@@ -38,7 +38,6 @@ use pocketmine\network\mcpe\protocol\StartGamePacket;
 use pocketmine\network\mcpe\protocol\SetLocalPlayerAsInitializedPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
-use pocketmine\network\mcpe\protocol\types\BoolGameRule;
 use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
@@ -120,10 +119,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$levelSettings->rainLevel = 0; //TODO: implement these properly
 			$levelSettings->lightningLevel = 0;
 			$levelSettings->commandsEnabled = true;
-			$levelSettings->gameRules = [
-				"naturalregeneration" => new BoolGameRule(false, false), //Hack for client side regeneration
-				"locatorbar" => new BoolGameRule(false, false) //Disable client-side tracking of nearby players
-			];
+			$levelSettings->gameRules = $world->getGameRules()->toNetwork();
 			$levelSettings->experiments = new Experiments([], false);
 
 			$blockNetworkIdsAreHashes = $protocolId >= ProtocolInfo::PROTOCOL_1_26_50;
@@ -225,3 +221,4 @@ class PreSpawnPacketHandler extends PacketHandler{
 		return true;
 	}
 }
+

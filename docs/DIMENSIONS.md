@@ -171,6 +171,32 @@ varios Overworlds y sus dimensiones, y búsqueda de portales sin recorrer hasta
 
 ## Pruebas en el servidor
 
+### Coordenadas para configurar PortalLink
+
+`/gamerule showcoordinates true` activa las coordenadas del HUD en el mundo actual.
+Para apagarlas usa `false`; `/gamerule showcoordinates` consulta su valor. Alias:
+`/gr` y `/gamerules`. Requiere `pocketmine.command.gamerule` (operadores y consola).
+
+Desde consola puedes indicar la carpeta de un mundo cargado:
+
+```text
+gamerule showcoordinates true world
+gamerule showcoordinates true world_nether
+gamerule showcoordinates true world_the_end
+```
+
+La regla se guarda inmediatamente en `worlds/<carpeta>/gamerules.yml`; se aplica
+a los jugadores conectados, al entrar y al cambiar de mundo. Si aun no hay ese
+archivo, respeta `showcoordinates` de `level.dat` en proveedores NBT. Actualmente
+el comando expone `showcoordinates`; rechaza reglas cuyo comportamiento no esta
+implementado. Conserva las reglas internas de regeneracion y locatorbar.
+
+Cuando estes en un punto seguro del Nether, `/plink dest spawn_overworld_a_nether`
+guarda tu posicion y orientacion como llegada. El spawn guardado en el ZIP revisado
+es `2,64,1`; el destino `0,46,0` no tiene suelo en ese mapa.
+
+### Casos de viaje
+
 1. Arrancar sin `dimensions.yml` y comprobar que carga los mundos existentes.
 2. Entrar y regresar por Nether en supervivencia y creativo; permanecer dentro
    del portal de llegada para comprobar que no devuelve inmediatamente.
