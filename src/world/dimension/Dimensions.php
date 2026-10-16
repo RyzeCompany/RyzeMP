@@ -10,7 +10,7 @@ use pocketmine\world\World;
 
 /**
  * Maps worlds to Bedrock dimensions. The overworld is the default world; the
- * nether and the end are the worlds named in config.yml. Any other world is
+ * nether and the end are the worlds named in dimensions.yml. Any other world is
  * treated as an overworld.
  */
 final class Dimensions{
@@ -75,3 +75,4 @@ final class Dimensions{
 		};
 	}
 }
+

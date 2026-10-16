@@ -7,6 +7,7 @@ namespace pocketmine\world\dimension;
 use pocketmine\entity\Entity;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\Server;
+use pocketmine\utils\Config;
 use pocketmine\world\dimension\generator\GeneratorOptions;
 use pocketmine\world\dimension\generator\end\EndCrystalSpawner;
 use pocketmine\world\dimension\generator\VanillaGenerators;
@@ -15,6 +16,8 @@ use pocketmine\world\dimension\portal\PortalTravel;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
+use function copy;
+use function is_file;
 
 final class DimensionManager{
 
@@ -24,15 +27,18 @@ final class DimensionManager{
 	private Dimensions $dimensions;
 	private PortalTravel $portalTravel;
 	private EndCrystalSpawner $endCrystalSpawner;
+	private DimensionSettings $settings;
 
 	public function __construct(private Server $server){
+		$path = $server->getDataPath() . "dimensions.yml";
+		if(!is_file($path) && !copy(\pocketmine\RESOURCE_PATH . "dimensions.yml", $path)){
+			throw new \RuntimeException("Could not create dimensions.yml");
+		}
+		$this->settings = DimensionSettings::fromArray((new Config($path, Config::YAML))->getAll());
 		VanillaGenerators::register();
 		PortalContent::register($server->getAsyncPool(), $server->getCraftingManager());
-		$this->dimensions = new Dimensions($server, [
-			DimensionIds::NETHER => self::NETHER_WORLD,
-			DimensionIds::THE_END => self::END_WORLD
-		]);
-		$this->portalTravel = new PortalTravel($this->dimensions);
+		$this->dimensions = new Dimensions($server, $this->settings->getWorldNames());
+		$this->portalTravel = new PortalTravel($this->dimensions, $this->settings);
 		$this->endCrystalSpawner = new EndCrystalSpawner($this->dimensions);
 	}
 
@@ -46,6 +52,10 @@ final class DimensionManager{
 	}
 
 	public function prepareWorlds() : void{
+		$overworld = $this->server->getWorldManager()->getDefaultWorld();
+		if($overworld !== null){
+			$this->settings->validateOverworld($overworld->getFolderName());
+		}
 		$this->prepareWorld(DimensionIds::NETHER, VanillaGenerators::NETHER);
 		$this->prepareWorld(DimensionIds::THE_END, VanillaGenerators::END);
 	}
@@ -60,6 +70,16 @@ final class DimensionManager{
 
 	public function touchEndPortal(Entity $entity) : void{
 		$this->portalTravel->touchEndPortal($entity);
+	}
+
+	/** Invalidates delayed portal callbacks after a successful external teleport. */
+	public function cancelPendingPortalTravel(Entity $entity) : void{
+		$this->portalTravel->cancelPending($entity->getId());
+	}
+
+	/** Releases portal state when an entity dies or is disposed. */
+	public function forgetEntity(Entity $entity) : void{
+		$this->portalTravel->forget($entity->getId());
 	}
 
 	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
@@ -95,3 +115,4 @@ final class DimensionManager{
 		$this->server->getLogger()->info("Native dimensions: created {$name}");
 	}
 }
+

@@ -565,6 +565,7 @@ abstract class Entity{
 
 	public function kill() : void{
 		if($this->isAlive()){
+			$this->getWorld()->getServer()->getDimensionManager()->forgetEntity($this);
 			$this->health = 0;
 			$this->onDeath();
 			$this->scheduleUpdate();
@@ -1488,6 +1489,7 @@ abstract class Entity{
 
 		$this->setMotion(new Vector3(0, 0, 0));
 		if($this->setPositionAndRotation($pos, $yaw ?? $this->location->yaw, $pitch ?? $this->location->pitch)){
+			$this->getWorld()->getServer()->getDimensionManager()->cancelPendingPortalTravel($this);
 			$this->resetFallDistance();
 			$this->setForceMovementUpdate();
 
@@ -1627,6 +1629,9 @@ abstract class Entity{
 
 		if(!$this->closed){
 			$this->closeInFlight = true;
+			if($this->location->isValid()){
+				$this->getWorld()->getServer()->getDimensionManager()->forgetEntity($this);
+			}
 			(new EntityDespawnEvent($this))->call();
 
 			$this->onDispose();
@@ -1755,3 +1760,4 @@ abstract class Entity{
 		return (new \ReflectionClass($this))->getShortName() . "(" . $this->getId() . ")";
 	}
 }
+
