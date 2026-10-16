@@ -8,8 +8,6 @@ on:
   push:
     branches:
       - main
-      - fix/chest-minecart-item
-      - feature/native-nether-end
     tags:
       - 'v*'
   pull_request:
@@ -21,6 +19,8 @@ jobs:
     secrets: inherit
   build:
     needs: tests
+    permissions:
+      contents: write # required only for tagged GitHub release publication
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -37,37 +37,6 @@ jobs:
           extensions: zlib
           ini-values: phar.readonly=Off
           tools: composer
-
-      - name: Vendor VanillaAltay structure templates
-        if: github.ref == 'refs/heads/feature/native-nether-end'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f resources/dimension/structures/structures.nbt ]; then
-            mkdir -p resources/dimension/structures
-            curl -L --fail --retry 3 -o /tmp/VanillaAltay.phar \
-              https://github.com/NaySurGithub/VanillaAltay/releases/download/latest/Vanilla-Altay-0.4.0.phar
-            php -d phar.readonly=0 -r '
-              $p = new Phar("/tmp/VanillaAltay.phar");
-              $paths = [
-                "resources/dimension/structures/structures.nbt",
-                "dimension/structures/structures.nbt"
-              ];
-              foreach($paths as $path){
-                if(isset($p[$path])){
-                  file_put_contents("resources/dimension/structures/structures.nbt", $p[$path]->getContent());
-                  exit(0);
-                }
-              }
-              fwrite(STDERR, "structures.nbt not found in VanillaAltay PHAR\n");
-              exit(1);
-            '
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add resources/dimension/structures/structures.nbt
-            git commit -m "Vendor VanillaAltay dimension structure templates"
-            git push origin HEAD:feature/native-nether-end
-          fi
 
       - name: Verify PHAR compression support
         run: |
