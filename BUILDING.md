@@ -8,6 +8,10 @@
 
 For the current CI build, GitHub Actions uses PHP 8.4 plus PocketMine's required extensions for validation, and PHP 8.3 for the PHAR builder.
 
+## Distributions
+
+For installing a **published source project with Composer**, or downloading a **versioned PHAR directly from GitHub Releases**, see [DISTRIBUTION.md](docs/DISTRIBUTION.md). The public Composer command is not available until the maintainer registers the accessible packages on Packagist.
+
 ## Install dependencies
 
 ```bash
