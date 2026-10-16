@@ -9,7 +9,7 @@ RyzeMP is a Minecraft Bedrock server software maintained by RyzeMCBE, built on t
 - **Plugin API:** `Server::getApiVersion()` returns `VersionInfo::PLUGIN_API_VERSION`, currently `5.44.2`. Never derive it from the RyzeMP release version.
 - **PHP namespaces:** retain `pocketmine\`, `pocketmine\network\mcpe\protocol\`, and all existing plugin-facing classes and interfaces.
 - **Composer package identity:** use `ryzemcbe/ryzemp` for the root package, retain its `pocketmine/pocketmine-mp` replacement, and keep Composer's installed-reference lookup aligned with the root package.
-- **Protocol:** use the checked-in Composer lockfile references to `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData`; retain pinned dependency commits and legacy Composer dependency names until a separately tested package-name migration is complete.
+- **Protocol:** use the checked-in Composer lockfile references to `ryzemcbe/bedrock-protocol` and `ryzemcbe/bedrock-data` at their reviewed commits. The Composer package-name migration is complete. Move from `dev-main` to tagged constraints only as part of a tested coordinated dependency release.
 - **World data:** preserve `PMMPDataVersion` and existing world storage identifiers to avoid corrupting or orphaning worlds.
 - **Distribution:** new releases generate `RyzeMP.phar`; the shell and Docker launchers prefer it while keeping the older PHAR name as a migration fallback.
 - **Provenance:** preserve the source license, notices, original copyright holders, and the LGPL-3.0-or-later conditions. RyzeMP is a derivative, not a clean-room rewrite.
