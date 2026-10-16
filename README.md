@@ -13,9 +13,14 @@
 
 Support for a Bedrock protocol in the dependency does **not** guarantee every gameplay feature works on every supported client. Use staging to validate mixed-version joins, skins, respawns, dimension transfers, and inventory behavior.
 
-## Building
+## Get RyzeMP — two distribution channels
 
-Read [BUILDING.md](BUILDING.md) for source and PHAR instructions. The standard artifact name is `RyzeMP.phar`.
+- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the repositories are accessible and the release is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.1" --no-dev --prefer-dist`.
+- **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.1.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
+
+**These public channels are prepared, not published yet.** RyzeMP and both libraries currently require authorized access; the first public release is subject to dependency publication and live game tests.
+
+Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
 The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `PocketMine-MP.phar` for existing installs.
 
