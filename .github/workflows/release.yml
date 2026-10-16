@@ -38,6 +38,17 @@ jobs:
           ini-values: phar.readonly=Off
           tools: composer
 
+      - name: Check release tag matches RyzeMP version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          grep -Fq "public const BASE_VERSION = \"$version\";" src/VersionInfo.php || {
+            echo "Release tag $GITHUB_REF_NAME does not match VersionInfo::BASE_VERSION"
+            exit 1
+          }
+
       - name: Verify PHAR compression support
         run: |
           php -r 'if(!extension_loaded("zlib") || !Phar::canCompress(Phar::GZ)){fwrite(STDERR, "Gzip PHAR compression is unavailable\\n"); exit(1);} echo "zlib + Phar::GZ compression available\\n";'
@@ -73,7 +84,10 @@ jobs:
         run: |
           set -euo pipefail
           php RyzeMP.phar --version | tee /tmp/ryzemp-version.txt
-          grep -q 'RyzeMP 1.0.0-beta.1' /tmp/ryzemp-version.txt
+          grep -q 'RyzeMP ' /tmp/ryzemp-version.txt
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            grep -Fq "RyzeMP ${GITHUB_REF_NAME#v}" /tmp/ryzemp-version.txt
+          fi
 
       - name: Smoke-test native dimensions startup
         shell: bash
@@ -108,15 +122,24 @@ jobs:
           path: RyzeMP.phar
           if-no-files-found: error
 
-      - name: Rename phar
+      - name: Prepare versioned PHAR and checksum
         if: startsWith(github.ref, 'refs/tags/v')
-        run: mv RyzeMP.phar RyzeMP_${{ github.ref_name }}.phar
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv RyzeMP.phar "RyzeMP_${GITHUB_REF_NAME}.phar"
+          sha256sum "RyzeMP_${GITHUB_REF_NAME}.phar" > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
 
-      - name: Create Release
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: RyzeMP_${{ github.ref_name }}.phar
+          files: |
+            RyzeMP_${{ github.ref_name }}.phar
+            SHA256SUMS.txt
+            LICENSE
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
