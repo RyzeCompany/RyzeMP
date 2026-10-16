@@ -12,6 +12,7 @@ use pocketmine\world\dimension\generator\GeneratorOptions;
 use pocketmine\world\dimension\generator\end\EndCrystalSpawner;
 use pocketmine\world\dimension\generator\VanillaGenerators;
 use pocketmine\world\dimension\portal\PortalContent;
+use pocketmine\world\dimension\portal\PortalLinkManager;
 use pocketmine\world\dimension\portal\PortalTravel;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\World;
@@ -28,6 +29,7 @@ final class DimensionManager{
 	private PortalTravel $portalTravel;
 	private EndCrystalSpawner $endCrystalSpawner;
 	private DimensionSettings $settings;
+	private PortalLinkManager $portalLinks;
 
 	public function __construct(private Server $server){
 		$path = $server->getDataPath() . "dimensions.yml";
@@ -38,12 +40,18 @@ final class DimensionManager{
 		VanillaGenerators::register();
 		PortalContent::register($server->getAsyncPool(), $server->getCraftingManager());
 		$this->dimensions = new Dimensions($server, $this->settings->getWorldNames());
-		$this->portalTravel = new PortalTravel($this->dimensions, $this->settings);
+		$this->portalLinks = new PortalLinkManager();
+		$this->portalTravel = new PortalTravel($this->dimensions, $this->settings, $this->portalLinks);
 		$this->endCrystalSpawner = new EndCrystalSpawner($this->dimensions);
 	}
 
 	public function getDimensions() : Dimensions{
 		return $this->dimensions;
+	}
+
+	/** Returns the registry used by both Nether and End portal travel. Register links on the server thread. */
+	public function getPortalLinkManager() : PortalLinkManager{
+		return $this->portalLinks;
 	}
 
 	/** @phpstan-return DimensionIds::* */

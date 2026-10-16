@@ -56,6 +56,77 @@ la escala 8:1 y las reglas de salida del End. Esta revisión no cambia la secuen
 de paquetes del cliente, no añade inmunidad durante la pantalla de carga y no
 implementa almacenamiento compartido de dimensiones.
 
+## API de vinculación explícita de portales
+
+Los plugins pueden obtener el registro mediante
+`$server->getDimensionManager()->getPortalLinkManager()`. Solo se consulta una
+vinculación cuando una entidad toca un bloque real del tipo de portal indicado.
+Un portal sin enlace conserva el cálculo 8:1, la búsqueda y la creación actuales.
+Nether conserva su espera de 80 ticks (inmediata en creativo); End es inmediato.
+
+Cada `PortalLink` tiene un ID estable, un `PortalArea` y un `PortalDestination`.
+El área incluye todos los bloques activos del portal, con esquinas mínimas y
+máximas inclusivas. El destino contiene el nombre de carpeta del mundo,
+coordenadas exactas de los pies, yaw y pitch. No aplica escala ni suma 0.5.
+`PortalDestination::fromLocation()` permite capturar una ubicación existente.
+
+Ejemplo para un plugin HCF; **las áreas son ilustrativas y deben sustituirse por
+los extremos reales de cada portal**. Las llegadas pueden quedar delante del
+portal, aunque también se permite llegar dentro de un portal con suelo seguro.
+
+```php
+use pocketmine\world\dimension\portal\PortalArea;
+use pocketmine\world\dimension\portal\PortalDestination;
+use pocketmine\world\dimension\portal\PortalLink;
+use pocketmine\world\dimension\portal\PortalType;
+
+$links = $this->getServer()->getDimensionManager()->getPortalLinkManager();
+$registered = $links->registerBidirectional(
+    "hcf:spawn-nether",
+    new PortalArea("world", PortalType::NETHER, 10, 78, -90, 11, 80, -90),
+    new PortalDestination("world", 10, 78, -90, 180, 0),
+    new PortalArea("world_nether", PortalType::NETHER, 0, 46, 0, 1, 48, 0),
+    new PortalDestination("world_nether", 0, 46, 0, 0, 0)
+);
+
+// IDs: hcf:spawn-nether:forward y hcf:spawn-nether:reverse.
+$forward = $links->get("hcf:spawn-nether:forward");
+$all = $links->getLinks();
+
+// Al desactivar el plugin, elimina solo sus propios enlaces.
+foreach ($registered as $link) {
+    $links->unregister($link->id);
+}
+```
+
+Para un único sentido, usa `register(new PortalLink($id, $area, $destination))`.
+`find($worldName, $type, $x, $y, $z)` consulta un bloque del portal. El registro
+rechaza IDs duplicados y áreas de origen superpuestas del mismo tipo y mundo.
+El registro bidireccional es atómico: si hay un conflicto, no registra la mitad
+del par. Para cambiar un enlace, elimínalo y registra una nueva instancia.
+
+Los enlaces pertenecen al plugin: guarda sus datos en su configuración, regístralos
+en `onEnable()` y elimínalos en `onDisable()`. El núcleo no duplica esa persistencia
+ni necesita un mundo cargado para registrar los nombres y coordenadas. Los mundos
+de destino sí deben estar cargados al viajar; la API no los genera ni los carga
+automáticamente. Esto permite referencias estables después de descargar y volver
+a cargar un mundo con el mismo nombre.
+
+Una vinculación existente tiene prioridad incluso si su destino falla. Si no
+está cargado, queda fuera de los límites de la dimensión, tiene bloques alrededor
+del cuerpo o no tiene suelo seguro bajo toda la entidad, cancela el viaje y
+registra el motivo. No busca otro destino, no construye portales y no cambia
+bloques. Asegura un suelo continuo debajo de coordenadas enteras como `0,46,0`,
+porque la entidad ocupa espacio a ambos lados del centro. Se conservan los eventos
+de teletransporte existentes; un plugin que cambie el destino en esos eventos es
+responsable de validar su nuevo destino.
+
+Eliminar o sustituir un enlace invalida las cargas pendientes de esa instancia.
+Añadir una vinculación mientras se prepara un viaje automático también cancela
+el destino automático antiguo. Después de un viaje vinculado, la entidad debe
+permanecer fuera de todos los bloques de portal durante dos ticks antes de activar
+otro portal, también cuando los enlaces conectan tipos de portal distintos.
+
 ## Referencia y siguientes mejoras
 
 El diseño toma como referencia las validaciones de llegada de `EndArrivalHelper`
@@ -83,3 +154,10 @@ varios Overworlds y sus dimensiones, y búsqueda de portales sin recorrer hasta
    llegada y el regreso al Overworld.
 8. Desactivar una dimensión y comprobar que no genera una carpeta nueva ni viaja
    hacia ella; reactivarla sin borrar sus datos.
+9. Registrar un enlace del spawn HCF y verificar ambas llegadas exactas y la
+   orientación. Un portal no registrado debe conservar el cálculo automático.
+10. Bloquear el destino o descargar su mundo: el portal vinculado debe cancelar,
+    sin enviar al jugador a otro lugar ni modificar bloques.
+11. Eliminar o sustituir el enlace durante una carga pendiente: la solicitud
+    anterior no debe transportar después. Al reiniciar, el plugin debe restaurar
+    sus enlaces desde su propia configuración.

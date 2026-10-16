@@ -19,6 +19,7 @@ use pocketmine\world\Position;
 use pocketmine\world\World;
 use function abs;
 use function floor;
+use function ceil;
 use function max;
 use function min;
 
@@ -43,11 +44,14 @@ final class PortalTravel{
 	private array $netherPortalTicks = [];
 	/** @var array<int, true> */
 	private array $inEndPortal = [];
-	/** @var array<int, array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int}> */
+	/** @var array<int, array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int, link: ?PortalLink}> */
 	private array $pending = [];
 	private int $requestSequence = 0;
 	private int $currentTick = 0;
 	private DimensionSettings $settings;
+	private PortalLinkManager $portalLinks;
+	/** @var array<int, array{entity: Entity, outsideTicks: int}> */
+	private array $linkedArrivals = [];
 	/** @var array<int, Entity> */
 	private array $netherTouches = [];
 	/** @var array<int, Entity> */
@@ -55,19 +59,35 @@ final class PortalTravel{
 
 	public function __construct(
 		private Dimensions $dimensions,
-		?DimensionSettings $settings = null
+		?DimensionSettings $settings = null,
+		?PortalLinkManager $portalLinks = null
 	){
 		$this->settings = $settings ?? DimensionSettings::fromArray([]);
+		$this->portalLinks = $portalLinks ?? new PortalLinkManager();
 	}
 
 	public function tick() : void{
 		++$this->currentTick;
+		foreach($this->linkedArrivals as $id => &$arrival){
+			$entity = $arrival["entity"];
+			if(!$this->canTravel($entity)){
+				unset($this->linkedArrivals[$id]);
+			}elseif($this->isTouchingPortal($entity, true) || $this->isTouchingPortal($entity, false)){
+				$arrival["outsideTicks"] = 0;
+			}elseif(++$arrival["outsideTicks"] >= 2){
+				unset($this->linkedArrivals[$id]);
+			}
+		}
+		unset($arrival);
 		foreach($this->pending as $id => $request){
 			if(!$this->requestIsValid($request)){
 				unset($this->pending[$id]);
 			}
 		}
 		foreach($this->netherTouches as $id => $entity){
+			if(isset($this->linkedArrivals[$id])){
+				continue;
+			}
 			if(!$this->canTravel($entity)){
 				$this->forget($id);
 				continue;
@@ -91,6 +111,9 @@ final class PortalTravel{
 		}
 
 		foreach($this->endTouches as $id => $entity){
+			if(isset($this->linkedArrivals[$id])){
+				continue;
+			}
 			if(!$this->canTravel($entity)){
 				$this->forget($id);
 				continue;
@@ -129,6 +152,7 @@ final class PortalTravel{
 			$this->netherPortalTicks[$entityId],
 			$this->inEndPortal[$entityId],
 			$this->pending[$entityId],
+			$this->linkedArrivals[$entityId],
 			$this->netherTouches[$entityId],
 			$this->endTouches[$entityId]
 		);
@@ -146,6 +170,9 @@ final class PortalTravel{
 
 
 	private function travelThroughNetherPortal(Entity $entity) : void{
+		if($this->tryLinkedTravel($entity, true)){
+			return;
+		}
 		$from = $this->dimensions->getDimension($entity->getWorld());
 		if($from === DimensionIds::OVERWORLD){
 			$to = DimensionIds::NETHER;
@@ -187,6 +214,9 @@ final class PortalTravel{
 	}
 
 	private function travelThroughEndPortal(Entity $entity) : void{
+		if($this->tryLinkedTravel($entity, false)){
+			return;
+		}
 		$from = $this->dimensions->getDimension($entity->getWorld());
 		if(!$this->dimensions->isEnabled(DimensionIds::THE_END)){
 			return;
@@ -229,16 +259,79 @@ final class PortalTravel{
 		}
 	}
 
-	/** @param array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int} $request */
+	/** Returns true once a link matches, including when that linked trip is refused. */
+	private function tryLinkedTravel(Entity $entity, bool $nether) : bool{
+		$link = $this->findTouchedLink($entity, $nether);
+		if($link === null){
+			return false;
+		}
+		$destination = $link->destination;
+		$world = $this->dimensions->getWorldByName($destination->worldName);
+		if($world === null || !$world->isLoaded()){
+			$entity->getWorld()->getServer()->getLogger()->warning("Portal link " . $link->id . ": destination world is not loaded; travel cancelled");
+			return true;
+		}
+		$dimension = $this->dimensions->getDimension($world);
+		if(!LinkedPortalArrival::isWithinBounds($entity, $world, $destination, $dimension)){
+			$world->getServer()->getLogger()->warning("Portal link " . $link->id . ": destination is outside dimension bounds; travel cancelled");
+			return true;
+		}
+		$box = LinkedPortalArrival::boundingBox($entity, $destination);
+		$radius = (int) ceil(max($box->maxX - $box->minX, $box->maxZ - $box->minZ) / 2) + 1;
+		$this->populate($entity, $world, (int) floor($destination->x), (int) floor($destination->z), $nether, $radius, function() use($entity, $world, $destination, $dimension, $link) : void{
+			if(!LinkedPortalArrival::isSafe($entity, $world, $destination, $dimension)){
+				$world->getServer()->getLogger()->warning("Portal link " . $link->id . ": arrival is obstructed or has no safe floor; travel cancelled");
+				return;
+			}
+			if($entity->teleport(new Position($destination->x, $destination->y, $destination->z, $world), $destination->yaw, $destination->pitch)){
+				// Also blocks cross-type links, such as Nether portal -> End portal.
+				$this->linkedArrivals[$entity->getId()] = ["entity" => $entity, "outsideTicks" => 0];
+			}
+		}, $link);
+		return true;
+	}
+
+	private function findTouchedLink(Entity $entity, bool $nether) : ?PortalLink{
+		if($this->portalLinks->getLinks() === []){
+			return null;
+		}
+		$worldName = $entity->getWorld()->getFolderName();
+		$type = $nether ? PortalType::NETHER : PortalType::END;
+		foreach($this->touchingPortalBlocks($entity, $nether) as [$x, $y, $z]){
+			$link = $this->portalLinks->find($worldName, $type, $x, $y, $z);
+			if($link !== null){
+				return $link;
+			}
+		}
+		return null;
+	}
+
+	/** @param array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int, link: ?PortalLink} $request */
 	private function requestIsValid(array $request) : bool{
 		$entity = $request["entity"];
-		return $this->currentTick < $request["deadline"] && $request["source"]->isLoaded() &&
-			$this->canTravel($entity) && $entity->getPortalTravelVersion() === $request["version"] &&
-			$entity->getWorld() === $request["source"] &&
-			$this->isTouchingPortal($entity, $request["nether"]);
+		if($this->currentTick >= $request["deadline"] || !$request["source"]->isLoaded() ||
+			!$this->canTravel($entity) || $entity->getPortalTravelVersion() !== $request["version"] ||
+			$entity->getWorld() !== $request["source"] || !$this->isTouchingPortal($entity, $request["nether"])
+		){
+			return false;
+		}
+		$link = $request["link"];
+		if($link !== null && $this->portalLinks->get($link->id) !== $link){
+			return false;
+		}
+		// Adding a link during an automatic trip must not complete the old 8:1 route.
+		return $this->findTouchedLink($entity, $request["nether"]) === $link;
 	}
 
 	private function isTouchingPortal(Entity $entity, bool $nether) : bool{
+		foreach($this->touchingPortalBlocks($entity, $nether) as $_){
+			return true;
+		}
+		return false;
+	}
+
+	/** @return iterable<array{int, int, int}> */
+	private function touchingPortalBlocks(Entity $entity, bool $nether) : iterable{
 		$box = $entity->getBoundingBox();
 		$world = $entity->getWorld();
 		for($x = (int) floor($box->minX + 0.001); $x <= (int) floor($box->maxX - 0.001); ++$x){
@@ -246,12 +339,11 @@ final class PortalTravel{
 				for($z = (int) floor($box->minZ + 0.001); $z <= (int) floor($box->maxZ - 0.001); ++$z){
 					$block = $world->getBlockAt($x, $y, $z);
 					if($nether ? $block instanceof NetherPortal : $block instanceof EndPortal){
-						return true;
+						yield [$x, $y, $z];
 					}
 				}
 			}
 		}
-		return false;
 	}
 
 	/**
@@ -260,7 +352,7 @@ final class PortalTravel{
 	 *
 	 * @phpstan-param Closure() : void $callback
 	 */
-	private function populate(Entity $entity, World $world, int $x, int $z, bool $nether, int $radius, Closure $callback) : void{
+	private function populate(Entity $entity, World $world, int $x, int $z, bool $nether, int $radius, Closure $callback, ?PortalLink $link = null) : void{
 		$id = $entity->getId();
 		$token = ++$this->requestSequence;
 		$this->pending[$id] = [
@@ -269,7 +361,8 @@ final class PortalTravel{
 			"version" => $entity->getPortalTravelVersion(),
 			"source" => $entity->getWorld(),
 			"nether" => $nether,
-			"deadline" => $this->currentTick + $this->settings->portalLoadTimeoutTicks
+			"deadline" => $this->currentTick + $this->settings->portalLoadTimeoutTicks,
+			"link" => $link
 		];
 		try{
 			$promises = [];
