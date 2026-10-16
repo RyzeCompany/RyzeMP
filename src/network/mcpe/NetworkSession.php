@@ -125,6 +125,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
 use pocketmine\world\World;
 use pocketmine\YmlServerProperties;
@@ -139,6 +140,7 @@ use function implode;
 use function in_array;
 use function is_string;
 use function json_encode;
+use function microtime;
 use function ord;
 use function random_bytes;
 use function str_split;
@@ -167,6 +169,8 @@ class NetworkSession{
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
 	private bool $pendingDimensionChangeAck = false;
+	/** @var array{world: World, chunks: array<int, true>, centerX: int, centerZ: int, startedAt: float}|null */
+	private ?array $dimensionChangeTerrain = null;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -1157,6 +1161,13 @@ class NetworkSession{
 
 	public function syncMovement(Vector3 $pos, ?float $yaw = null, ?float $pitch = null, int $mode = MovePlayerPacket::MODE_NORMAL) : void{
 		if($this->player !== null){
+			if($mode === MovePlayerPacket::MODE_TELEPORT && $this->dimensionChangeTerrain !== null &&
+				(($pos->getFloorX() >> Chunk::COORD_BIT_SIZE) !== $this->dimensionChangeTerrain["centerX"] ||
+				($pos->getFloorZ() >> Chunk::COORD_BIT_SIZE) !== $this->dimensionChangeTerrain["centerZ"])
+			){
+				// An external teleport must replace the footprint whose old requests Player will cancel.
+				$this->beginDimensionTerrain($this->player->getWorld());
+			}
 			$location = $this->player->getLocation();
 			$yaw = $yaw ?? $location->getYaw();
 			$pitch = $pitch ?? $location->getPitch();
@@ -1183,6 +1194,7 @@ class NetworkSession{
 	public function setClientDimension(int $dimension) : void{
 		$this->clientDimension = $dimension;
 		$this->pendingDimensionChangeAck = false;
+		$this->dimensionChangeTerrain = null;
 	}
 
 	public function syncViewAreaRadius(int $distance) : void{
@@ -1367,10 +1379,11 @@ class NetworkSession{
 	/**
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
-	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world) : void{
+	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world, int $chunkX, int $chunkZ) : void{
 		$world->timings->syncChunkSend->startTiming();
 		try{
 			$this->queueCompressed($chunkPacket);
+			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
 			$onCompletion();
 		}finally{
 			$world->timings->syncChunkSend->stopTiming();
@@ -1389,7 +1402,7 @@ class NetworkSession{
 		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
 		$promiseOrPacket = $cache->request($chunkX, $chunkZ, $this->getTypeConverter());
 		if(is_string($promiseOrPacket)){
-			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
+			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world, $chunkX, $chunkZ);
 			return;
 		}
 		$promiseOrPacket->onResolve(
@@ -1410,7 +1423,7 @@ class NetworkSession{
 					//to NEEDED if they want to be resent.
 					return;
 				}
-				$this->sendChunkPacket($promise->getResult(), $onCompletion, $world);
+				$this->sendChunkPacket($promise->getResult(), $onCompletion, $world, $chunkX, $chunkZ);
 			}
 		);
 	}
@@ -1428,8 +1441,11 @@ class NetworkSession{
 			if($dimension !== $this->clientDimension){
 				$this->clientDimension = $dimension;
 				$this->pendingDimensionChangeAck = true;
+				$this->beginDimensionTerrain($world);
 				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, null));
-				$this->acknowledgeDimensionChange();
+			}elseif($this->pendingDimensionChangeAck){
+				// A second world change can replace a destination before its terrain was sent.
+				$this->beginDimensionTerrain($world);
 			}
 			$this->syncWorldTime($world->getTime());
 			$this->syncGameRules($world);
@@ -1438,11 +1454,37 @@ class NetworkSession{
 		}
 	}
 
+	private function beginDimensionTerrain(World $world) : void{
+		$position = $this->player->getPosition();
+		$centerX = $position->getFloorX() >> Chunk::COORD_BIT_SIZE;
+		$centerZ = $position->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+		$chunks = [];
+		for($x = $centerX - 1; $x <= $centerX + 1; ++$x){
+			for($z = $centerZ - 1; $z <= $centerZ + 1; ++$z){
+				$chunks[World::chunkHash($x, $z)] = true;
+			}
+		}
+		$this->dimensionChangeTerrain = ["world" => $world, "chunks" => $chunks, "centerX" => $centerX, "centerZ" => $centerZ, "startedAt" => microtime(true)];
+		$this->logger->debug("Dimension transition to " . $world->getFolderName() . ": waiting for 9 arrival chunks");
+	}
+
+	private function onDimensionTerrainSent(World $world, int $chunkX, int $chunkZ) : void{
+		if($this->dimensionChangeTerrain === null || $this->dimensionChangeTerrain["world"] !== $world){
+			return;
+		}
+		unset($this->dimensionChangeTerrain["chunks"][World::chunkHash($chunkX, $chunkZ)]);
+		if($this->dimensionChangeTerrain["chunks"] === []){
+			$this->logger->debug(sprintf("Dimension transition to %s: arrival terrain queued in %.3f s, acknowledging change", $world->getFolderName(), microtime(true) - $this->dimensionChangeTerrain["startedAt"]));
+			$this->acknowledgeDimensionChange();
+		}
+	}
+
 	private function acknowledgeDimensionChange() : void{
 		if(!$this->pendingDimensionChangeAck || $this->player === null){
 			return;
 		}
 		$this->pendingDimensionChangeAck = false;
+		$this->dimensionChangeTerrain = null;
 		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
 		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
 	}

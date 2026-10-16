@@ -90,6 +90,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	private int $storageDimension = 0;
 	private bool $storageInUse = false;
 	private bool $dimensionConfigured = false;
+	private bool $blockStatesUpgraded = false;
 
 	/** @internal Call before constructing World or accessing its chunks. */
 	public function configureDimension(int $target, ?int $source = null) : void{
@@ -233,7 +234,9 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 				continue;
 			}
 			try{
-				$palette[] = $this->blockStateDeserializer->deserialize($blockStateData);
+				$normalized = ImportedBlockStateNormalizer::normalize($blockStateData);
+				$palette[] = $this->blockStateDeserializer->deserialize($normalized);
+				$this->blockStatesUpgraded = $this->blockStatesUpgraded || $normalized !== $blockStateData;
 			}catch(UnsupportedBlockStateException $e){
 				$blockDecodeErrors[$e->getMessage()][] = $i;
 				$palette[] = $this->blockStateDeserializer->deserialize(GlobalBlockStateHandlers::getUnknownBlockStateData());
@@ -677,6 +680,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	 */
 	public function loadChunk(int $chunkX, int $chunkZ) : ?LoadedChunkData{
 		$this->storageInUse = true;
+		$this->blockStatesUpgraded = false;
 		$index = self::chunkIndex($chunkX, $chunkZ, $this->storageDimension);
 
 		$chunkVersion = $this->readVersion($chunkX, $chunkZ);
@@ -780,7 +784,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 
 		return new LoadedChunkData(
 			data: new ChunkData($subChunks, $terrainPopulated, $entities, $tiles),
-			upgraded: $hasBeenUpgraded,
+			upgraded: $hasBeenUpgraded || $this->blockStatesUpgraded,
 			fixerFlags: LoadedChunkData::FIXER_FLAG_ALL //TODO: fill this by version rather than just setting all flags
 		);
 	}

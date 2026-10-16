@@ -216,3 +216,26 @@ es `2,64,1`; el destino `0,46,0` no tiene suelo en ese mapa.
 11. Eliminar o sustituir el enlace durante una carga pendiente: la solicitud
     anterior no debe transportar después. Al reiniciar, el plugin debe restaurar
     sus enlaces desde su propia configuración.
+
+### Compatibilidad de mapas importados y pantalla de carga
+
+LevelDB conserva la actualización automática de formatos antiguos. Los chunks se
+marcan para guardarse en el formato actual en el siguiente autoguardado o descarga.
+También adapta las propiedades derivadas `minecraft:corner` de escaleras y
+`minecraft:connection_*` de vallas, paneles y barrotes, guardadas por otros forks.
+La orientación y la mitad superior/inferior se conservan; las conexiones se
+recalculan desde los bloques vecinos. Las propiedades desconocidas o malformadas
+siguen generando errores. Un chunk adaptado se vuelve a guardar aunque su versión
+de contenedor ya sea actual; una vez guardado no requiere repetir esa adaptación.
+
+Al cambiar de dimensión, la confirmación se envía después de encolar los nueve
+chunks que rodean la llegada, tanto con caché como con compresión asíncrona. No se
+introduce una espera fija. Un nuevo viaje sustituye la llegada pendiente y los
+chunks de otro mundo no pueden completarla. Con depuración activa se registra el
+inicio y el tiempo de preparación del terreno. El tiempo de encolado no equivale
+al de recepción o renderizado en el cliente: una espera restante necesita
+comprobarse con el log y un cliente conectado.
+
+Antes de actualizar mundos importados, conserva una copia de sus datos originales.
+El lector no puede reconstruir bloques que una versión anterior ya haya guardado
+como `INFO_UPDATE`; esas zonas requieren recuperarse del mapa original.
