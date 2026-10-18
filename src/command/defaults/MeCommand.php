@@ -32,7 +32,7 @@ use pocketmine\utils\TextFormat;
 use function count;
 use function implode;
 
-class MeCommand extends VanillaCommand{
+class MeCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,7 +43,7 @@ class MeCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_ME);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}

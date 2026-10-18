@@ -33,7 +33,7 @@ use pocketmine\utils\TextFormat;
 use function array_shift;
 use function count;
 
-class OpCommand extends VanillaCommand{
+class OpCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,7 +44,7 @@ class OpCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_OP_GIVE);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}

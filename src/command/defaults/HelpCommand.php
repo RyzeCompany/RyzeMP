@@ -43,7 +43,7 @@ use const PHP_INT_MAX;
 use const SORT_FLAG_CASE;
 use const SORT_NATURAL;
 
-class HelpCommand extends VanillaCommand{
+class HelpCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -55,7 +55,7 @@ class HelpCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_HELP);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			$commandName = "";
 			$pageNumber = 1;

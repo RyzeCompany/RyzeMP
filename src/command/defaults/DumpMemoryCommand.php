@@ -29,7 +29,7 @@ use pocketmine\permission\DefaultPermissionNames;
 use Symfony\Component\Filesystem\Path;
 use function date;
 
-class DumpMemoryCommand extends VanillaCommand{
+class DumpMemoryCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -40,7 +40,7 @@ class DumpMemoryCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_DUMPMEMORY);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$sender->getServer()->getMemoryManager()->dumpServerMemory($args[0] ?? (Path::join($sender->getServer()->getDataPath(), "memory_dumps", date("D_M_j-H.i.s-T_Y"))), 48, 80);
 		return true;
 	}

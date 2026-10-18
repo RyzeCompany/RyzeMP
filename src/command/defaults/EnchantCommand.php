@@ -32,7 +32,7 @@ use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
 
-class EnchantCommand extends VanillaCommand{
+class EnchantCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +46,7 @@ class EnchantCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}

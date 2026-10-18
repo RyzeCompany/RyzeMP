@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find src generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          find src lib generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Build phar
         run: php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
@@ -143,3 +143,4 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

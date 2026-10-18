@@ -33,7 +33,7 @@ use function array_shift;
 use function count;
 use function implode;
 
-class BanCommand extends VanillaCommand{
+class BanCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,7 +44,7 @@ class BanCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_BAN_PLAYER);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}

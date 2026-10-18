@@ -31,7 +31,7 @@ use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function count;
 
-class TransferServerCommand extends VanillaCommand{
+class TransferServerCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +42,7 @@ class TransferServerCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_TRANSFERSERVER);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 1){
 			throw new InvalidCommandSyntaxException();
 		}elseif(!($sender instanceof Player)){

@@ -35,7 +35,7 @@ use function sort;
 use function strtolower;
 use const SORT_STRING;
 
-class BanListCommand extends VanillaCommand{
+class BanListCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +46,7 @@ class BanListCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_BAN_LIST);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(isset($args[0])){
 			$args[0] = strtolower($args[0]);
 			if($args[0] === "ips"){

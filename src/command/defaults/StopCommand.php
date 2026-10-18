@@ -28,7 +28,7 @@ use pocketmine\command\CommandSender;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 
-class StopCommand extends VanillaCommand{
+class StopCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -38,7 +38,7 @@ class StopCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_STOP);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_stop_start());
 
 		$sender->getServer()->shutdown();

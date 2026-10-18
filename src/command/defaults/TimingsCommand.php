@@ -51,7 +51,7 @@ use const CURLOPT_HTTPHEADER;
 use const CURLOPT_POST;
 use const CURLOPT_POSTFIELDS;
 
-class TimingsCommand extends VanillaCommand{
+class TimingsCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -62,7 +62,7 @@ class TimingsCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_TIMINGS);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

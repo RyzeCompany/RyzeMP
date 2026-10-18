@@ -32,7 +32,7 @@ use function memory_get_usage;
 use function number_format;
 use function round;
 
-class GarbageCollectorCommand extends VanillaCommand{
+class GarbageCollectorCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +42,7 @@ class GarbageCollectorCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_GC);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$chunksCollected = 0;
 		$entitiesCollected = 0;
 

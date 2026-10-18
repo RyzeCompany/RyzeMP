@@ -37,7 +37,7 @@ use function sort;
 use function strtolower;
 use const SORT_STRING;
 
-class WhitelistCommand extends VanillaCommand{
+class WhitelistCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -55,7 +55,7 @@ class WhitelistCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 1){
 			switch(strtolower($args[0])){
 				case "reload":

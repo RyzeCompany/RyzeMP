@@ -31,7 +31,7 @@ use pocketmine\permission\DefaultPermissionNames;
 use function count;
 use function inet_pton;
 
-class PardonIpCommand extends VanillaCommand{
+class PardonIpCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,7 +43,7 @@ class PardonIpCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_UNBAN_IP);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

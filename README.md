@@ -2,7 +2,7 @@
 
 **RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeMCBE and based on PocketMine-MP 5.
 
-> Development status: **1.0.0-beta.1**. This is a development branch; no stable RyzeMP release has been published yet.
+> Development status: **1.0.0-beta.3**. This is a development branch; no stable RyzeMP release has been published yet.
 
 ## Features and purpose
 
@@ -15,14 +15,23 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 
 ## Get RyzeMP — two distribution channels
 
-- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the repositories are accessible and the release is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.1" --no-dev --prefer-dist`.
-- **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.1.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
+- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the repositories are accessible and the release is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
+- **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.3.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
 
 **These public channels are prepared, not published yet.** RyzeMP and both libraries currently require authorized access; the first public release is subject to dependency publication and live game tests.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
 The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `PocketMine-MP.phar` for existing installs.
+
+## Native command API
+
+RyzeMP includes Commando 3.3.0 for plugins, with structured arguments emitted
+through the native multiversion command pipeline. See [the command API](docs/COMMAND_API.md).
+
+`/enchant` suggests both vanilla names and custom enchantments registered by plugins.
+The list is read from the native registry when command metadata is generated, including
+the 14 custom enchantments in HardCoreFactions beta.16. No separate HCF update is needed.
 
 ## Compatibility
 
@@ -48,4 +57,5 @@ RyzeMP is a derivative of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP)
 The covered PocketMine-MP code remains under **LGPL-3.0-or-later**; see [LICENSE](LICENSE) and preserve existing copyright notices. The RyzeMP name does not imply the upstream maintainers endorse this fork.
 
 Minecraft is a trademark of Mojang/Microsoft. RyzeMP is an independent community project and is not affiliated with or endorsed by Mojang or Microsoft.
+
 

@@ -34,7 +34,7 @@ use pocketmine\utils\TextFormat;
 use pocketmine\world\World;
 use function count;
 
-class SetWorldSpawnCommand extends VanillaCommand{
+class SetWorldSpawnCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,7 +45,7 @@ class SetWorldSpawnCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SETWORLDSPAWN);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			if($sender instanceof Player){
 				$location = $sender->getPosition();

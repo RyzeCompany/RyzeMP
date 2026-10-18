@@ -36,7 +36,7 @@ use function count;
 use function str_ends_with;
 use function substr;
 
-class XpCommand extends VanillaCommand{
+class XpCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -50,7 +50,7 @@ class XpCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 1){
 			throw new InvalidCommandSyntaxException();
 		}

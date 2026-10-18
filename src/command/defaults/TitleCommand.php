@@ -31,7 +31,7 @@ use function array_slice;
 use function count;
 use function implode;
 
-class TitleCommand extends VanillaCommand{
+class TitleCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,7 +45,7 @@ class TitleCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}
