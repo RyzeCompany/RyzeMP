@@ -212,6 +212,7 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 		array_unshift($keys, $subCommand->getName());
 		$keys = array_unique($keys);
 		foreach($keys as $key) {
+			$key = strtolower($key);
 			if(!isset($this->subCommands[$key])) {
 				$subCommand->setParent($this);
 				$this->subCommands[$key] = $subCommand;
