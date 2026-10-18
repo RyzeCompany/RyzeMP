@@ -67,6 +67,8 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 
 	/** @var CommandSender */
 	protected CommandSender $currentSender;
+	/** @var list<string> Original tokens, including the subcommand, for compatible adapters. */
+	private array $rawArguments = [];
 
 	/** @var BaseSubCommand[] */
 	private array $subCommands = [];
@@ -99,6 +101,9 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 	/** @return list<\pocketmine\network\mcpe\protocol\types\command\CommandOverload> */
 	public function getNetworkOverloads(CommandSender $sender) : array{return NetworkCommandBuilder::build($this, $sender);}
 
+	/** @return list<string> */
+	public function getRawArguments() : array{return $this->rawArguments;}
+
 	public function getOwningPlugin(): Plugin {
 		return $this->plugin;
 	}
@@ -106,6 +111,7 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 	final public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(!$this->plugin->isEnabled()){return;}
 		$this->currentSender = $sender;
+		$this->rawArguments = $args;
 		if(!$this->testPermission($sender)){
 			return;
 		}

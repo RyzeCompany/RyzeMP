@@ -86,6 +86,7 @@ final class NativeCommandApiTest extends TestCase{
 		});
 		$command->execute($this->sender, "sample", ["15", "true"]);
 		self::assertSame(["amount" => 15, "enabled" => true], $command->calls[0]);
+		self::assertSame(["15", "true"], $command->getRawArguments());
 		$command->execute($this->sender, "sample", ["bad", "true"]);
 		$command->execute($this->sender, "sample", ["15"]);
 		$command->execute($this->sender, "sample", ["15", "true", "extra"]);

@@ -1,0 +1,102 @@
+name: RyzeMP and HCF command API integration
+
+on:
+  pull_request:
+    paths:
+      - 'src/command/**'
+      - 'src/network/mcpe/NetworkSession.php'
+      - 'lib/commando/**'
+      - 'composer.json'
+      - 'composer.lock'
+      - 'tests/integration/**'
+      - '.github/workflows/command-api-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked server dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
+      - name: Checkout paired HCF beta.15
+        uses: actions/checkout@v4
+        with:
+          repository: RyzeMCBE/HardCoreFactions
+          ref: e82f2c7fe6628d29b08c51dae595ca3cb11b1c9d
+          path: .test-plugins/hcf
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+          persist-credentials: false
+      - name: HCF libasynql pinned source
+        uses: actions/checkout@v4
+        with:
+          repository: poggit/libasynql
+          ref: 0cb1cb8451513d9fd2e903f7652083fe7b7d6717
+          path: .test-plugins/hcf/.build-deps/libasynql
+          persist-credentials: false
+      - name: HCF InvMenu pinned source
+        uses: actions/checkout@v4
+        with:
+          repository: Muqsit/InvMenu
+          ref: 1035fd9eca0b1ebdd38fc166deb7955406d299e5
+          path: .test-plugins/hcf/.build-deps/invmenu
+          persist-credentials: false
+      - name: Build HCF and verify command flows against this server API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ln -s "$GITHUB_WORKSPACE/vendor/pocketmine/nbt" .test-plugins/hcf/.build-deps/nbt
+          ln -s "$GITHUB_WORKSPACE/vendor/pocketmine/binaryutils" .test-plugins/hcf/.build-deps/binaryutils
+          php -dphar.readonly=0 .test-plugins/hcf/scripts/build-phar.php
+          RYZEMP_COMMAND_API_ROOT="$GITHUB_WORKSPACE" php .test-plugins/hcf/tests/CommandFlowTest.php
+      - name: Build server and prepare paired PHARs
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer dump-autoload --no-dev --classmap-authoritative
+          mkdir -p artifacts
+          php -dphar.readonly=0 build/server-phar.php --out=artifacts/RyzeMP.phar
+          cp .test-plugins/hcf/build/HardCoreFactions.phar artifacts/HardCoreFactions.phar
+      - name: Boot real server PHAR with HCF and verify command registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_root=/tmp/ryzemp-hcf-command-smoke
+          mkdir -p "$test_root/plugins"
+          cp artifacts/HardCoreFactions.phar "$test_root/plugins/HardCoreFactions.phar"
+          cp resources/pocketmine.yml "$test_root/pocketmine.yml"
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' "$test_root/pocketmine.yml"
+          php -dphar.readonly=0 tests/integration/build-hcf-command-smoke.php "$test_root/plugins/NativeCommandSmoke.phar"
+          set +e
+          timeout 120s php artifacts/RyzeMP.phar --no-wizard --disable-ansi --data="$test_root" --plugins="$test_root/plugins" > /tmp/ryzemp-hcf-command-smoke.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/ryzemp-hcf-command-smoke.log
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY|COMMAND_API_HCF_SMOKE_FAILED' /tmp/ryzemp-hcf-command-smoke.log; then
+            exit 1
+          fi
+          test "$status" -eq 0
+          grep -q 'COMMAND_API_HCF_SMOKE_OK roots=44 api=1' /tmp/ryzemp-hcf-command-smoke.log
+      - name: Record paired revision and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'RyzeMP: %s\nHCF: e82f2c7fe6628d29b08c51dae595ca3cb11b1c9d\n' "$GITHUB_SHA" > artifacts/REVISIONS.txt
+          cd artifacts
+          sha256sum RyzeMP.phar HardCoreFactions.phar > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-HCF-native-commands-beta15
+          path: artifacts/
+          if-no-files-found: error

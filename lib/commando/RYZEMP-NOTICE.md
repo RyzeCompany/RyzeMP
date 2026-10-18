@@ -12,7 +12,8 @@ protocolo; PacketHooker como entrada compatible sin interceptor ni dependencia
 SimplePacketHandler; argumentos de red por emisor; bloqueo de plugin deshabilitado;
 constraints del padre también en subcomandos; alias de subcomandos sin distinguir
 mayúsculas; permisos personalizados; enums literales y enteros sin overflow;
-orden estable de alternativas, dejando TextArgument al final.
+orden estable de alternativas, dejando TextArgument al final; acceso a los tokens
+originales para adaptadores que conservan sus manejadores.
 
 Los archivos originales README.md y docs/MIGRATION.md describen la biblioteca
 upstream. Para RyzeMP se usa docs/COMMAND_API.md del repositorio del servidor.

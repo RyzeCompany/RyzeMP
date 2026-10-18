@@ -45,6 +45,9 @@ $this->getServer()->getCommandMap()->register("exampleplugin", $this->command);
 $this->getServer()->getCommandMap()->unregister($this->command);
 ```
 
+`BaseCommand::getRawArguments()` conserva los tokens originales, incluido el
+subcomando, para adaptar manejadores existentes sin reconstruir nombres o texto.
+
 Los subcomandos se registran desde `prepare()` con `registerSubCommand()`. Sus
 permisos y constraints filtran las sugerencias y se revalidan al ejecutar. Las
 restricciones del comando padre se aplican también a los subcomandos. El propietario
