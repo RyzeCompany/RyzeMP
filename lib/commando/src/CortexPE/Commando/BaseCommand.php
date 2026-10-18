@@ -210,9 +210,8 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 	public function registerSubCommand(BaseSubCommand $subCommand): void {
 		$keys = $subCommand->getAliases();
 		array_unshift($keys, $subCommand->getName());
-		$keys = array_unique($keys);
+		$keys = array_unique(array_map("strtolower", $keys));
 		foreach($keys as $key) {
-			$key = strtolower($key);
 			if(!isset($this->subCommands[$key])) {
 				$subCommand->setParent($this);
 				$this->subCommands[$key] = $subCommand;
