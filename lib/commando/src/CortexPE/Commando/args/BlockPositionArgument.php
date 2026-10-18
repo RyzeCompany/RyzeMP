@@ -36,7 +36,9 @@ use function preg_match;
 
 class BlockPositionArgument extends Vector3Argument {
 	public function isValidCoordinate(string $coordinate, bool $locatable): bool {
-		return (bool)preg_match("/^(?:" . ($locatable ? "(?:~-|~\+)?" : "") . "-?\d+)" . ($locatable ? "|~" : "") . "$/", $coordinate);
+		if($locatable && $coordinate === "~"){return true;}
+		if($locatable && str_starts_with($coordinate, "~")){$coordinate = substr($coordinate, 1);}
+		return preg_match("/^[+-]?\\d+$/D", $coordinate) === 1;
 	}
 
 	public function parse(string $argument, CommandSender $sender) : Vector3{
