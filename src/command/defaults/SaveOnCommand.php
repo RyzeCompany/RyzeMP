@@ -28,7 +28,7 @@ use pocketmine\command\CommandSender;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 
-class SaveOnCommand extends VanillaCommand{
+class SaveOnCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -38,7 +38,7 @@ class SaveOnCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SAVE_ENABLE);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$sender->getServer()->getWorldManager()->setAutoSave(true);
 
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_save_enabled());

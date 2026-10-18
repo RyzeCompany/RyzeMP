@@ -34,7 +34,7 @@ use pocketmine\utils\TextFormat;
 use function count;
 use function strtolower;
 
-class EffectCommand extends VanillaCommand{
+class EffectCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -48,7 +48,7 @@ class EffectCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}

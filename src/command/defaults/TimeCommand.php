@@ -32,7 +32,7 @@ use pocketmine\player\Player;
 use pocketmine\world\World;
 use function count;
 
-class TimeCommand extends VanillaCommand{
+class TimeCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -49,7 +49,7 @@ class TimeCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 1){
 			throw new InvalidCommandSyntaxException();
 		}

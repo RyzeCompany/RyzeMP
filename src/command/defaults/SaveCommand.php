@@ -30,7 +30,7 @@ use pocketmine\permission\DefaultPermissionNames;
 use function microtime;
 use function round;
 
-class SaveCommand extends VanillaCommand{
+class SaveCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -40,7 +40,7 @@ class SaveCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SAVE_PERFORM);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::pocketmine_save_start());
 		$start = microtime(true);
 

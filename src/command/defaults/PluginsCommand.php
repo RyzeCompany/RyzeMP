@@ -34,7 +34,7 @@ use function implode;
 use function sort;
 use const SORT_STRING;
 
-class PluginsCommand extends VanillaCommand{
+class PluginsCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +46,7 @@ class PluginsCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_PLUGINS);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$list = array_map(function(Plugin $plugin) : string{
 			return ($plugin->isEnabled() ? TextFormat::GREEN : TextFormat::RED) . $plugin->getDescription()->getFullName();
 		}, $sender->getServer()->getPluginManager()->getPlugins());

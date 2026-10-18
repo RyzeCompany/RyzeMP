@@ -15,13 +15,13 @@ use function count;
 use function implode;
 use function strtolower;
 
-final class GameRuleCommand extends VanillaCommand{
+final class GameRuleCommand extends NativeCommand{
 	public function __construct(){
 		parent::__construct("gamerule", "Consultar o cambiar reglas del mundo", "/gamerule [regla] [true|false] [mundo]", ["gr", "gamerules"]);
 		$this->setPermission(DefaultPermissionNames::COMMAND_GAMERULE);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args) : bool{
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args) : bool{
 		if(!$this->testPermission($sender)){ return true; }
 		if(count($args) > 3){ throw new InvalidCommandSyntaxException(); }
 		$world = isset($args[2]) ? $sender->getServer()->getWorldManager()->getWorldByName($args[2]) :

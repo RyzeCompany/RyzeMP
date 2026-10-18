@@ -76,3 +76,11 @@ lista vacía oculta ese comando para el emisor indicado.
 Las pruebas automatizadas cubren generación nativa, aliases, restricciones,
 parsing y la conversión antigua/moderna. Las sugerencias visuales y la interacción
 de clientes Bedrock de diferentes versiones requieren la prueba en juego.
+
+## Native server commands
+
+All 42 built-in commands now extend `NativeCommand` and use the same Commando argument parser as plugins. `NativeCommandDefinitions` declares every complete syntax alternative, including the six forms of `/tp`, text/NBT tails, relative coordinates, `/title` branches and permission-specific `/time` and `/whitelist` actions. Invalid argument types and incomplete or extra arguments return the existing localized usage message before any handler runs. Gameplay handlers retain their target permissions, bounds, messages and raw quoted tokens.
+
+`OverloadedCommand` is available for server-owned commands without a plugin owner. Call `registerOverload(list<BaseArgument>, ?string $permission)` for each complete syntax, and implement `executeParsed()`; execution and network suggestions use those same signatures. Commando `BaseCommand` remains the plugin API. Both use `NetworkCommandBuilder::buildArguments()` and `ArgumentableTrait`; neither needs packet interception. Existing third-party subclasses of `Command` and `VanillaCommand` retain their old execution API.
+
+The coordinated integration workflow boots the built server archive with the HCF archive, checks all 42 native commands and all 44 HCF roots, and publishes both PHARs in one artifact. Runtime classes are verified inside the server archive's decompressed cache, which is how the native PHAR loader operates.

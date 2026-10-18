@@ -35,7 +35,7 @@ use function count;
 use function implode;
 use function trim;
 
-class KickCommand extends VanillaCommand{
+class KickCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +46,7 @@ class KickCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_KICK);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}

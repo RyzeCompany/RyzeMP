@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: RyzeMCBE/HardCoreFactions
-          ref: e82f2c7fe6628d29b08c51dae595ca3cb11b1c9d
+          ref: 00b90de51350400ea252a5199699acbb1764c7c1
           path: .test-plugins/hcf
           token: ${{ secrets.SUBMODULE_TOKEN }}
           persist-credentials: false
@@ -92,7 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'RyzeMP: %s\nHCF: e82f2c7fe6628d29b08c51dae595ca3cb11b1c9d\n' "$GITHUB_SHA" > artifacts/REVISIONS.txt
+          printf 'RyzeMP: %s\nHCF: 00b90de51350400ea252a5199699acbb1764c7c1\n' "$GITHUB_SHA" > artifacts/REVISIONS.txt
           cd artifacts
           sha256sum RyzeMP.phar HardCoreFactions.phar > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4

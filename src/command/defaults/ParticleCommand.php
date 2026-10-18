@@ -73,7 +73,7 @@ use function microtime;
 use function mt_rand;
 use function strtolower;
 
-class ParticleCommand extends VanillaCommand{
+class ParticleCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -84,7 +84,7 @@ class ParticleCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_PARTICLE);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 7){
 			throw new InvalidCommandSyntaxException();
 		}

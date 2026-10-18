@@ -34,7 +34,7 @@ use pocketmine\world\World;
 use function count;
 use function round;
 
-class SpawnpointCommand extends VanillaCommand{
+class SpawnpointCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -48,7 +48,7 @@ class SpawnpointCommand extends VanillaCommand{
 		]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$target = $this->fetchPermittedPlayerTarget($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_SPAWNPOINT_SELF, DefaultPermissionNames::COMMAND_SPAWNPOINT_OTHER);
 		if($target === null){
 			return true;

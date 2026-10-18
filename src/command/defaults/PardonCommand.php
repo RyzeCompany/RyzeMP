@@ -30,7 +30,7 @@ use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
 
-class PardonCommand extends VanillaCommand{
+class PardonCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +42,7 @@ class PardonCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_UNBAN_PLAYER);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

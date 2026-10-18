@@ -34,7 +34,7 @@ use function array_shift;
 use function count;
 use function implode;
 
-class TellCommand extends VanillaCommand{
+class TellCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +46,7 @@ class TellCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_TELL);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}

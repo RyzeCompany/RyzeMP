@@ -36,7 +36,7 @@ use function number_format;
 use function round;
 use function strval;
 
-class StatusCommand extends VanillaCommand{
+class StatusCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -63,7 +63,7 @@ class StatusCommand extends VanillaCommand{
 		return l10n::pocketmine_command_status_memory_stat(number_format(round(($bytes / 1024) / 1024, 2), 2))->prefix(TextFormat::RED);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$mUsage = Process::getAdvancedMemoryUsage();
 
 		$server = $sender->getServer();

@@ -37,7 +37,7 @@ use function array_shift;
 use function count;
 use function round;
 
-class TeleportCommand extends VanillaCommand{
+class TeleportCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -61,7 +61,7 @@ class TeleportCommand extends VanillaCommand{
 		return $subject;
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		switch(count($args)){
 			case 1: // /tp targetPlayer
 			case 3: // /tp x y z

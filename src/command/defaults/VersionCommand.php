@@ -36,7 +36,7 @@ use function stripos;
 use function strtolower;
 use const PHP_VERSION;
 
-class VersionCommand extends VanillaCommand{
+class VersionCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -48,7 +48,7 @@ class VersionCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_VERSION);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			$sender->sendMessage(TextFormat::GOLD . "---- " . VersionInfo::NAME . " ----");
 			$sender->sendMessage(TextFormat::GREEN . "Software: " . TextFormat::WHITE . VersionInfo::NAME);

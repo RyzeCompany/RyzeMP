@@ -37,7 +37,7 @@ use pocketmine\utils\TextFormat;
 use function count;
 use function min;
 
-class ClearCommand extends VanillaCommand{
+class ClearCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -48,7 +48,7 @@ class ClearCommand extends VanillaCommand{
 		$this->setPermissions([DefaultPermissionNames::COMMAND_CLEAR_SELF, DefaultPermissionNames::COMMAND_CLEAR_OTHER]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) > 3){
 			throw new InvalidCommandSyntaxException();
 		}

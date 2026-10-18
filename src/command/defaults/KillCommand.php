@@ -31,7 +31,7 @@ use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
 
-class KillCommand extends VanillaCommand{
+class KillCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,7 +43,7 @@ class KillCommand extends VanillaCommand{
 		$this->setPermissions([DefaultPermissionNames::COMMAND_KILL_SELF, DefaultPermissionNames::COMMAND_KILL_OTHER]);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) >= 2){
 			throw new InvalidCommandSyntaxException();
 		}

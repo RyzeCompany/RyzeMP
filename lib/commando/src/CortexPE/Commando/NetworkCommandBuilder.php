@@ -23,15 +23,15 @@ final class NetworkCommandBuilder{
 			// Include registered aliases in the accepted enum as well as the primary name.
 			$names = array_values(array_unique([$sub->getName(), ...$sub->getAliases()]));
 			$prefix = CommandParameter::enum($label, new CommandHardEnum($command->getName() . ":" . $label, $names), 0);
-			foreach(self::arguments($sub, $sender) as $overload){
+			foreach(self::buildArguments($sub, $sender) as $overload){
 				$overloads[] = new CommandOverload(false, [$prefix, ...$overload->getParameters()]);
 			}
 		}
-		return [...$overloads, ...self::arguments($command, $sender)];
+		return [...$overloads, ...self::buildArguments($command, $sender)];
 	}
 
 	/** @return list<CommandOverload> */
-	private static function arguments(IArgumentable $command, CommandSender $sender) : array{
+	public static function buildArguments(IArgumentable $command, CommandSender $sender) : array{
 		$sets = [[]];
 		foreach($command->getArgumentList() as $alternatives){
 			$next = [];

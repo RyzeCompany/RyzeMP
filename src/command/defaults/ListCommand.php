@@ -34,7 +34,7 @@ use function implode;
 use function sort;
 use const SORT_STRING;
 
-class ListCommand extends VanillaCommand{
+class ListCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,7 +44,7 @@ class ListCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_LIST);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		$playerNames = array_map(function(Player $player) : string{
 			return $player->getName();
 		}, array_filter($sender->getServer()->getOnlinePlayers(), function(Player $player) use ($sender) : bool{

@@ -31,7 +31,7 @@ use pocketmine\player\GameMode;
 use pocketmine\ServerProperties;
 use function count;
 
-class DefaultGamemodeCommand extends VanillaCommand{
+class DefaultGamemodeCommand extends NativeCommand{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +42,7 @@ class DefaultGamemodeCommand extends VanillaCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_DEFAULTGAMEMODE);
 	}
 
-	public function execute(CommandSender $sender, string $commandLabel, array $args){
+	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
