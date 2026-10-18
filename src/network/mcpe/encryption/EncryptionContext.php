@@ -25,6 +25,7 @@ namespace pocketmine\network\mcpe\encryption;
 
 use Crypto\Cipher;
 use pmmp\encoding\LE;
+use pocketmine\network\mcpe\protocol\ProtocolTransportInfo;
 use function bin2hex;
 use function openssl_digest;
 use function openssl_error_string;
@@ -70,6 +71,11 @@ class EncryptionContext{
 			"AES-256-CTR",
 			substr($encryptionKey, 0, 12) . "\x00\x00\x00\x02"
 		);
+	}
+
+	/** Select encryption for this session without changing the global switch. */
+	public static function forProtocol(string $encryptionKey, int $protocolId) : self{
+		return ProtocolTransportInfo::usesCfb8Encryption($protocolId) ? self::cfb8($encryptionKey) : self::fakeGCM($encryptionKey);
 	}
 
 	public static function cfb8(string $encryptionKey) : self{
