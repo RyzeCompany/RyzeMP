@@ -27,7 +27,7 @@ final class NativeCommandDefinitions{
 			"deop", "op", "pardon", "pardon-ip" => [[$s("target")]],
 			"dumpmemory" => [[$s("path", true)]],
 			"effect" => [[$p(), $s("effect"), new A("seconds", "duration", true), $i("amplifier", true), $e("hideParticles", ["true", "false", "on", "off", "t", "f", "1", "0"], true)]],
-			"enchant" => [[$p(), $s("enchantment"), $i("level", true)]],
+			"enchant" => [[$p(), new A("enchantment", "enchantment"), $i("level", true)]],
 			"gamerule" => [[$s("rule", true), $e("value", ["true", "false"], true), new A("world", "world", true)]],
 			"give" => [[$p(), $s("item"), $i("amount", true), $t("nbt", true)]],
 			"help" => [[$t("commandOrPage", true)]],

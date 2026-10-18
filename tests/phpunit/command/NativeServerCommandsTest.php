@@ -10,6 +10,9 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\command\args\NativeArgument;
 use pocketmine\command\defaults\NativeCommand;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\item\enchantment\StringToEnchantmentParser;
+use pocketmine\item\enchantment\VanillaEnchantments;
+use pocketmine\network\mcpe\protocol\types\command\CommandSoftEnum;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\permission\Permission;
 use pocketmine\permission\PermissionManager;
@@ -103,5 +106,47 @@ final class NativeServerCommandsTest extends TestCase{
 		$args = ["Space Name", "0010", '{Name:"Hello World"}'];
 		self::assertTrue($command->execute($this->sender, "give-test", $args));
 		self::assertSame($args, $command->received);
+	}
+
+	public function testEnchantPublishesRegisteredVanillaNamesForOldAndCurrentProtocols() : void{
+		$command = $this->map->getCommand("enchant");
+		foreach([589, PHP_INT_MAX] as $protocol){
+			$parameters = CommandMetadata::forProtocol($command, $this->sender, $protocol)[0]->getParameters();
+			self::assertSame("enchantment", $parameters[1]->paramName);
+			self::assertInstanceOf(CommandSoftEnum::class, $parameters[1]->enum);
+			self::assertSame("native:enchantment", $parameters[1]->enum->getName());
+			self::assertContains("sharpness", $parameters[1]->enum->getValues());
+			self::assertContains("unbreaking", $parameters[1]->enum->getValues());
+			self::assertSame(array_map("strval", StringToEnchantmentParser::getInstance()->getKnownAliases()), $parameters[1]->enum->getValues());
+		}
+		// Suggestions do not replace the handler's parser, normalization or not-found message.
+		foreach(["minecraft:sharpness", "SHARPNESS", "unregistered_enchantment"] as $name){
+			self::assertSame([], $command->getSignatures()[0]->parseArguments(["@s", $name, "1"], $this->sender)["errors"]);
+		}
+	}
+
+	public function testEnchantSuggestionsIncludePluginAliasesRegisteredAfterCommandConstruction() : void{
+		$original = StringToEnchantmentParser::getInstance();
+		$parser = clone $original;
+		StringToEnchantmentParser::setInstance($parser);
+		try{
+			$command = $this->map->getCommand("enchant");
+			$before = CommandMetadata::forProtocol($command, $this->sender, 589)[0]->getParameters()[1]->enum;
+			self::assertNotContains("native_api_test_custom", $before->getValues());
+			$parser->register("Native API Test Custom", static fn() => VanillaEnchantments::UNBREAKING());
+			$parser->registerAlias("native_api_test_custom", "native_api_test_alias");
+			$parser->register("12345", static fn() => VanillaEnchantments::UNBREAKING());
+			foreach([589, PHP_INT_MAX] as $protocol){
+				$enum = CommandMetadata::forProtocol($command, $this->sender, $protocol)[0]->getParameters()[1]->enum;
+				self::assertInstanceOf(CommandSoftEnum::class, $enum);
+				self::assertContains("sharpness", $enum->getValues());
+				self::assertContains("native_api_test_custom", $enum->getValues());
+				self::assertContains("native_api_test_alias", $enum->getValues());
+				self::assertContains("12345", $enum->getValues());
+			}
+			self::assertNotContains("native_api_test_custom", $before->getValues(), "Existing metadata must remain unchanged");
+		}finally{
+			StringToEnchantmentParser::setInstance($original);
+		}
 	}
 }

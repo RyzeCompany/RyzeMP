@@ -77,6 +77,15 @@ Las pruebas automatizadas cubren generación nativa, aliases, restricciones,
 parsing y la conversión antigua/moderna. Las sugerencias visuales y la interacción
 de clientes Bedrock de diferentes versiones requieren la prueba en juego.
 
+Desde RyzeMP 1.0.0-beta.3, `/enchant <jugador> <encantamiento> [nivel]` anuncia
+los nombres vanilla y custom de `StringToEnchantmentParser` en una lista dinámica.
+Registrar un encantamiento con `StringToEnchantmentParser::register()` lo incluye
+en las próximas sincronizaciones; los registros realizados al cargar el plugin
+ya aparecen al conectarse el jugador. Si se añaden aliases durante el juego,
+llamar a `CommandMetadata::refresh($server)` para reenviar la lista a los conectados.
+Se conserva la validación y el mensaje de encantamiento desconocido del comando.
+No es necesario modificar `/enchant` ni mantener una segunda lista en el plugin.
+
 ## Native server commands
 
 All 42 built-in commands now extend `NativeCommand` and use the same Commando argument parser as plugins. `NativeCommandDefinitions` declares every complete syntax alternative, including the six forms of `/tp`, text/NBT tails, relative coordinates, `/title` branches and permission-specific `/time` and `/whitelist` actions. Invalid argument types and incomplete or extra arguments return the existing localized usage message before any handler runs. Gameplay handlers retain their target permissions, bounds, messages and raw quoted tokens.

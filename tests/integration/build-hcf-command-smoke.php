@@ -50,6 +50,15 @@ final class NativeCommandSmoke extends PluginBase{
                 foreach(["f list","rank","listranks","pocketmine:help give","pocketmine:time query","pocketmine:enchant no_player sharpness 1"] as $input){if(!$server->dispatchCommand($sender,$input)){throw new \RuntimeException("Console routing failed: ".$input);}}
                 $f=$map->getCommand("hardcorefactions:f");$old=CommandMetadata::forProtocol($f,$sender,589);$modern=CommandMetadata::forProtocol($f,$sender,PHP_INT_MAX);
                 if($old===[]||$modern===[]){throw new \RuntimeException("Native metadata missing for console-visible subcommands");}
+                $custom=["speed","fire_resistance","invisibility","jump_boost","night_vision","glowing","implants","gappler","nutrition","water_breathing","smelting_touch","recover","rage","gears"];
+                foreach([589,PHP_INT_MAX] as $protocol){
+                    $parameter=CommandMetadata::forProtocol($map->getCommand("pocketmine:enchant"),$sender,$protocol)[0]->getParameters()[1];
+                    if(!$parameter->enum instanceof \pocketmine\network\mcpe\protocol\types\command\CommandSoftEnum){throw new \RuntimeException("Enchant suggestions missing");}
+                    foreach(["sharpness","unbreaking",...$custom] as $name){
+                        if(!in_array($name,$parameter->enum->getValues(),true)){throw new \RuntimeException("Missing enchant suggestion: ".$name." protocol=".$protocol);}
+                    }
+                }
+                $this->getLogger()->info("ENCHANT_SUGGESTIONS_HCF_OK custom=".count($custom)." protocols=2");
                 $this->getLogger()->info("COMMAND_API_HCF_SMOKE_OK roots=".$count." api=".CommandMetadata::API_VERSION." native=".$native);
                 $finished=true;$server->shutdown();
             }catch(\Throwable $error){

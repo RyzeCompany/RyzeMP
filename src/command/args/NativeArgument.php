@@ -7,6 +7,7 @@ namespace pocketmine\command\args;
 use CortexPE\Commando\args\IntegerArgument;
 use CortexPE\Commando\args\RawStringArgument;
 use pocketmine\command\CommandSender;
+use pocketmine\item\enchantment\StringToEnchantmentParser;
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
 use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
 use pocketmine\network\mcpe\protocol\types\command\CommandParameter;
@@ -59,6 +60,7 @@ final class NativeArgument extends RawStringArgument{
 			return CommandParameter::enum($this->name, new CommandHardEnum("native:" . $this->name . ":" . md5(implode("|", $this->values)), $this->values), 0, $this->optional);
 		}
 		$values = match($this->kind){
+			"enchantment" => array_map("strval", StringToEnchantmentParser::getInstance()->getKnownAliases()),
 			"player" => ["@s", ...array_map(static fn($player) : string => $player->getName(), array_values($sender->getServer()->getOnlinePlayers()))],
 			"world" => array_map(static fn($world) : string => $world->getFolderName(), array_values($sender->getServer()->getWorldManager()->getWorlds())),
 			default => null

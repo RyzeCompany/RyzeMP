@@ -30,11 +30,11 @@ jobs:
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress
         env:
           COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
-      - name: Checkout paired HCF beta.15
+      - name: Checkout paired HCF beta.16
         uses: actions/checkout@v4
         with:
           repository: RyzeMCBE/HardCoreFactions
-          ref: 00b90de51350400ea252a5199699acbb1764c7c1
+          ref: d7b3df22ca3fcbe8827ba14e9e08dc65304562b5
           path: .test-plugins/hcf
           token: ${{ secrets.SUBMODULE_TOKEN }}
           persist-credentials: false
@@ -68,6 +68,7 @@ jobs:
           mkdir -p artifacts
           php -dphar.readonly=0 build/server-phar.php --out=artifacts/RyzeMP.phar
           cp .test-plugins/hcf/build/HardCoreFactions.phar artifacts/HardCoreFactions.phar
+          RYZEMP_NATIVE_PHAR="$GITHUB_WORKSPACE/artifacts/RyzeMP.phar" php .test-plugins/hcf/tests/NativeEnchantmentTest.php
       - name: Boot real server PHAR with HCF and verify command registration
         shell: bash
         run: |
@@ -88,15 +89,16 @@ jobs:
           fi
           test "$status" -eq 0
           grep -q 'COMMAND_API_HCF_SMOKE_OK roots=44 api=1' /tmp/ryzemp-hcf-command-smoke.log
+          grep -q 'ENCHANT_SUGGESTIONS_HCF_OK custom=14 protocols=2' /tmp/ryzemp-hcf-command-smoke.log
       - name: Record paired revision and checksums
         shell: bash
         run: |
           set -euo pipefail
-          printf 'RyzeMP: %s\nHCF: 00b90de51350400ea252a5199699acbb1764c7c1\n' "$GITHUB_SHA" > artifacts/REVISIONS.txt
+          printf 'RyzeMP: %s\nHCF: d7b3df22ca3fcbe8827ba14e9e08dc65304562b5\n' "$GITHUB_SHA" > artifacts/REVISIONS.txt
           cd artifacts
           sha256sum RyzeMP.phar HardCoreFactions.phar > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: RyzeMP-HCF-native-commands-beta15
+          name: RyzeMP-beta3-HCF-beta16-enchant-suggestions
           path: artifacts/
           if-no-files-found: error
