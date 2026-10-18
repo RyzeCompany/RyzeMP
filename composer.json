@@ -60,14 +60,16 @@
     "replace": {
         "symfony/polyfill-ctype": "*",
         "symfony/polyfill-mbstring": "*",
-        "pocketmine/pocketmine-mp": "*"
+        "pocketmine/pocketmine-mp": "*",
+        "cortexpe/commando": "3.3.0"
     },
     "autoload": {
         "psr-4": {
             "pocketmine\\": [
                 "src/",
                 "generated/"
-            ]
+            ],
+            "CortexPE\\Commando\\": "lib/commando/src/CortexPE/Commando/"
         },
         "files": [
             "src/CoreConstants.php"

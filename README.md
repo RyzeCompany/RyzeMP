@@ -24,6 +24,11 @@ Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [
 
 The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `PocketMine-MP.phar` for existing installs.
 
+## Native command API
+
+RyzeMP includes Commando 3.3.0 for plugins, with structured arguments emitted
+through the native multiversion command pipeline. See [the command API](docs/COMMAND_API.md).
+
 ## Compatibility
 
 Read [Dimension configuration and portal safety](docs/DIMENSIONS.md) to configure
@@ -48,4 +53,5 @@ RyzeMP is a derivative of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP)
 The covered PocketMine-MP code remains under **LGPL-3.0-or-later**; see [LICENSE](LICENSE) and preserve existing copyright notices. The RyzeMP name does not imply the upstream maintainers endorse this fork.
 
 Minecraft is a trademark of Mojang/Microsoft. RyzeMP is an independent community project and is not affiliated with or endorsed by Mojang or Microsoft.
+
 

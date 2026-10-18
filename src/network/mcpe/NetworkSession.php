@@ -1293,6 +1293,8 @@ class NetworkSession{
 				continue;
 			}
 
+			$overloads = \pocketmine\command\CommandMetadata::forProtocol($command, $this->player, $this->getProtocolId());
+			if($overloads === []){continue;}
 			$lname = strtolower($command->getLabel());
 			$aliases = $command->getAliases();
 			$aliasObj = null;
@@ -1311,9 +1313,7 @@ class NetworkSession{
 				0,
 				CommandPermissions::NORMAL,
 				$aliasObj,
-				[
-					new CommandOverload(chaining: false, parameters: [CommandParameter::standard("args", AvailableCommandsPacket::convertArg($this->getProtocolId(), AvailableCommandsPacket::ARG_TYPE_RAWTEXT), 0, true)])
-				],
+				$overloads,
 				chainedSubCommandData: []
 			);
 

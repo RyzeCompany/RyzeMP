@@ -163,6 +163,7 @@ function main() : void{
 		$pharPath,
 		dirname(__DIR__) . DIRECTORY_SEPARATOR,
 		[
+			'lib',
 			'generated',
 			'resources',
 			'src',
@@ -181,3 +182,4 @@ function main() : void{
 }
 
 main();
+
