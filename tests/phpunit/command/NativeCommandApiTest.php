@@ -10,9 +10,11 @@ use CortexPE\Commando\BaseSubCommand;
 use CortexPE\Commando\NetworkCommandBuilder;
 use CortexPE\Commando\PacketHooker;
 use CortexPE\Commando\args\BooleanArgument;
+use CortexPE\Commando\args\BlockPositionArgument;
 use CortexPE\Commando\args\IntegerArgument;
 use CortexPE\Commando\args\RawStringArgument;
 use CortexPE\Commando\args\TextArgument;
+use CortexPE\Commando\args\Vector3Argument;
 use CortexPE\Commando\constraint\BaseConstraint;
 use PHPUnit\Framework\TestCase;
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
@@ -177,6 +179,30 @@ final class NativeCommandApiTest extends TestCase{
 		self::assertSame(1, CommandMetadata::API_VERSION);self::assertTrue(PacketHooker::isRegistered());
 		PacketHooker::register($this->plugin);PacketHooker::register($this->plugin);
 		self::assertTrue(PacketHooker::isRegistered());
+	}
+
+	public function testRelativeCoordinatesWorkForPluginPositionArguments() : void{
+		$player = $this->createMock(\pocketmine\\player\\Player::class);
+		$vector = new Vector3Argument("position");
+		$block = new BlockPositionArgument("block");
+		self::assertTrue($vector->canParse("~ ~1 ~-2.5", $player));
+		self::assertTrue($vector->canParse("~+.5 ~-0.25 ~+2", $player));
+		self::assertTrue($block->canParse("~ ~-1 ~+2", $player));
+		self::assertFalse($block->canParse("~ 1.5 ~", $player));
+		self::assertFalse($vector->canParse("~ ~1 ~-2.5", $this->sender));
+		self::assertTrue($vector->canParse("1 2.5 -3", $this->sender));
+	}
+
+	public function testMixedCaseSubcommandAliasesAreExecutableAndSuggested() : void{
+		$command = $this->command(static function(BaseCommand $cmd) : void{
+			$cmd->registerSubCommand(new TestNativeSubCommand("Who", ["INFO", "Alias"], null));
+		});
+		$command->execute($this->sender, "sample", ["info"]);
+		$command->execute($this->sender, "sample", ["WHO"]);
+		$command->execute($this->sender, "sample", ["aLiAs"]);
+		self::assertSame(3, $command->getSubCommands()["who"]->runs);
+		$overloads = $command->getNetworkOverloads($this->sender);
+		self::assertSame(["Who", "INFO", "Alias"], $overloads[0]->getParameters()[0]->enum->getValues());
 	}
 }
 
