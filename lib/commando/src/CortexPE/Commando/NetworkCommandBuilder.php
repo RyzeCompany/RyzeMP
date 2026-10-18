@@ -21,7 +21,14 @@ final class NetworkCommandBuilder{
 			if($label !== strtolower($sub->getName()) || !$sub->testPermissionSilent($sender)){continue;}
 			foreach($sub->getConstraints() as $constraint){if(!$constraint->isVisibleTo($sender)){continue 2;}}
 			// Include registered aliases in the accepted enum as well as the primary name.
-			$names = array_values(array_unique([$sub->getName(), ...$sub->getAliases()]));
+			$names = [];
+			$seen = [];
+			foreach([$sub->getName(), ...$sub->getAliases()] as $name){
+				$key = strtolower($name);
+				if(isset($seen[$key])){continue;}
+				$seen[$key] = true;
+				$names[] = $name;
+			}
 			$prefix = CommandParameter::enum($label, new CommandHardEnum($command->getName() . ":" . $label, $names), 0);
 			foreach(self::buildArguments($sub, $sender) as $overload){
 				$overloads[] = new CommandOverload(false, [$prefix, ...$overload->getParameters()]);
