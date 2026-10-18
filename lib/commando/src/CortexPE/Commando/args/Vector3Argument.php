@@ -52,7 +52,7 @@ class Vector3Argument extends BaseArgument {
 		$coords = explode(" ", $testString);
 		if(count($coords) === 3) {
 			foreach($coords as $coord) {
-				if(!$this->isValidCoordinate($coord, $sender instanceof Vector3)) {
+				if(!$this->isValidCoordinate($coord, $sender instanceof Entity)) {
 					return false;
 				}
 			}
