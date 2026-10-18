@@ -195,7 +195,7 @@ final class NativeCommandApiTest extends TestCase{
 
 	public function testMixedCaseSubcommandAliasesAreExecutableAndSuggested() : void{
 		$command = $this->command(static function(BaseCommand $cmd) : void{
-			$cmd->registerSubCommand(new TestNativeSubCommand("Who", ["INFO", "Alias"], null));
+			$cmd->registerSubCommand(new TestNativeSubCommand("Who", ["who", "INFO", "Alias"], null));
 		});
 		$command->execute($this->sender, "sample", ["info"]);
 		$command->execute($this->sender, "sample", ["WHO"]);
