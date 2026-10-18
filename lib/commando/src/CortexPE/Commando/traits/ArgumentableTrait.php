@@ -204,4 +204,3 @@ trait ArgumentableTrait{
 		return $this->argumentList;
 	}
 }
-

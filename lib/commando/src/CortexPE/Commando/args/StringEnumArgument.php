@@ -54,7 +54,7 @@ abstract class StringEnumArgument extends BaseArgument {
 	}
 
 	public function canParse(string $testString, CommandSender $sender): bool {
-		return in_array(strtolower($testString), array_map("\\strtolower", $this->getEnumValues()), true);
+		return in_array(strtolower($testString), array_map("strtolower", $this->getEnumValues()), true);
 	}
 
 	public function getValue(string $string) {
@@ -65,4 +65,3 @@ abstract class StringEnumArgument extends BaseArgument {
 		return array_keys(static::VALUES);
 	}
 }
-

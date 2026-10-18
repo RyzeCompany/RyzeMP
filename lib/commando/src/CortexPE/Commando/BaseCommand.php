@@ -237,4 +237,3 @@ abstract class BaseCommand extends Command implements IArgumentable, IRunnable, 
 		return $this->getUsage();
 	}
 }
-

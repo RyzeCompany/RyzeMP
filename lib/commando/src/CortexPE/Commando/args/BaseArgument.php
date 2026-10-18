@@ -99,4 +99,3 @@ abstract class BaseArgument {
 		return $this->parameterData;
 	}
 }
-

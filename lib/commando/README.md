@@ -41,7 +41,7 @@ class MyCommand extends BaseCommand {
 	protected function prepare(): void {
 		// This is where we'll register our arguments and subcommands
 	}
-	
+
 	public function onRun(CommandSender $sender, string $aliasUsed, array $args): void {
 		// This is where the processing will occur if it's NOT handled by other subcommands
 	}
@@ -104,4 +104,3 @@ The error messages are sent in bulk to the users to let them know what parts are
 
 -----
 **This framework was made with :heart: by CortexPE, Enjoy!~ :3**
-

@@ -94,4 +94,3 @@ class Vector3Argument extends BaseArgument {
 		return 3;
 	}
 }
-
