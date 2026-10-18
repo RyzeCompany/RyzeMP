@@ -182,7 +182,7 @@ final class NativeCommandApiTest extends TestCase{
 	}
 
 	public function testRelativeCoordinatesWorkForPluginPositionArguments() : void{
-		$player = $this->createMock(\pocketmine\\player\\Player::class);
+		$player = $this->createMock(\pocketmine\player\Player::class);
 		$vector = new Vector3Argument("position");
 		$block = new BlockPositionArgument("block");
 		self::assertTrue($vector->canParse("~ ~1 ~-2.5", $player));
