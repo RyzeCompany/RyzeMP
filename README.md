@@ -26,6 +26,9 @@ The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `Pocke
 
 ## Compatibility
 
+Read [Dimension configuration and portal safety](docs/DIMENSIONS.md) to configure
+Nether/End worlds and safe arrival points for custom End maps.
+
 RyzeMP has its **own software version**, while `Server::getApiVersion()` retains a PocketMine-MP 5 compatibility value. This is deliberate: plugins must not be forced to declare RyzeMP's independent release version as their API requirement.
 
 Read [RyzeMP compatibility and rebranding contract](docs/RYZEMP_COMPATIBILITY.md) before changing namespaces, Composer package names, or world data identifiers.
@@ -45,3 +48,4 @@ RyzeMP is a derivative of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP)
 The covered PocketMine-MP code remains under **LGPL-3.0-or-later**; see [LICENSE](LICENSE) and preserve existing copyright notices. The RyzeMP name does not imply the upstream maintainers endorse this fork.
 
 Minecraft is a trademark of Mojang/Microsoft. RyzeMP is an independent community project and is not affiliated with or endorsed by Mojang or Microsoft.
+

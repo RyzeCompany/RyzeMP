@@ -7,14 +7,21 @@ namespace pocketmine\world\dimension;
 use pocketmine\entity\Entity;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\Server;
+use pocketmine\utils\Config;
 use pocketmine\world\dimension\generator\GeneratorOptions;
 use pocketmine\world\dimension\generator\end\EndCrystalSpawner;
 use pocketmine\world\dimension\generator\VanillaGenerators;
 use pocketmine\world\dimension\portal\PortalContent;
+use pocketmine\world\dimension\portal\PortalLinkManager;
 use pocketmine\world\dimension\portal\PortalTravel;
 use pocketmine\world\generator\GeneratorManager;
+use pocketmine\world\format\io\WorldProvider;
+use pocketmine\world\format\io\data\BedrockWorldData;
+use pocketmine\world\format\io\leveldb\LevelDB;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
+use function copy;
+use function is_file;
 
 final class DimensionManager{
 
@@ -24,15 +31,20 @@ final class DimensionManager{
 	private Dimensions $dimensions;
 	private PortalTravel $portalTravel;
 	private EndCrystalSpawner $endCrystalSpawner;
+	private DimensionSettings $settings;
+	private PortalLinkManager $portalLinks;
 
 	public function __construct(private Server $server){
+		$path = $server->getDataPath() . "dimensions.yml";
+		if(!is_file($path) && !copy(\pocketmine\RESOURCE_PATH . "dimensions.yml", $path)){
+			throw new \RuntimeException("Could not create dimensions.yml");
+		}
+		$this->settings = DimensionSettings::fromArray((new Config($path, Config::YAML))->getAll());
 		VanillaGenerators::register();
 		PortalContent::register($server->getAsyncPool(), $server->getCraftingManager());
-		$this->dimensions = new Dimensions($server, [
-			DimensionIds::NETHER => self::NETHER_WORLD,
-			DimensionIds::THE_END => self::END_WORLD
-		]);
-		$this->portalTravel = new PortalTravel($this->dimensions);
+		$this->dimensions = new Dimensions($server, $this->settings->getWorldNames());
+		$this->portalLinks = new PortalLinkManager();
+		$this->portalTravel = new PortalTravel($this->dimensions, $this->settings, $this->portalLinks);
 		$this->endCrystalSpawner = new EndCrystalSpawner($this->dimensions);
 	}
 
@@ -40,12 +52,40 @@ final class DimensionManager{
 		return $this->dimensions;
 	}
 
+	/** Returns the registry used by both Nether and End portal travel. Register links on the server thread. */
+	public function getPortalLinkManager() : PortalLinkManager{
+		return $this->portalLinks;
+	}
+
 	/** @phpstan-return DimensionIds::* */
 	public function getDimension(World $world) : int{
 		return $this->dimensions->getDimension($world);
 	}
 
+	/** @internal Select storage before World can load or generate any chunks. */
+	public function configureWorldProvider(string $name, WorldProvider $provider) : void{
+		foreach($this->settings->getWorldNames() as $dimension => $folder){
+			if($name !== $folder){ continue; }
+			if($provider instanceof LevelDB){
+				$provider->configureDimension($dimension, $this->settings->getSourceDimension($dimension));
+				$this->server->getLogger()->info("Native dimensions: $name uses LevelDB source dimension " . $provider->getStorageDimension());
+				$data = $provider->getWorldData();
+				// Imported level.dat describes its Overworld generator, even for a native Nether/End DB.
+				// Preserve plugin generators; replace only the generic vanilla import defaults.
+				if($data instanceof BedrockWorldData && in_array(strtolower($data->getGenerator()), ["default", "normal", "flat"], true)){
+					$data->getCompoundTag()->setString("generatorName", $dimension === DimensionIds::NETHER ? VanillaGenerators::NETHER : VanillaGenerators::END);
+					$data->getCompoundTag()->setString("generatorOptions", GeneratorOptions::encode(\pocketmine\RESOURCE_PATH));
+				}
+			}
+			return;
+		}
+	}
+
 	public function prepareWorlds() : void{
+		$overworld = $this->server->getWorldManager()->getDefaultWorld();
+		if($overworld !== null){
+			$this->settings->validateOverworld($overworld->getFolderName());
+		}
 		$this->prepareWorld(DimensionIds::NETHER, VanillaGenerators::NETHER);
 		$this->prepareWorld(DimensionIds::THE_END, VanillaGenerators::END);
 	}
@@ -95,3 +135,4 @@ final class DimensionManager{
 		$this->server->getLogger()->info("Native dimensions: created {$name}");
 	}
 }
+

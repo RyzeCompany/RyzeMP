@@ -1075,3 +1075,4 @@ class InGamePacketHandler extends PacketHandler{
 		return true;
 	}
 }
+

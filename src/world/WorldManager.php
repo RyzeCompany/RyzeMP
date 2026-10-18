@@ -197,6 +197,7 @@ class WorldManager{
 
 		try{
 			$provider = $providerClass->fromPath($path, new \PrefixedLogger($this->server->getLogger(), "World Provider: $name"));
+			$this->server->getDimensionManager()->configureWorldProvider($name, $provider);
 		}catch(CorruptedWorldException $e){
 			$this->server->getLogger()->error($this->server->getLanguage()->translate(KnownTranslationFactory::pocketmine_level_loadError(
 				$name,
@@ -242,6 +243,7 @@ class WorldManager{
 			$converter = new FormatConverter($provider, $providerClass, Path::join($this->server->getDataPath(), "backups", "worlds"), $this->server->getLogger());
 			$converter->execute();
 			$provider = $providerClass->fromPath($path, new \PrefixedLogger($this->server->getLogger(), "World Provider: $name"));
+			$this->server->getDimensionManager()->configureWorldProvider($name, $provider);
 
 			$this->server->getLogger()->notice($this->server->getLanguage()->translate(KnownTranslationFactory::pocketmine_level_conversion_finish($name, $converter->getBackupPath())));
 		}
@@ -402,3 +404,4 @@ class WorldManager{
 		}
 	}
 }
+

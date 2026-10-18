@@ -166,6 +166,7 @@ abstract class Entity{
 
 	protected bool $closed = false;
 	private bool $closeInFlight = false;
+	private int $portalTravelVersion = 0;
 	private bool $needsDespawn = false;
 
 	protected TimingsHandler $timings;
@@ -565,6 +566,7 @@ abstract class Entity{
 
 	public function kill() : void{
 		if($this->isAlive()){
+			++$this->portalTravelVersion;
 			$this->health = 0;
 			$this->onDeath();
 			$this->scheduleUpdate();
@@ -1488,6 +1490,7 @@ abstract class Entity{
 
 		$this->setMotion(new Vector3(0, 0, 0));
 		if($this->setPositionAndRotation($pos, $yaw ?? $this->location->yaw, $pitch ?? $this->location->pitch)){
+			++$this->portalTravelVersion;
 			$this->resetFallDistance();
 			$this->setForceMovementUpdate();
 
@@ -1497,6 +1500,15 @@ abstract class Entity{
 		}
 
 		return false;
+	}
+
+	/**
+	 * Identifies the entity state used to start delayed portal travel. Changes
+	 * after an accepted teleport, death or disposal, invalidating old requests.
+	 * @internal
+	 */
+	public function getPortalTravelVersion() : int{
+		return $this->portalTravelVersion;
 	}
 
 	public function getId() : int{
@@ -1627,6 +1639,7 @@ abstract class Entity{
 
 		if(!$this->closed){
 			$this->closeInFlight = true;
+			++$this->portalTravelVersion;
 			(new EntityDespawnEvent($this))->call();
 
 			$this->onDispose();
@@ -1755,3 +1768,4 @@ abstract class Entity{
 		return (new \ReflectionClass($this))->getShortName() . "(" . $this->getId() . ")";
 	}
 }
+

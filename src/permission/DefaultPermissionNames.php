@@ -67,6 +67,7 @@ final class DefaultPermissionNames{
 	public const COMMAND_TELEPORT_OTHER = "pocketmine.command.teleport.other";
 	public const COMMAND_TELEPORT_SELF = "pocketmine.command.teleport.self";
 	public const COMMAND_TELL = "pocketmine.command.tell";
+	public const COMMAND_GAMERULE = "pocketmine.command.gamerule";
 	public const COMMAND_TIME_ADD = "pocketmine.command.time.add";
 	public const COMMAND_TIME_QUERY = "pocketmine.command.time.query";
 	public const COMMAND_TIME_SET = "pocketmine.command.time.set";

@@ -10,7 +10,7 @@ use pocketmine\world\World;
 
 /**
  * Maps worlds to Bedrock dimensions. The overworld is the default world; the
- * nether and the end are the worlds named in config.yml. Any other world is
+ * nether and the end are the worlds named in dimensions.yml. Any other world is
  * treated as an overworld.
  */
 final class Dimensions{
@@ -57,6 +57,11 @@ final class Dimensions{
 		return $name === null ? null : $manager->getWorldByName($name);
 	}
 
+	/** Resolves a loaded world for a stable portal destination; does not load or generate worlds. */
+	public function getWorldByName(string $worldName) : ?World{
+		return $this->server->getWorldManager()->getWorldByName($worldName);
+	}
+
 	/**
 	 * Lowest block Y the client of this dimension can see.
 	 */
@@ -75,3 +80,4 @@ final class Dimensions{
 		};
 	}
 }
+

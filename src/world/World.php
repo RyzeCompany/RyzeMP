@@ -73,6 +73,7 @@ use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\NetworkBroadcastUtils;
@@ -504,6 +505,13 @@ class World implements ChunkManager{
 		private AsyncPool $workerPool
 	){
 		$this->folderName = $name;
+		$data = $provider->getWorldData();
+		$defaultCoordinates = false;
+		if($data instanceof \pocketmine\world\format\io\data\BaseNbtWorldData){
+			$tag = $data->getCompoundTag()->getTag(GameRules::SHOW_COORDINATES);
+			$defaultCoordinates = $tag instanceof ByteTag && $tag->getValue() !== 0;
+		}
+		$this->gameRules = new GameRules($provider->getPath() . "/gamerules.yml", $defaultCoordinates);
 		$this->worldId = self::$worldIdCounter++;
 
 		$this->displayName = $this->provider->getWorldData()->getName();
@@ -621,6 +629,18 @@ class World implements ChunkManager{
 
 	final public function getProvider() : WritableWorldProvider{
 		return $this->provider;
+	}
+
+	private GameRules $gameRules;
+
+	public function getGameRules() : GameRules{ return $this->gameRules; }
+
+	/** Saves immediately and updates every player currently viewing this world. */
+	public function setGameRule(string $name, bool $value) : void{
+		$this->gameRules->setBool($name, $value);
+		foreach($this->getPlayers() as $player){
+			$player->getNetworkSession()->syncGameRules($this);
+		}
 	}
 
 	/**
@@ -3765,3 +3785,4 @@ class World implements ChunkManager{
 		}
 	}
 }
+

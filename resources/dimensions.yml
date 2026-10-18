@@ -1,0 +1,27 @@
+# RyzeMP dimensions use separate world folders under worlds/.
+# Existing installations keep world_nether and world_the_end by default.
+nether:
+  enabled: true
+  world: world_nether
+  # auto: prefer native Nether chunks; otherwise keep separate-world storage.
+  # Options: auto, overworld, nether, end. No conversion or renaming of chunks.
+  source-dimension: auto
+
+end:
+  enabled: true
+  world: world_the_end
+  source-dimension: auto
+  arrival:
+    # Enable for a custom map whose level.dat contains its intended spawn.
+    use-world-spawn: false
+    x: 100
+    y: 49
+    z: 0
+    # Only build over empty space, when no nearby safe floor is available.
+    # Existing blocks are never cleared or replaced.
+    create-platform: true
+
+portal:
+  # Cancel the portal request after this many server ticks (600 = 30s at 20 TPS).
+  # This is a server-side loading deadline, not a client loading-screen timer.
+  load-timeout-ticks: 600
