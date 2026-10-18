@@ -240,20 +240,14 @@ Antes de actualizar mundos importados, conserva una copia de sus datos originale
 El lector no puede reconstruir bloques que una versión anterior ya haya guardado
 como `INFO_UPDATE`; esas zonas requieren recuperarse del mapa original.
 
-### Diagnóstico de recepción de terreno
+### Incidencia pendiente en Nether personalizado
 
-Las trazas `Dimension trace #N` distinguen tres etapas: los chunks preparados y
-encolados, sus confirmaciones de recepción RakNet y los avisos START/STOP de la
-pantalla enviados por el cliente. Se observan únicamente los nueve chunks de
-llegada, con coordenadas, tamaño comprimido y SHA-256. Una confirmación RakNet
-acredita la recepción del paquete, no su interpretación ni renderizado. Los avisos
-de pantalla son observaciones; no completan el viaje ni alteran los paquetes de
-juego. Las confirmaciones de un viaje anterior no se atribuyen al siguiente.
+La espera de unos 30 segundos observada con el Nether personalizado sigue sin
+causa ni solución confirmadas. La preparación rápida de los chunks no demuestra
+que el cliente los haya interpretado o renderizado. Las comprobaciones automáticas
+de este cambio no sustituyen esa validación con Bedrock.
 
-Prueba con la misma compilación y el mismo cliente dos idas y vueltas en el mapa
-custom. Conserva el log completo. Si es posible, repite en un servidor de prueba
-con el Nether generado, conservando las mismas opciones de red y distancia de
-visión. Si aparecen nueve recepciones rápidas y el STOP sigue a los 30 segundos,
-la investigación se concentra en la interpretación del terreno y la transición;
-si faltan recepciones, se revisa el envío y transporte de esos chunks concretos.
-Esta instrumentación no constituye una corrección confirmada de la espera.
+La instrumentación temporal de `aa588a95939bd854aaedfaa81e4203ca2635791c`
+queda disponible en el historial para retomar el diagnóstico; la distribución
+normal utiliza el envío habitual de chunks sin recibos, hashes ni observadores
+adicionales de pantalla. Esta limpieza no pretende corregir el tiempo de carga.

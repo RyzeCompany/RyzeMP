@@ -10,17 +10,11 @@ use pocketmine\entity\Location;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
 use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
-use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
-use pocketmine\network\mcpe\handler\InGamePacketHandler;
-use pocketmine\network\mcpe\handler\PacketHandlerAction;
-use pocketmine\network\mcpe\handler\PacketHandlerInspector;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
-use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\player\ChunkSelector;
 use pocketmine\player\Player;
 use pocketmine\Server;
-use pocketmine\timings\Timings;
 use pocketmine\world\dimension\DimensionManager;
 use pocketmine\world\dimension\Dimensions;
 use pocketmine\world\Position;
@@ -34,11 +28,8 @@ final class DimensionTransitionTest extends TestCase{
 	private Player $player;
 	private Position $position;
 	private array $wire = [];
-	private array $receiptIds = [];
-	private array $logs = [];
 
 	protected function setUp() : void{
-		Timings::init();
 		$this->world = $this->world("world_nether");
 		$this->position = new Position(-0.5, 36, -3.5, $this->world);
 		$this->player = $this->createMock(Player::class);
@@ -57,17 +48,6 @@ final class DimensionTransitionTest extends TestCase{
 		(new \ReflectionProperty(NetworkSession::class, "server"))->setValue($this->session, $server);
 		(new \ReflectionProperty(NetworkSession::class, "logger"))->setValue($this->session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
 		(new \ReflectionProperty(NetworkSession::class, "compressor"))->setValue($this->session, ZlibCompressor::getInstance());
-		(new \ReflectionProperty(NetworkSession::class, "compressedQueue"))->setValue($this->session, new \SplQueue());
-		$sender = $this->createMock(PacketSender::class);
-		$sender->method("send")->willReturnCallback(function(string $bytes, bool $immediate, ?int $receiptId) : void{
-			$this->wire[] = $bytes;
-			if($receiptId !== null){ $this->receiptIds[] = $receiptId; }
-		});
-		(new \ReflectionProperty(NetworkSession::class, "sender"))->setValue($this->session, $sender);
-		$logger = $this->createMock(\Logger::class);
-		$logger->method("debug")->willReturnCallback(function($message) : void{ $this->logs[] = $message; });
-		$logger->method("log")->willReturnCallback(function($level, $message) : void{ $this->logs[] = $message; });
-		(new \ReflectionProperty(NetworkSession::class, "logger"))->setValue($this->session, new \PrefixedLogger($logger, "test"));
 		\GlobalLogger::set($this->createMock(\Logger::class));
 		$this->session->method("sendDataPacket")->willReturnCallback(function($packet) : bool{
 			$this->wire[] = $packet;
@@ -148,44 +128,5 @@ final class DimensionTransitionTest extends TestCase{
 		for($x = 1; $x <= 3; ++$x){ for($z = 2; $z <= 4; ++$z){ $this->send($this->world, $x, $z); } }
 		self::assertSame(1, $this->ackCount());
 	}
-
-	public function testReceiptsAndScreenNotificationsOnlyObserveDelivery() : void{
-		$this->begin(1);
-		$this->session->onClientLoadingScreen(LoadingScreenType::START_LOADING_SCREEN, null);
-		for($x = -2; $x <= 0; ++$x){ for($z = -2; $z <= 0; ++$z){ $this->send($this->world, $x, $z); } }
-		self::assertSame(1, $this->ackCount(), "Diagnostics must not delay the dimension ACK until receipt or screen completion");
-		self::assertCount(9, $this->receiptIds);
-		$before = $this->wire;
-		foreach($this->receiptIds as $id){ $this->session->handleAckReceipt($id); }
-		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, null);
-		self::assertSame($before, $this->wire, "Receiving diagnostics must not send gameplay packets");
-		self::assertStringContainsString("STOP_LOADING_SCREEN", end($this->logs));
-		self::assertStringContainsString("transport_receipts=9/9", end($this->logs));
-	}
-
-	public function testLateReceiptsCannotCompleteANewerTrace() : void{
-		$this->begin(1);
-		$this->send($this->world, -1, -1);
-		$oldReceipt = $this->receiptIds[0];
-		$this->world = $this->world("world_the_end");
-		$this->position = new Position(0, 64, 0, $this->world);
-		$this->begin(2);
-		$this->session->handleAckReceipt($oldReceipt);
-		$this->session->onClientLoadingScreen(LoadingScreenType::START_LOADING_SCREEN, null);
-		self::assertStringContainsString("Dimension trace #2", end($this->logs));
-		self::assertStringContainsString("transport_receipts=0/9", end($this->logs));
-		self::assertSame(0, $this->ackCount());
-	}
-
-	public function testClientScreenPacketIsDecodedAndRoutedDuringGameplay() : void{
-		$handler = (new \ReflectionClass(InGamePacketHandler::class))->newInstanceWithoutConstructor();
-		(new \ReflectionProperty(InGamePacketHandler::class, "session"))->setValue($handler, $this->session);
-		$actions = PacketHandlerInspector::getHandlerActions($handler);
-		self::assertSame(PacketHandlerAction::HANDLED, $actions[ServerboundLoadingScreenPacket::class]);
-		$this->begin(1);
-		$before = $this->wire;
-		self::assertTrue($handler->handleServerboundLoadingScreen(ServerboundLoadingScreenPacket::create(LoadingScreenType::START_LOADING_SCREEN, null)));
-		self::assertStringContainsString("START_LOADING_SCREEN", end($this->logs));
-		self::assertSame($before, $this->wire);
-	}
 }
+

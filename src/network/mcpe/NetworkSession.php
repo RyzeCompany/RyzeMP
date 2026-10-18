@@ -103,7 +103,6 @@ use pocketmine\network\mcpe\protocol\types\command\CommandParameter;
 use pocketmine\network\mcpe\protocol\types\command\CommandPermissions;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
-use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
@@ -137,7 +136,6 @@ use function base64_encode;
 use function bin2hex;
 use function count;
 use function get_class;
-use function hash;
 use function implode;
 use function in_array;
 use function is_string;
@@ -173,9 +171,6 @@ class NetworkSession{
 	private bool $pendingDimensionChangeAck = false;
 	/** @var array{world: World, chunks: array<int, true>, centerX: int, centerZ: int, startedAt: float}|null */
 	private ?array $dimensionChangeTerrain = null;
-	/** @var array{id: int, world: World, startedAt: float, received: array<int, true>, loadingAt: ?float}|null */
-	private ?array $dimensionTransferTrace = null;
-	private int $dimensionTransferSequence = 0;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -1200,7 +1195,6 @@ class NetworkSession{
 		$this->clientDimension = $dimension;
 		$this->pendingDimensionChangeAck = false;
 		$this->dimensionChangeTerrain = null;
-		$this->dimensionTransferTrace = null;
 	}
 
 	public function syncViewAreaRadius(int $distance) : void{
@@ -1388,14 +1382,7 @@ class NetworkSession{
 	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world, int $chunkX, int $chunkZ) : void{
 		$world->timings->syncChunkSend->startTiming();
 		try{
-			$hash = World::chunkHash($chunkX, $chunkZ);
-			if($this->dimensionChangeTerrain !== null && $this->dimensionChangeTerrain["world"] === $world && isset($this->dimensionChangeTerrain["chunks"][$hash]) && $this->dimensionTransferTrace !== null){
-				$traceId = $this->dimensionTransferTrace["id"];
-				$this->logger->debug(sprintf("Dimension trace #%d chunk %d %d: compressed_bytes=%d sha256=%s", $traceId, $chunkX, $chunkZ, strlen($chunkPacket), hash("sha256", $chunkPacket)));
-				$this->queueDimensionChunkWithReceipt($chunkPacket, $traceId, $hash);
-			}else{
-				$this->queueCompressed($chunkPacket);
-			}
+			$this->queueCompressed($chunkPacket);
 			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
 			$onCompletion();
 		}finally{
@@ -1478,7 +1465,6 @@ class NetworkSession{
 			}
 		}
 		$this->dimensionChangeTerrain = ["world" => $world, "chunks" => $chunks, "centerX" => $centerX, "centerZ" => $centerZ, "startedAt" => microtime(true)];
-		$this->dimensionTransferTrace = ["id" => ++$this->dimensionTransferSequence, "world" => $world, "startedAt" => microtime(true), "received" => [], "loadingAt" => null];
 		$this->logger->debug("Dimension transition to " . $world->getFolderName() . ": waiting for 9 arrival chunks");
 	}
 
@@ -1491,36 +1477,6 @@ class NetworkSession{
 			$this->logger->debug(sprintf("Dimension transition to %s: arrival terrain queued in %.3f s, acknowledging change", $world->getFolderName(), microtime(true) - $this->dimensionChangeTerrain["startedAt"]));
 			$this->acknowledgeDimensionChange();
 		}
-	}
-
-	/** Receipts measure transport delivery, not client decoding or rendering. */
-	private function queueDimensionChunkWithReceipt(string $payload, int $traceId, int $chunkHash) : void{
-		/** @var PromiseResolver<true> $receipt */
-		$receipt = new PromiseResolver();
-		$receipt->getPromise()->onCompletion(function() use ($traceId, $chunkHash) : void{
-			if($this->dimensionTransferTrace === null || $this->dimensionTransferTrace["id"] !== $traceId){
-				return;
-			}
-			$trace = &$this->dimensionTransferTrace;
-			$trace["received"][$chunkHash] = true;
-			World::getXZ($chunkHash, $chunkX, $chunkZ);
-			$this->logger->debug(sprintf("Dimension trace #%d transport receipt chunk %d %d: %d/9 in %.3f s", $traceId, $chunkX, $chunkZ, count($trace["received"]), microtime(true) - $trace["startedAt"]));
-		}, static function() : void{});
-		$this->flushGamePacketQueue();
-		$this->queueCompressedNoGamePacketFlush($payload, ackPromises: [$receipt]);
-	}
-
-	/** Observes client notifications; never closes or acknowledges a loading screen. */
-	public function onClientLoadingScreen(LoadingScreenType $type, ?int $loadingScreenId) : void{
-		if($this->dimensionTransferTrace === null){
-			return;
-		}
-		$trace = &$this->dimensionTransferTrace;
-		$now = microtime(true);
-		if($type === LoadingScreenType::START_LOADING_SCREEN){
-			$trace["loadingAt"] ??= $now;
-		}
-		$this->logger->debug(sprintf("Dimension trace #%d client %s screen_id=%s world=%s elapsed=%.3f s screen=%.3f s transport_receipts=%d/9", $trace["id"], $type->name, $loadingScreenId === null ? "none" : (string) $loadingScreenId, $trace["world"]->getFolderName(), $now - $trace["startedAt"], $trace["loadingAt"] === null ? 0 : $now - $trace["loadingAt"], count($trace["received"])));
 	}
 
 	private function acknowledgeDimensionChange() : void{
@@ -1680,4 +1636,5 @@ class NetworkSession{
 		$this->flushGamePacketQueue();
 	}
 }
+
 
