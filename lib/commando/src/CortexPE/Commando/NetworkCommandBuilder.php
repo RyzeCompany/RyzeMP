@@ -18,7 +18,7 @@ final class NetworkCommandBuilder{
 		foreach($command->getConstraints() as $constraint){if(!$constraint->isVisibleTo($sender)){return [];}}
 		$overloads = [];
 		foreach($command->getSubCommands() as $label => $sub){
-			if($label !== $sub->getName() || !$sub->testPermissionSilent($sender)){continue;}
+			if($label !== strtolower($sub->getName()) || !$sub->testPermissionSilent($sender)){continue;}
 			foreach($sub->getConstraints() as $constraint){if(!$constraint->isVisibleTo($sender)){continue 2;}}
 			// Include registered aliases in the accepted enum as well as the primary name.
 			$names = array_values(array_unique([$sub->getName(), ...$sub->getAliases()]));
