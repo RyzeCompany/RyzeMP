@@ -98,7 +98,10 @@ final class BlockStateDictionary{
 			}
 		}
 
-		$standardSkull = $this->stateDataToStateIdLookup[BlockTypeNames::SKELETON_SKULL];
+		$standardSkull = $this->stateDataToStateIdLookup[BlockTypeNames::SKELETON_SKULL] ?? null;
+		if($standardSkull === null){
+			return; //Subset palettes cannot provide skull aliases without a source state.
+		}
 		foreach([
 			BlockTypeNames::WITHER_SKELETON_SKULL,
 			BlockTypeNames::ZOMBIE_HEAD,

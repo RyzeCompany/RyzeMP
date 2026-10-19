@@ -90,6 +90,8 @@ final class LegacyChunkSerializerTest extends TestCase{
 		$serializer = $this->createMock(BlockStateSerializer::class);
 		$serializer->method('serialize')->willReturn(BlockStateData::current(BlockTypeNames::AIR, []));
 		$translator = new BlockTranslator($dictionary, $serializer);
+		self::assertNull($dictionary->lookupStateIdFromData(BlockStateData::current(BlockTypeNames::SKELETON_SKULL, [])));
+		self::assertNull($dictionary->lookupStateIdFromData(BlockStateData::current(BlockTypeNames::WITHER_SKELETON_SKULL, [])));
 		$blocks = new PalettedBlockArray(7);
 		$subchunk = new SubChunk(0, [$blocks], new PalettedBlockArray(0));
 		self::assertSame(0, $blocks->getBitsPerBlock());
