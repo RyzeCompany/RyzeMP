@@ -197,18 +197,18 @@ class InGamePacketHandler extends PacketHandler{
 		return null;
 	}
 
- public function handleTickSync(\pocketmine\network\mcpe\protocol\TickSyncPacket $packet) : bool{
-  if($this->session->getProtocolId() !== ProtocolInfo::PROTOCOL_1_16_100){ return false; }
-  $this->session->sendDataPacket(\pocketmine\network\mcpe\protocol\TickSyncPacket::response($packet->getClientSendTime(), (int) (microtime(true) * 1000)));
-  return true;
- }
+	public function handleTickSync(\pocketmine\network\mcpe\protocol\TickSyncPacket $packet) : bool{
+		if($this->session->getProtocolId() !== ProtocolInfo::PROTOCOL_1_16_100){ return false; }
+		$this->session->sendDataPacket(\pocketmine\network\mcpe\protocol\TickSyncPacket::response($packet->getClientSendTime(), (int) (microtime(true) * 1000)));
+		return true;
+	}
 
- public function handleAdventureSettings(\pocketmine\network\mcpe\protocol\AdventureSettingsPacket $packet) : bool{
-  if($this->session->getProtocolId() !== ProtocolInfo::PROTOCOL_1_16_100 || $packet->entityUniqueId !== $this->player->getId()){ return false; }
-  $this->player->toggleFlight($packet->getFlag($packet::FLYING));
-  $this->session->syncAbilities($this->player);
-  return true;
- }
+	public function handleAdventureSettings(\pocketmine\network\mcpe\protocol\AdventureSettingsPacket $packet) : bool{
+		if($this->session->getProtocolId() !== ProtocolInfo::PROTOCOL_1_16_100 || $packet->entityUniqueId !== $this->player->getId()){ return false; }
+		$this->player->toggleFlight($packet->getFlag($packet::FLYING));
+		$this->session->syncAbilities($this->player);
+		return true;
+	}
 
 	public function handlePlayerAuthInput(PlayerAuthInputPacket $packet) : bool{
 		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);

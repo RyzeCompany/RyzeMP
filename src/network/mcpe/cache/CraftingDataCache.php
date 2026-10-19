@@ -87,9 +87,9 @@ final class CraftingDataCache{
 	 * Rebuilds the cached CraftingDataPacket.
 	 */
 	private function buildCraftingDataCache(CraftingManager $manager) : CraftingDataPacket{
-  if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
-   return CraftingDataPacket::create([], [], [], [], true);
-  }
+		if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			return CraftingDataPacket::create([], [], [], [], true);
+		}
 		Timings::$craftingDataCacheRebuild->startTiming();
 
 		$nullUUID = Uuid::fromString(Uuid::NIL);

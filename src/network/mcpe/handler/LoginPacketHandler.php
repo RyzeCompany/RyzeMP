@@ -377,12 +377,12 @@ class LoginPacketHandler extends PacketHandler{
 			throw PacketHandlingException::wrap($e);
 		}
 
-  if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
-   $clientDataClaims += [
-    "CompatibleWithClientSideChunkGen" => false, "IsEditorMode" => false,
-    "PlayFabId" => "", "SkinGeometryDataEngineVersion" => "", "TrustedSkin" => false
-   ];
-  }
+		if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			$clientDataClaims += [
+				"CompatibleWithClientSideChunkGen" => false, "IsEditorMode" => false,
+				"PlayFabId" => "", "SkinGeometryDataEngineVersion" => "", "TrustedSkin" => false
+			];
+		}
 		$mapper = $this->defaultJsonMapper("ClientData JWT body");
 		try{
 			$clientData = $mapper->map($clientDataClaims, new ClientData());

@@ -19,15 +19,15 @@ use pocketmine\network\mcpe\protocol\serializer\LegacyLoginPacketDecoder;
 final class LegacySessionBootstrap{
 	private function __construct(){}
 
- public static function isNetworkSettingsRequest(string $payload) : bool{
-  try{
-   $in = new ByteBufferReader($payload);
-   VarInt::readUnsignedInt($in); // frame length; the regular decoder validates the complete frame
-   return (VarInt::readUnsignedInt($in) & 0x3ff) === ProtocolInfo::REQUEST_NETWORK_SETTINGS_PACKET;
-  }catch(DataDecodeException){
-   return false;
-  }
- }
+	public static function isNetworkSettingsRequest(string $payload) : bool{
+		try{
+			$in = new ByteBufferReader($payload);
+			VarInt::readUnsignedInt($in); // frame length; the regular decoder validates the complete frame
+			return (VarInt::readUnsignedInt($in) & 0x3ff) === ProtocolInfo::REQUEST_NETWORK_SETTINGS_PACKET;
+		}catch(DataDecodeException){
+			return false;
+		}
+	}
 
 	public static function decodeLogin(string $payload, Compressor $compressor) : LoginPacket{
 		// Use the bounded native decompressor; do not retry malformed modern batches

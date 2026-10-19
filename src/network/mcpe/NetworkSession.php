@@ -456,20 +456,20 @@ class NetworkSession{
 				throw new PacketHandlingException("No bytes in payload");
 			}
 
-   if($this->protocolId === null && $this->handler instanceof SessionStartPacketHandler && $this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_ENABLE_EXPERIMENTAL_1_16_100, false) && !LegacySessionBootstrap::isNetworkSettingsRequest($payload)){
-    try{
-     $login = LegacySessionBootstrap::decodeLogin($payload, $this->compressor);
-    }catch(DecompressionException|PacketDecodeException|DataDecodeException $e){
-     throw PacketHandlingException::wrap($e, "Legacy Login preflight failed");
-    }
-    $this->setProtocolId(ProtocolInfo::PROTOCOL_1_16_100);
-    $this->onSessionStartSuccess();
-    $this->gamePacketLimiter->decrement();
-    $encoded = new ByteBufferWriter();
-    $login->encode($encoded, ProtocolInfo::PROTOCOL_1_16_100);
-    $this->handleDataPacket($login, $encoded->getData());
-    return;
-   }
+			if($this->protocolId === null && $this->handler instanceof SessionStartPacketHandler && $this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_ENABLE_EXPERIMENTAL_1_16_100, false) && !LegacySessionBootstrap::isNetworkSettingsRequest($payload)){
+				try{
+					$login = LegacySessionBootstrap::decodeLogin($payload, $this->compressor);
+				}catch(DecompressionException|PacketDecodeException|DataDecodeException $e){
+					throw PacketHandlingException::wrap($e, "Legacy Login preflight failed");
+				}
+				$this->setProtocolId(ProtocolInfo::PROTOCOL_1_16_100);
+				$this->onSessionStartSuccess();
+				$this->gamePacketLimiter->decrement();
+				$encoded = new ByteBufferWriter();
+				$login->encode($encoded, ProtocolInfo::PROTOCOL_1_16_100);
+				$this->handleDataPacket($login, $encoded->getData());
+				return;
+			}
 			if($this->enableCompression){
 				if($this->protocolId >= ProtocolInfo::PROTOCOL_1_20_60){
 					$compressionType = ord($payload[0]);
@@ -1285,11 +1285,11 @@ class NetworkSession{
 			$for->getId(),
 			$layers
 		);
-  if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
-   $this->sendDataPacket(\pocketmine\network\mcpe\protocol\AdventureSettingsPacket::fromAbilitiesData($data, $for->hasAutoJump()));
-  }else{
-   $this->sendDataPacket(UpdateAbilitiesPacket::create($data));
-  }
+		if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			$this->sendDataPacket(\pocketmine\network\mcpe\protocol\AdventureSettingsPacket::fromAbilitiesData($data, $for->hasAutoJump()));
+		}else{
+			$this->sendDataPacket(UpdateAbilitiesPacket::create($data));
+		}
 	}
 
 	public function syncAdventureSettings() : void{
