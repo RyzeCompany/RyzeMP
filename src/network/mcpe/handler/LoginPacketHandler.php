@@ -162,6 +162,12 @@ class LoginPacketHandler extends PacketHandler{
 				}catch(\JsonMapper_Exception $e){
 					throw PacketHandlingException::wrap($e, "Error mapping self-signed certificate chain");
 				}
+				if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+					$rawChain = $chainData->chain ?? null;
+					$this->session->getLogger()->debug("Legacy 419 certificate input: raw-links=" . (is_array($rawChain) ? count($rawChain) : "invalid") .
+						" mapped-links=" . count($chain->chain) .
+						" preserved=" . ($rawChain === $chain->chain ? "yes" : "no"));
+				}
 				if($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93){
 					if(count($chain->chain) > 1 || !isset($chain->chain[0])){
 						throw new PacketHandlingException("Expected exactly one certificate in self-signed certificate chain, got " . count($chain->chain));

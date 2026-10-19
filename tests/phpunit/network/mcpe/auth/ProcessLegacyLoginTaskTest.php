@@ -67,7 +67,7 @@ final class ProcessLegacyLoginTaskTest extends TestCase{
 		self::assertTrue($required);
 		self::assertNull($error);
 		self::assertSame(JwtUtils::emitDerPublicKey($client), $clientKey);
-		self::assertStringContainsString('signatures=valid trusted-root=' . hash('sha256', $rootDer), $diagnostic);
+		self::assertStringContainsString('verification=passed result=trusted trusted-root=' . hash('sha256', $rootDer), $diagnostic);
 	}
 
 	public function testSelfSignedClientIsNotAuthenticatedEvenWhenItClaimsAnXuid() : void{
@@ -81,7 +81,10 @@ final class ProcessLegacyLoginTaskTest extends TestCase{
 		self::assertFalse($authenticated);
 		self::assertTrue($required);
 		self::assertNull($error);
-		self::assertStringContainsString('signatures=valid trusted-root=none', $diagnostic);
+		self::assertStringContainsString('verification=passed result=untrusted trusted-root=none', $diagnostic);
+		self::assertStringContainsString('single-self-issued=yes', $diagnostic);
+		self::assertStringNotContainsString($token, $diagnostic);
+		self::assertStringNotContainsString(base64_encode(JwtUtils::emitDerPublicKey($client)), $diagnostic);
 	}
 
 	public function testMentioningTrustedRootWithoutItsSignatureDoesNotAuthenticate() : void{
@@ -102,7 +105,7 @@ final class ProcessLegacyLoginTaskTest extends TestCase{
 		[$authenticated, , $error, , $diagnostic] = $this->verify([$forged], self::certificate($client, $client), JwtUtils::emitDerPublicKey($root));
 		self::assertFalse($authenticated);
 		self::assertNotNull($error);
-		self::assertStringContainsString('signatures=invalid trusted-root=none', $diagnostic);
+		self::assertStringContainsString('verification=failed result=invalid trusted-root=none', $diagnostic);
 	}
 
 	public function testExpiredTrustedCertificateIsRejected() : void{
@@ -116,8 +119,37 @@ final class ProcessLegacyLoginTaskTest extends TestCase{
 	public function testClientDataMustBeSignedByFinalChainKey() : void{
 		$root = self::key();
 		$client = self::key();
-		[, , $error] = $this->verify([self::certificate($root, $client)], self::certificate($root, $root), JwtUtils::emitDerPublicKey($root));
+		[$authenticated, , $error] = $this->verify([self::certificate($root, $client)], self::certificate($root, $root), JwtUtils::emitDerPublicKey($root));
+		self::assertFalse($authenticated);
 		self::assertNotNull($error);
+	}
+
+	public function testSingleUntrustedDelegationIsNotReportedAsSelfIssued() : void{
+		$signer = self::key();
+		$client = self::key();
+		[$authenticated, $required, $error, , $diagnostic] = $this->verify(
+			[self::certificate($signer, $client)], self::certificate($client, $client), JwtUtils::emitDerPublicKey(self::key())
+		);
+		self::assertFalse($authenticated);
+		self::assertTrue($required);
+		self::assertNull($error);
+		self::assertStringContainsString('result=untrusted trusted-root=none', $diagnostic);
+		self::assertStringContainsString('first-signer=' . hash('sha256', JwtUtils::emitDerPublicKey($signer)), $diagnostic);
+		self::assertStringContainsString('single-self-issued=no', $diagnostic);
+	}
+
+	public function testRootMatchCannotAuthenticateAfterABrokenChainLink() : void{
+		$root = self::key();
+		$client = self::key();
+		$unrelated = self::key();
+		[$authenticated, $required, $error, , $diagnostic] = $this->verify(
+			[self::certificate($root, $client), self::certificate($unrelated, $client)],
+			self::certificate($client, $client), JwtUtils::emitDerPublicKey($root)
+		);
+		self::assertFalse($authenticated);
+		self::assertTrue($required);
+		self::assertNotNull($error);
+		self::assertStringContainsString('verification=failed result=invalid', $diagnostic);
 	}
 
 	public function test419RotationDoesNotChangeOtherProtocolTrustPolicies() : void{

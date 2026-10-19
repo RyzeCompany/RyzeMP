@@ -1011,11 +1011,6 @@ class NetworkSession{
 		if(!$this->connected){
 			return;
 		}
-		$this->logger->debug("Authentication result: protocol=" . $this->getProtocolId() .
-			" game=" . Utils::printable(substr($this->getGameVersion() ?? "unknown", 0, 32)) .
-			" authenticated=" . ($authenticated ? "yes" : "no") .
-			" required=" . ($authRequired ? "yes" : "no") .
-			" verification=" . ($error === null ? "valid" : "failed"));
 		if($error === null){
 			if($authenticated && !($this->info instanceof XboxLivePlayerInfo)){
 				$error = "Expected XUID but none found";
@@ -1023,6 +1018,11 @@ class NetworkSession{
 				$error = "Missing client public key"; //failsafe
 			}
 		}
+		$this->logger->debug("Authentication result: protocol=" . $this->getProtocolId() .
+			" game=" . Utils::printable(substr($this->getGameVersion() ?? "unknown", 0, 32)) .
+			" authenticated=" . ($authenticated && $error === null ? "yes" : "no") .
+			" required=" . ($authRequired ? "yes" : "no") .
+			" verification=" . ($error === null ? "valid" : "failed"));
 
 		if($error !== null){
 			$this->disconnectWithError(

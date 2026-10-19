@@ -78,6 +78,8 @@ class ProcessLegacyLoginTask extends AsyncTask{
 	private ?string $clientPublicKeyDer = null;
 	private int $chainLength;
 	private ?string $authenticatedRootFingerprint = null;
+	private ?string $firstSignerFingerprint = null;
+	private bool $singleSelfIssuedCertificate = false;
 
 	/**
 	 * @param string[] $chainJwts
@@ -105,6 +107,7 @@ class ProcessLegacyLoginTask extends AsyncTask{
 			AuthJwtHelper::validateSelfSignedToken($this->clientDataJwt, $this->clientPublicKeyDer);
 			$this->error = null;
 		}catch(VerifyLoginException $e){
+			$this->authenticated = false;
 			$disconnectMessage = $e->getDisconnectMessage();
 			$this->error = $disconnectMessage instanceof Translatable ? new NonThreadSafeValue($disconnectMessage) : $disconnectMessage;
 		}
@@ -124,6 +127,7 @@ class ProcessLegacyLoginTask extends AsyncTask{
 			if($signingKeyDer === null){
 				[$header, ] = JwtUtils::parse($jwt);
 				$signingKeyDer = base64_decode($header['x5u'], true);
+				$this->firstSignerFingerprint = hash('sha256', $signingKeyDer);
 			}
 			if(($this->rootAuthKeyDer !== null && $signingKeyDer === $this->rootAuthKeyDer) ||
 				($this->alternateRootAuthKeyDer !== null && $signingKeyDer === $this->alternateRootAuthKeyDer)){
@@ -136,6 +140,9 @@ class ProcessLegacyLoginTask extends AsyncTask{
 			$identityPublicKey = base64_decode($claims->identityPublicKey, true);
 			if($identityPublicKey === false){
 				throw new VerifyLoginException("Invalid identityPublicKey: base64 error decoding");
+			}
+			if($this->chainLength === 1){
+				$this->singleSelfIssuedCertificate = $signingKeyDer === $identityPublicKey;
 			}
 			$identityPublicKeyDer = $identityPublicKey;
 		}
@@ -155,9 +162,13 @@ class ProcessLegacyLoginTask extends AsyncTask{
 		$callback = $this->fetchLocal(self::TLS_KEY_ON_COMPLETION);
 		/** @var (\Closure(string) : void)|null $diagnostic */
 		$diagnostic = $this->fetchLocal(self::TLS_KEY_ON_DIAGNOSTIC);
+		$result = $this->error !== null ? "invalid" : ($this->authenticated ? "trusted" : "untrusted");
 		$diagnostic?->__invoke("Legacy authentication: chain-links=" . $this->chainLength .
-			" signatures=" . ($this->error === null ? "valid" : "invalid") .
-			" trusted-root=" . ($this->authenticatedRootFingerprint ?? "none"));
+			" verification=" . ($this->error === null ? "passed" : "failed") .
+			" result=" . $result .
+			" trusted-root=" . ($this->authenticatedRootFingerprint ?? "none") .
+			" first-signer=" . ($this->firstSignerFingerprint ?? "unverified") .
+			" single-self-issued=" . ($this->singleSelfIssuedCertificate ? "yes" : "no"));
 		$callback($this->authenticated, $this->authRequired, $this->error instanceof NonThreadSafeValue ? $this->error->deserialize() : $this->error, $this->clientPublicKeyDer);
 	}
 }
