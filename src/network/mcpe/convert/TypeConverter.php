@@ -110,7 +110,8 @@ class TypeConverter{
 			GlobalItemDataHandlers::getSerializer(),
 			GlobalItemDataHandlers::getDeserializer(),
 			$this->blockItemIdMap,
-			$this->itemDataDowngrader
+			$this->itemDataDowngrader,
+			$protocolId === ProtocolInfo::PROTOCOL_1_16_100
 		);
 
 		$this->skinAdapter = new LegacySkinAdapter();

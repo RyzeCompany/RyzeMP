@@ -59,7 +59,8 @@ class RakLibServer extends Thread{
 		protected int $serverId,
 		protected int $maxMtuSize,
 		protected int $protocolVersion,
-		protected SleeperHandlerEntry $sleeperEntry
+		protected SleeperHandlerEntry $sleeperEntry,
+		protected bool $allowExperimentalLegacy = false
 	){
 		$this->mainPath = \pocketmine\PATH;
 		$this->address = new NonThreadSafeValue($address);
@@ -96,7 +97,7 @@ class RakLibServer extends Thread{
 			$this->logger,
 			$socket,
 			$this->maxMtuSize,
-			new MinecraftProtocolAcceptor($this->protocolVersion, in_array(ProtocolInfo::PROTOCOL_1_16_100, ProtocolInfo::ACCEPTED_PROTOCOL, true)),
+			new MinecraftProtocolAcceptor($this->protocolVersion, $this->allowExperimentalLegacy || in_array(ProtocolInfo::PROTOCOL_1_16_100, ProtocolInfo::ACCEPTED_PROTOCOL, true)),
 			new UserToRakLibThreadMessageReceiver(new PthreadsChannelReader($this->mainToThreadBuffer)),
 			new RakLibToUserThreadMessageSender(new SnoozeAwarePthreadsChannelWriter($this->threadToMainBuffer, $this->sleeperEntry->createNotifier())),
 			new ExceptionTraceCleaner($this->mainPath),

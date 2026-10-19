@@ -49,7 +49,7 @@ final class BlockStateDictionaryEntry{
 	public function __construct(
 		private string $stateName,
 		array $stateProperties,
-		private int $meta,
+		private ?int $meta,
 		private ?BlockStateData $oldBlockStateData,
 		private bool $strippedProperties = false
 	){
@@ -73,7 +73,7 @@ final class BlockStateDictionaryEntry{
 		);
 	}
 
-	public function getMeta() : int{ return $this->meta; }
+	public function getMeta() : ?int{ return $this->meta; }
 
 	/** True when network-only properties were removed from this state's server-side form. */
 	public function hasStrippedProperties() : bool{ return $this->strippedProperties; }

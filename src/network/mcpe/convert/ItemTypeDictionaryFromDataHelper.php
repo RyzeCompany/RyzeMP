@@ -79,6 +79,9 @@ final class ItemTypeDictionaryFromDataHelper{
 	];
 
 	public static function loadFromProtocolId(int $protocolId) : ItemTypeDictionary{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			return self::loadFromString(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "legacy/1.16.100/required_item_list.json"));
+		}
 		return self::loadFromString(Filesystem::fileGetContents(str_replace(".json", self::PATHS[$protocolId] . ".json", BedrockDataFiles::REQUIRED_ITEM_LIST_JSON)));
 	}
 

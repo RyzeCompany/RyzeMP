@@ -42,6 +42,16 @@ class ProcessLegacyLoginTask extends AsyncTask{
 	 */
 	public const LEGACY_MOJANG_ROOT_PUBLIC_KEY = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAECRXueJeTDqNRRgJi/vlRufByu/2G0i2Ebt6YMar5QX/R0DIIyrJMcUpruK4QveTfJSTp3Shlq4Gk34cD/4GUWwkv0DVuzeuB+tXija7HBxii03NHDbPAD0AKnLr2wdAp";
 
+	/** Root used by 1.16.100, verified against its historical native authentication implementation. */
+	public const MOJANG_ROOT_PUBLIC_KEY_1_16_100 = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE8ELkixyLcwlZryUQcu1TvPOmI2B7vX83ndnWRUaXm74wFfa5f/lwQNTfrLVHa2PmenpGI6JhIMUJaWZrjmMj90NoKNFSNBuKdm8rYiXsfaz3K36x/1U26HpG0ZxK/V1V";
+
+	public static function rootKeyForProtocol(int $protocolId) : ?string{
+		if($protocolId >= \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_21_93){
+			return null;
+		}
+		return base64_decode($protocolId === \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_16_100 ? self::MOJANG_ROOT_PUBLIC_KEY_1_16_100 : self::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true) ?: throw new \LogicException("Invalid authentication root key");
+	}
+
 	private string $chain;
 
 	/**

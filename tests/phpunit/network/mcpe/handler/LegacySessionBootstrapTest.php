@@ -33,4 +33,11 @@ final class LegacySessionBootstrapTest extends TestCase{
 		$this->expectException(PacketDecodeException::class);
 		LegacySessionBootstrap::decodeLogin($compressed, new ZlibCompressor(7, 256, 1024));
 	}
+ public function testModernNetworkSettingsAreNeverRetriedAsLegacyLogin() : void{
+  self::assertTrue(LegacySessionBootstrap::isNetworkSettingsRequest("\x06\xc1\x01\x00\x00\x08\x91"));
+  // Even a truncated request stays on the modern decoder path.
+  self::assertTrue(LegacySessionBootstrap::isNetworkSettingsRequest("\x06\xc1\x01"));
+  self::assertFalse(LegacySessionBootstrap::isNetworkSettingsRequest(zlib_encode(self::BATCH, ZLIB_ENCODING_RAW)));
+ }
+
 }

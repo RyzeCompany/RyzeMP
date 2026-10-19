@@ -377,6 +377,12 @@ class LoginPacketHandler extends PacketHandler{
 			throw PacketHandlingException::wrap($e);
 		}
 
+  if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+   $clientDataClaims += [
+    "CompatibleWithClientSideChunkGen" => false, "IsEditorMode" => false,
+    "PlayFabId" => "", "SkinGeometryDataEngineVersion" => "", "TrustedSkin" => false
+   ];
+  }
 		$mapper = $this->defaultJsonMapper("ClientData JWT body");
 		try{
 			$clientData = $mapper->map($clientDataClaims, new ClientData());
@@ -418,7 +424,7 @@ class LoginPacketHandler extends PacketHandler{
 	protected function processLegacySelfSignedLogin(array $legacyCertificate, string $clientDataJwt, bool $authRequired) : void{
 		$this->session->setHandler(null); //drop packets received during login verification
 
-		$rootAuthKeyDer = $this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93 ? null : base64_decode(ProcessLegacyLoginTask::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true);
+		$rootAuthKeyDer = ProcessLegacyLoginTask::rootKeyForProtocol($this->session->getProtocolId());
 		if($rootAuthKeyDer === false){ //should never happen unless the constant is messed up
 			throw new \InvalidArgumentException("Failed to base64-decode hardcoded Mojang root public key");
 		}
