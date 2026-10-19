@@ -125,6 +125,7 @@ use pocketmine\timings\Timings;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\TextFormat;
+use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
@@ -1010,6 +1011,11 @@ class NetworkSession{
 		if(!$this->connected){
 			return;
 		}
+		$this->logger->debug("Authentication result: protocol=" . $this->getProtocolId() .
+			" game=" . Utils::printable(substr($this->getGameVersion() ?? "unknown", 0, 32)) .
+			" authenticated=" . ($authenticated ? "yes" : "no") .
+			" required=" . ($authRequired ? "yes" : "no") .
+			" verification=" . ($error === null ? "valid" : "failed"));
 		if($error === null){
 			if($authenticated && !($this->info instanceof XboxLivePlayerInfo)){
 				$error = "Expected XUID but none found";

@@ -25,15 +25,19 @@ namespace pocketmine\network\mcpe\auth;
 
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\lang\Translatable;
+use pocketmine\network\mcpe\JwtUtils;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\thread\NonThreadSafeValue;
 use pocketmine\utils\AssumptionFailedError;
 use function base64_decode;
+use function count;
+use function hash;
 use function igbinary_serialize;
 use function igbinary_unserialize;
 
 class ProcessLegacyLoginTask extends AsyncTask{
 	private const TLS_KEY_ON_COMPLETION = "completion";
+	private const TLS_KEY_ON_DIAGNOSTIC = "diagnostic";
 
 	/**
 	 * New Mojang root auth key. Mojang notified third-party developers of this change prior to the release of 1.20.0.
@@ -52,6 +56,13 @@ class ProcessLegacyLoginTask extends AsyncTask{
 		return base64_decode($protocolId === \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_16_100 ? self::MOJANG_ROOT_PUBLIC_KEY_1_16_100 : self::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true) ?: throw new \LogicException("Invalid authentication root key");
 	}
 
+	/** The certificate issuer can rotate its signing key independently of the client's wire version. */
+	public static function alternateRootKeyForProtocol(int $protocolId) : ?string{
+		return $protocolId === \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_16_100
+			? (base64_decode(self::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true) ?: throw new \LogicException("Invalid authentication root key"))
+			: null;
+	}
+
 	private string $chain;
 
 	/**
@@ -65,19 +76,26 @@ class ProcessLegacyLoginTask extends AsyncTask{
 	/** Whether the player has a certificate chain link signed by the given root public key. */
 	private bool $authenticated = false;
 	private ?string $clientPublicKeyDer = null;
+	private int $chainLength;
+	private ?string $authenticatedRootFingerprint = null;
 
 	/**
 	 * @param string[] $chainJwts
 	 * @phpstan-param \Closure(bool $isAuthenticated, bool $authRequired, Translatable|string|null $error, ?string $clientPublicKey) : void $onCompletion
+	 * @phpstan-param (\Closure(string) : void)|null $onDiagnostic
 	 */
 	public function __construct(
 		array $chainJwts,
 		private string $clientDataJwt,
 		private ?string $rootAuthKeyDer,
 		private bool $authRequired,
-		\Closure $onCompletion
+		\Closure $onCompletion,
+		private ?string $alternateRootAuthKeyDer = null,
+		?\Closure $onDiagnostic = null
 	){
 		$this->storeLocal(self::TLS_KEY_ON_COMPLETION, $onCompletion);
+		$this->storeLocal(self::TLS_KEY_ON_DIAGNOSTIC, $onDiagnostic);
+		$this->chainLength = count($chainJwts);
 		$this->chain = igbinary_serialize($chainJwts) ?? throw new AssumptionFailedError("This should never fail");
 	}
 
@@ -100,8 +118,17 @@ class ProcessLegacyLoginTask extends AsyncTask{
 
 		foreach($chain as $jwt){
 			$claims = AuthJwtHelper::validateLegacyAuthToken($jwt, $identityPublicKeyDer);
-			if($this->rootAuthKeyDer !== null && $identityPublicKeyDer === $this->rootAuthKeyDer){
+			// For the first link there is no preceding identityPublicKey. Its x5u has already
+			// been verified by validateLegacyAuthToken(), including the actual JWT signature.
+			$signingKeyDer = $identityPublicKeyDer;
+			if($signingKeyDer === null){
+				[$header, ] = JwtUtils::parse($jwt);
+				$signingKeyDer = base64_decode($header['x5u'], true);
+			}
+			if(($this->rootAuthKeyDer !== null && $signingKeyDer === $this->rootAuthKeyDer) ||
+				($this->alternateRootAuthKeyDer !== null && $signingKeyDer === $this->alternateRootAuthKeyDer)){
 				$this->authenticated = true; //we're signed into xbox live, according to this root key
+				$this->authenticatedRootFingerprint = hash('sha256', $signingKeyDer);
 			}
 			if(!isset($claims->identityPublicKey)){
 				throw new VerifyLoginException("Missing identityPublicKey in chain link", KnownTranslationFactory::pocketmine_disconnect_invalidSession_missingKey());
@@ -126,6 +153,11 @@ class ProcessLegacyLoginTask extends AsyncTask{
 		 * @phpstan-var \Closure(bool, bool, Translatable|string|null, ?string) : void $callback
 		 */
 		$callback = $this->fetchLocal(self::TLS_KEY_ON_COMPLETION);
+		/** @var (\Closure(string) : void)|null $diagnostic */
+		$diagnostic = $this->fetchLocal(self::TLS_KEY_ON_DIAGNOSTIC);
+		$diagnostic?->__invoke("Legacy authentication: chain-links=" . $this->chainLength .
+			" signatures=" . ($this->error === null ? "valid" : "invalid") .
+			" trusted-root=" . ($this->authenticatedRootFingerprint ?? "none"));
 		$callback($this->authenticated, $this->authRequired, $this->error instanceof NonThreadSafeValue ? $this->error->deserialize() : $this->error, $this->clientPublicKeyDer);
 	}
 }

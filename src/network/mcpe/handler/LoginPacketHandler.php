@@ -425,10 +425,14 @@ class LoginPacketHandler extends PacketHandler{
 		$this->session->setHandler(null); //drop packets received during login verification
 
 		$rootAuthKeyDer = ProcessLegacyLoginTask::rootKeyForProtocol($this->session->getProtocolId());
-		if($rootAuthKeyDer === false){ //should never happen unless the constant is messed up
-			throw new \InvalidArgumentException("Failed to base64-decode hardcoded Mojang root public key");
-		}
-		$this->server->getAsyncPool()->submitTask(new ProcessLegacyLoginTask($legacyCertificate, $clientDataJwt, rootAuthKeyDer: $rootAuthKeyDer, authRequired: $authRequired, onCompletion: $this->authCallback));
+		$this->server->getAsyncPool()->submitTask(new ProcessLegacyLoginTask(
+			$legacyCertificate, $clientDataJwt,
+			rootAuthKeyDer: $rootAuthKeyDer,
+			authRequired: $authRequired,
+			onCompletion: $this->authCallback,
+			alternateRootAuthKeyDer: ProcessLegacyLoginTask::alternateRootKeyForProtocol($this->session->getProtocolId()),
+			onDiagnostic: fn(string $message) => $this->session->getLogger()->debug($message)
+		));
 	}
 
 	private function defaultJsonMapper(string $logContext) : \JsonMapper{
