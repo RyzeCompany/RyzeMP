@@ -56,7 +56,12 @@ final class NativeLegacySmoke extends PluginBase{
 					$this->send(P\PlayerAuthInputPacket::create($this->probePosition->add(0, 1.62, 0), 0, 0, 0, 0, 0, new BitSet(PlayerAuthInputFlags::NUMBER_OF_FLAGS), 1, 0, 0, null, new Vector2(0, 0), 1, new Vector3(0, 0, 0), null, null, null, null, 0, 0, new Vector3(0, 0, 0), new Vector2(0, 0)));
 					$chat = new P\TextPacket(); $chat->type = P\TextPacket::TYPE_CHAT; $chat->sourceName = 'LegacyProbe'; $chat->message = 'native 419 smoke';
 					$this->send($chat);
-					$this->send(P\CommandRequestPacket::create('/help', new CommandOriginData(0, Uuid::fromString(Uuid::NIL), '', 0), false, '', 0));
+					$origin = new CommandOriginData();
+					$origin->type = CommandOriginData::ORIGIN_PLAYER;
+					$origin->uuid = $player->getUniqueId();
+					$origin->requestId = '';
+					$origin->playerActorUniqueId = $player->getId();
+					$this->send(P\CommandRequestPacket::create('/help', $origin, false, '', 0));
 					$this->probeTick = $this->ticks;
 				}elseif($this->probeTick !== null && $this->ticks > $this->probeTick + 4){
 					if($this->cipher === null || $this->probeTexts < 2){ throw new \RuntimeException('Encrypted chat/command exchange did not complete'); }

@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find src lib generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          find src lib generated -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
 
       - name: Build phar
         run: php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
