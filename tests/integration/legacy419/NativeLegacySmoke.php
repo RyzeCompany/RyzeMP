@@ -34,6 +34,7 @@ final class NativeLegacySmoke extends PluginBase{
 	private array $queue = [];
 	private ?string $closed = null;
 	private int $chunks = 0;
+	private int $probeTexts = 0;
 	private int $ticks = 0;
 	private ?int $probeTick = null;
 	private ?Vector3 $probePosition = null;
@@ -58,6 +59,7 @@ final class NativeLegacySmoke extends PluginBase{
 					$this->send(P\CommandRequestPacket::create('/help', new CommandOriginData(0, Uuid::fromString(Uuid::NIL), '', 0), false, '', 0));
 					$this->probeTick = $this->ticks;
 				}elseif($this->probeTick !== null && $this->ticks > $this->probeTick + 4){
+					if($this->cipher === null || $this->probeTexts < 2){ throw new \RuntimeException('Encrypted chat/command exchange did not complete'); }
 					if($this->session->getPlayer()->getPosition()->distance($this->probePosition) > 0.05){ throw new \RuntimeException('Native movement was not applied'); }
 					$this->getLogger()->info('LEGACY419_JOIN_SMOKE_OK encrypted=cfb8 chunks=' . $this->chunks . ' movement=1 chat=1 command=1');
 					$this->finished = true;
@@ -83,7 +85,9 @@ final class NativeLegacySmoke extends PluginBase{
 		$converter = TypeConverter::getInstance();
 		$broadcaster = $server->getPacketBroadcaster(P\ProtocolInfo::CURRENT_PROTOCOL);
 		$this->session = new NetworkSession($server, $server->getNetwork()->getSessionManager(), P\PacketPool::getInstance(), $sender, $broadcaster, $server->getEntityEventBroadcaster($broadcaster, $converter), ZlibCompressor::getInstance(), $converter, '127.0.0.1', 40019);
-		$this->key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => JwtUtils::BEDROCK_SIGNING_KEY_CURVE_NAME]);
+		$key = openssl_pkey_new(['ec' => ['curve_name' => JwtUtils::BEDROCK_SIGNING_KEY_CURVE_NAME]]);
+		if($key === false){ throw new \RuntimeException('Client key generation failed: ' . openssl_error_string()); }
+		$this->key = $key;
 		$public = base64_encode(JwtUtils::emitDerPublicKey($this->key));
 		$header = ['alg' => 'ES384', 'x5u' => $public];
 		$chain = JwtUtils::create($header, ['nbf' => time() - 10, 'exp' => time() + 300, 'identityPublicKey' => $public, 'extraData' => ['displayName' => 'LegacyProbe', 'identity' => '00000000-0000-4000-8000-000000000419', 'XUID' => '']], $this->key);
@@ -122,6 +126,7 @@ final class NativeLegacySmoke extends PluginBase{
 				$packet = P\PacketPool::getInstance()->getPacket($raw) ?? throw new \RuntimeException('Unknown outgoing packet');
 				$reader = new ByteBufferReader($raw); $packet->decode($reader, 419);
 				if($reader->getUnreadLength() !== 0){ throw new \RuntimeException('Trailing bytes in ' . $packet->getName()); }
+				if($packet instanceof P\TextPacket && $this->probeTick !== null){ ++$this->probeTexts; }
 				if($packet instanceof P\DisconnectPacket){ throw new \RuntimeException('Disconnected: ' . ($packet->message ?? '')); }
 				if($packet instanceof P\ServerToClientHandshakePacket){
 					[$header, $claims] = JwtUtils::parse($packet->jwt);

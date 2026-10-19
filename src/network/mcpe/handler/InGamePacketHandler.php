@@ -360,6 +360,13 @@ class InGamePacketHandler extends PacketHandler{
 			throw new PacketHandlingException("Too many slot sync requests in inventory transaction");
 		}
 
+		if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100 && $packet->trData instanceof NormalTransactionData){
+			// Legacy inventory movement needs a separate transaction bridge. Keep
+			// this connection-test build authoritative and leave stored items intact.
+			$this->inventoryManager->requestSyncAll();
+			return true;
+		}
+
 		$this->inventoryManager->setCurrentItemStackRequestId($packet->requestId);
 		$this->inventoryManager->addRawPredictedSlotChanges($packet->trData->getActions());
 
