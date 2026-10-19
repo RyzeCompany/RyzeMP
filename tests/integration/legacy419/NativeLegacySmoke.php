@@ -6,6 +6,7 @@ namespace ryzemp\integration;
 
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
+use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\math\Vector2;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\compression\ZlibCompressor;
@@ -40,13 +41,30 @@ final class NativeLegacySmoke extends PluginBase{
 	private ?Vector3 $probePosition = null;
 	private bool $finished = false;
 	private bool $started = false;
+	private bool $expectAuthRejection = false;
+	private bool $sawAuthRejection = false;
 
 	protected function onEnable() : void{
+		$this->expectAuthRejection = getenv('RYZEMP_419_EXPECT_AUTH_REJECTION') === '1';
 		$this->getScheduler()->scheduleRepeatingTask(new ClosureTask(function() : void{
 			if($this->finished){ return; }
 			try{
 				if(!$this->started){ $this->started = true; $this->startClient(); }
 				$this->pump();
+				if($this->expectAuthRejection){
+					if(!$this->getServer()->requiresAuthentication() || $this->cipher !== null || $this->chunks !== 0 || $this->session->getPlayer() !== null){
+						throw new \RuntimeException('Untrusted client progressed past required Xbox authentication');
+					}
+					if($this->closed !== null){
+						if(!$this->sawAuthRejection){ throw new \RuntimeException('Closed without the expected authentication rejection'); }
+						$this->getLogger()->info('LEGACY419_AUTH_REQUIRED_SMOKE_OK rejected=self-issued xbox-auth=on chunks=0');
+						$this->finished = true;
+						$this->getServer()->shutdown();
+					}elseif(++$this->ticks > 200){
+						throw new \RuntimeException('Required authentication rejection timed out');
+					}
+					return;
+				}
 				if($this->closed !== null){ throw new \RuntimeException('Session closed: ' . $this->closed); }
 				if(++$this->ticks > 1000){ throw new \RuntimeException('Login/spawn timed out, chunks=' . $this->chunks); }
 				if($this->session->getHandler() instanceof InGamePacketHandler && $this->probeTick === null){
@@ -81,7 +99,7 @@ final class NativeLegacySmoke extends PluginBase{
 
 	private function startClient() : void{
 		$server = $this->getServer();
-		if($server->requiresAuthentication()){ throw new \RuntimeException('Synthetic client requires an isolated offline test server'); }
+		if($server->requiresAuthentication() !== $this->expectAuthRejection){ throw new \RuntimeException('Synthetic client authentication policy does not match the isolated test mode'); }
 		$sender = new class($this) implements PacketSender{
 			public function __construct(private NativeLegacySmoke $owner){}
 			public function send(string $payload, bool $immediate, ?int $receiptId) : void{ $this->owner->capture($payload, $receiptId); }
@@ -95,7 +113,7 @@ final class NativeLegacySmoke extends PluginBase{
 		$this->key = $key;
 		$public = base64_encode(JwtUtils::emitDerPublicKey($this->key));
 		$header = ['alg' => 'ES384', 'x5u' => $public];
-		$chain = JwtUtils::create($header, ['nbf' => time() - 10, 'exp' => time() + 300, 'identityPublicKey' => $public, 'extraData' => ['displayName' => 'LegacyProbe', 'identity' => '00000000-0000-4000-8000-000000000419', 'XUID' => '']], $this->key);
+		$chain = JwtUtils::create($header, ['nbf' => time() - 10, 'exp' => time() + 300, 'identityPublicKey' => $public, 'extraData' => ['displayName' => 'LegacyProbe', 'identity' => '00000000-0000-4000-8000-000000000419', 'XUID' => $this->expectAuthRejection ? '123456789' : '']], $this->key);
 		$claims = [];
 		foreach((new \ReflectionClass(ClientData::class))->getProperties(\ReflectionProperty::IS_PUBLIC) as $property){
 			$claims[$property->getName()] = match($property->getType()->getName()){ 'int' => 0, 'string' => '', 'bool' => false, 'array' => [] };
@@ -132,7 +150,13 @@ final class NativeLegacySmoke extends PluginBase{
 				$reader = new ByteBufferReader($raw); $packet->decode($reader, 419);
 				if($reader->getUnreadLength() !== 0){ throw new \RuntimeException('Trailing bytes in ' . $packet->getName()); }
 				if($packet instanceof P\TextPacket && $this->probeTick !== null){ ++$this->probeTexts; }
-				if($packet instanceof P\DisconnectPacket){ throw new \RuntimeException('Disconnected: ' . ($packet->message ?? '')); }
+				if($packet instanceof P\DisconnectPacket){
+					if($this->expectAuthRejection && $packet->message === $this->getServer()->getLanguage()->translate(KnownTranslationFactory::disconnectionScreen_notAuthenticated())){
+						$this->sawAuthRejection = true;
+						continue;
+					}
+					throw new \RuntimeException('Disconnected: ' . ($packet->message ?? ''));
+				}
 				if($packet instanceof P\ServerToClientHandshakePacket){
 					[$header, $claims] = JwtUtils::parse($packet->jwt);
 					$secret = EncryptionUtils::generateSharedSecret($this->key, JwtUtils::parseDerPublicKey(base64_decode($header['x5u'], true)));

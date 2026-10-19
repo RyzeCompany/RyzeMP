@@ -113,6 +113,27 @@ jobs:
             exit "$status"
           fi
 
+      - name: Smoke-test experimental 419 with Xbox authentication required
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_root=/tmp/ryzemp-419-auth-required-smoke
+          mkdir -p "$test_root/plugins"
+          cp resources/pocketmine.yml "$test_root/pocketmine.yml"
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/; s/enable-experimental-1-16-100: false/enable-experimental-1-16-100: true/; s/^  level: 1$/  level: 2/' "$test_root/pocketmine.yml"
+          printf 'xbox-auth=on\nlevel-type=FLAT\nview-distance=4\n' > "$test_root/server.properties"
+          php -dphar.readonly=0 tests/integration/build-legacy419-smoke.php "$test_root/plugins/NativeLegacySmoke.phar"
+          set +e
+          RYZEMP_419_EXPECT_AUTH_REJECTION=1 timeout 45s php RyzeMP.phar --no-wizard --disable-ansi --data="$test_root" --plugins="$test_root/plugins" > /tmp/ryzemp-419-auth-required-smoke.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/ryzemp-419-auth-required-smoke.log
+          test "$status" -eq 0
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY|LEGACY419_JOIN_SMOKE_FAILED' /tmp/ryzemp-419-auth-required-smoke.log; then exit 1; fi
+          grep -q 'Legacy 419 certificate input: raw-links=1 mapped-links=1 preserved=yes' /tmp/ryzemp-419-auth-required-smoke.log
+          grep -q 'verification=passed result=untrusted trusted-root=none.*single-self-issued=yes' /tmp/ryzemp-419-auth-required-smoke.log
+          grep -q 'LEGACY419_AUTH_REQUIRED_SMOKE_OK rejected=self-issued xbox-auth=on chunks=0' /tmp/ryzemp-419-auth-required-smoke.log
+
       - name: Smoke-test experimental 419 encrypted login and world entry
         shell: bash
         run: |
