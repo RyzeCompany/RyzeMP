@@ -27,6 +27,7 @@ use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -37,7 +38,7 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 
-class RedstoneRepeater extends Flowable implements PoweredByRedstone, HorizontalFacing{
+class RedstoneRepeater extends Flowable implements PoweredByRedstone, HorizontalFacing, RedstonePowerSource{
 	use HorizontalFacingTrait;
 	use PoweredByRedstoneTrait;
 	use StaticSupportTrait;
@@ -46,6 +47,14 @@ class RedstoneRepeater extends Flowable implements PoweredByRedstone, Horizontal
 	public const MAX_DELAY = 4;
 
 	protected int $delay = self::MIN_DELAY;
+
+	public function getWeakPower(int $face) : int{
+		return $this->powered && $face === $this->facing ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->getWeakPower($face);
+	}
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->horizontalFacing($this->facing);
@@ -90,3 +99,4 @@ class RedstoneRepeater extends Flowable implements PoweredByRedstone, Horizontal
 
 	//TODO: redstone functionality
 }
+

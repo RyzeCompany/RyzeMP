@@ -23,10 +23,12 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\math\Facing;
 use function count;
 
-abstract class SimplePressurePlate extends PressurePlate{
+abstract class SimplePressurePlate extends PressurePlate implements RedstonePowerSource{
 	protected bool $pressed = false;
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
@@ -34,6 +36,14 @@ abstract class SimplePressurePlate extends PressurePlate{
 	}
 
 	public function isPressed() : bool{ return $this->pressed; }
+
+	public function getWeakPower(int $face) : int{
+		return $this->pressed ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $face === Facing::DOWN ? $this->getWeakPower($face) : 0;
+	}
 
 	/** @return $this */
 	public function setPressed(bool $pressed) : self{
@@ -56,3 +66,4 @@ abstract class SimplePressurePlate extends PressurePlate{
 		];
 	}
 }
+

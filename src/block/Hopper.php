@@ -26,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\block\tile\Hopper as TileHopper;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
+use pocketmine\block\utils\RedstoneSignal;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
@@ -130,24 +131,10 @@ class Hopper extends Transparent implements PoweredByRedstone{
 		return false;
 	}
 
-	/** Read the current adjacent block states without loading unloaded chunks. */
-	private function hasDirectPower() : bool{
-		$world = $this->position->getWorld();
-		foreach([Facing::UP, Facing::DOWN, Facing::NORTH, Facing::SOUTH, Facing::WEST, Facing::EAST] as $facing){
-			$neighbourPos = $this->position->getSide($facing);
-			if(!$world->isChunkLoaded($neighbourPos->getFloorX() >> 4, $neighbourPos->getFloorZ() >> 4)){
-				continue;
-			}
-			if(self::isDirectPowerSource($world->getBlock($neighbourPos), $facing)){
-				return true;
-			}
-		}
-		return false;
-	}
-
 	public function onScheduledUpdate() : void{
 		$world = $this->position->getWorld();
-		$powered = $this->hasDirectPower();
+		$powered = RedstoneSignal::getReceivedPower($this) > 0;
+		$powered = RedstoneSignal::filterChange($this, $this->powered ? 15 : 0, $powered ? 15 : 0) > 0;
 		if($powered !== $this->powered){
 			$this->powered = $powered;
 			$world->setBlock($this->position, $this);
@@ -161,3 +148,4 @@ class Hopper extends Transparent implements PoweredByRedstone{
 	}
 
 }
+

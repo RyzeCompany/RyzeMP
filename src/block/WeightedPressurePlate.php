@@ -25,15 +25,25 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\AnalogRedstoneSignalEmitter;
 use pocketmine\block\utils\AnalogRedstoneSignalEmitterTrait;
+use pocketmine\block\utils\RedstonePowerSource;
+use pocketmine\math\Facing;
 use function ceil;
 use function count;
 use function max;
 use function min;
 
-class WeightedPressurePlate extends PressurePlate implements AnalogRedstoneSignalEmitter{
+class WeightedPressurePlate extends PressurePlate implements AnalogRedstoneSignalEmitter, RedstonePowerSource{
 	use AnalogRedstoneSignalEmitterTrait;
 
 	private readonly float $signalStrengthFactor;
+
+	public function getWeakPower(int $face) : int{
+		return $this->signalStrength;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $face === Facing::DOWN ? $this->signalStrength : 0;
+	}
 
 	/**
 	 * @param float $signalStrengthFactor Number of entities on the plate is divided by this value to get signal strength
@@ -62,3 +72,4 @@ class WeightedPressurePlate extends PressurePlate implements AnalogRedstoneSigna
 		];
 	}
 }
+

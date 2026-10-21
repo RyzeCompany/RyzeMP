@@ -52,6 +52,8 @@ use pocketmine\entity\object\ItemEntity;
 use pocketmine\event\block\BlockBreakEvent;
 use pocketmine\event\block\BlockPlaceEvent;
 use pocketmine\event\block\BlockUpdateEvent;
+use pocketmine\block\utils\RedstonePowerSource;
+use pocketmine\block\utils\RedstoneSignal;
 use pocketmine\event\entity\ItemEntityDropEvent;
 use pocketmine\event\player\PlayerInteractEvent;
 use pocketmine\event\world\ChunkLoadEvent;
@@ -2164,6 +2166,7 @@ class World implements ChunkManager{
 		}
 
 		$this->timings->setBlock->startTiming();
+		$previousBlock = $update ? $this->getBlockAt($x, $y, $z) : null;
 
 		$this->unlockChunk($chunkX, $chunkZ, null);
 
@@ -2199,6 +2202,18 @@ class World implements ChunkManager{
 		if($update){
 			$this->updateAllLight($x, $y, $z);
 			$this->internalNotifyNeighbourBlockUpdate($x, $y, $z);
+			$notifyRedstone = $previousBlock instanceof RedstonePowerSource || $block instanceof RedstonePowerSource;
+			if(!$notifyRedstone){
+				foreach(Facing::OFFSET as [$dx, $dy, $dz]){
+					if(RedstoneSignal::getBlockAt($this, $x + $dx, $y + $dy, $z + $dz) instanceof RedstonePowerSource){
+						$notifyRedstone = true;
+						break;
+					}
+				}
+			}
+			if($notifyRedstone){
+				RedstoneSignal::notifyNeighbours($this, $pos);
+			}
 		}
 
 		$this->timings->setBlock->stopTiming();
@@ -3785,4 +3800,5 @@ class World implements ChunkManager{
 		}
 	}
 }
+
 

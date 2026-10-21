@@ -30,6 +30,7 @@ use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -41,13 +42,21 @@ use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use function assert;
 
-class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter, PoweredByRedstone, HorizontalFacing{
+class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter, PoweredByRedstone, HorizontalFacing, RedstonePowerSource{
 	use HorizontalFacingTrait;
 	use AnalogRedstoneSignalEmitterTrait;
 	use PoweredByRedstoneTrait;
 	use StaticSupportTrait;
 
 	protected bool $isSubtractMode = false;
+
+	public function getWeakPower(int $face) : int{
+		return $face === $this->facing ? $this->signalStrength : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->getWeakPower($face);
+	}
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->horizontalFacing($this->facing);
@@ -105,3 +114,4 @@ class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter
 
 	//TODO: redstone functionality
 }
+

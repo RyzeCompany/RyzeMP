@@ -25,10 +25,20 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\Lightable;
 use pocketmine\block\utils\LightableTrait;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\math\Facing;
 
-class RedstoneTorch extends Torch implements Lightable{
+class RedstoneTorch extends Torch implements Lightable, RedstonePowerSource{
 	use LightableTrait;
+
+	public function getWeakPower(int $face) : int{
+		return $this->lit && $face !== Facing::opposite($this->facing) ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->lit && $face === Facing::UP ? 15 : 0;
+	}
 
 	public function __construct(BlockIdentifier $idInfo, string $name, BlockTypeInfo $typeInfo){
 		$this->lit = true;
@@ -44,3 +54,4 @@ class RedstoneTorch extends Torch implements Lightable{
 		return $this->lit ? 7 : 0;
 	}
 }
+
