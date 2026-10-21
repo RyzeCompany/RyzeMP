@@ -286,6 +286,25 @@ final class DimensionTransitionTest extends TestCase{
 		self::assertNull($this->states[1]->getTransition()->getServerAckAt());
 	}
 
+	public function testDisconnectCannotStartReentrantTransitionFromPlugin() : void{
+		$this->begin(1);
+		$listener = new RegisteredListener(function(PlayerDimensionChangeEvent $event) : void{
+			if($event->getState() === PlayerDimensionChangeEvent::DISCONNECTED){
+				$this->world = $this->world("world_the_end");
+				$this->session->onEnterWorld();
+			}
+		}, EventPriority::NORMAL, $this->createMock(Plugin::class), true, new TimingsHandler("disconnect test"));
+		HandlerListManager::global()->getListFor(PlayerDimensionChangeEvent::class)->register($listener);
+		try{
+			(new \ReflectionProperty(NetworkSession::class, "disconnectGuard"))->setValue($this->session, true);
+			(new \ReflectionMethod(NetworkSession::class, "finishDimensionTransition"))->invoke($this->session, PlayerDimensionChangeEvent::DISCONNECTED);
+			self::assertNull($this->session->getDimensionTransition());
+			self::assertSame(["started", "disconnected"], array_map(fn($e) => $e->getState(), $this->states));
+		}finally{
+			HandlerListManager::global()->unregisterAll($listener);
+		}
+	}
+
 }
 
 

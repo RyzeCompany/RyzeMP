@@ -1461,7 +1461,7 @@ class NetworkSession{
 	}
 
 	public function onEnterWorld() : void{
-		if($this->player === null){ return; }
+		if($this->player === null || $this->disconnectGuard || !$this->connected){ return; }
 		$world = $this->player->getWorld();
 		$dimension = $this->server->getDimensionManager()->getDimension($world);
 		$sourceWorld = $this->clientWorldName;
