@@ -39,6 +39,9 @@ final class DimensionTransitionTest extends TestCase{
 	private array $wire = [];
 	private array $states = [];
 	private RegisteredListener $listener;
+	private ?\Closure $onSend = null;
+	private array $ackResolvers = [];
+	private DimensionManager $dimensionManager;
 
 	protected function setUp() : void{
 		$this->world = $this->world("world_nether");
@@ -51,13 +54,13 @@ final class DimensionTransitionTest extends TestCase{
 		$this->player->method("getLocation")->willReturnCallback(fn() => Location::fromObject($this->position, $this->world));
 		$this->player->method("getId")->willReturn(123);
 		$server = $this->createMock(Server::class);
-		$manager = (new \ReflectionClass(DimensionManager::class))->newInstanceWithoutConstructor();
+		$manager = $this->dimensionManager = (new \ReflectionClass(DimensionManager::class))->newInstanceWithoutConstructor();
 		(new \ReflectionProperty(DimensionManager::class, "dimensions"))->setValue($manager, new Dimensions($server, [1 => "world_nether", 2 => "world_the_end"]));
 		(new \ReflectionProperty(DimensionManager::class, "settings"))->setValue($manager, DimensionSettings::fromArray([]));
 		$server->method("getDimensionManager")->willReturn($manager);
 		$this->listener = new RegisteredListener(function(PlayerDimensionChangeEvent $event) : void{ $this->states[] = $event; }, EventPriority::NORMAL, $this->createMock(Plugin::class), true, new TimingsHandler("dimension test"));
 		HandlerListManager::global()->getListFor(PlayerDimensionChangeEvent::class)->register($this->listener);
-		$this->session = $this->createPartialMock(NetworkSession::class, ["sendDataPacket", "queueCompressed", "syncWorldTime", "syncGameRules", "syncWorldDifficulty", "syncWorldSpawnPoint"]);
+		$this->session = $this->createPartialMock(NetworkSession::class, ["sendDataPacket", "sendDataPacketWithReceipt", "queueCompressed", "syncWorldTime", "syncGameRules", "syncWorldDifficulty", "syncWorldSpawnPoint"]);
 		(new \ReflectionProperty(NetworkSession::class, "player"))->setValue($this->session, $this->player);
 		(new \ReflectionProperty(NetworkSession::class, "server"))->setValue($this->session, $server);
 		(new \ReflectionProperty(NetworkSession::class, "logger"))->setValue($this->session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
@@ -65,7 +68,13 @@ final class DimensionTransitionTest extends TestCase{
 		\GlobalLogger::set($this->createMock(\Logger::class));
 		$this->session->method("sendDataPacket")->willReturnCallback(function($packet) : bool{
 			$this->wire[] = $packet;
+			if($this->onSend !== null){ ($this->onSend)($packet); }
 			return true;
+		});
+		$this->session->method("sendDataPacketWithReceipt")->willReturnCallback(function($packet){
+			$this->wire[] = $packet;
+			$this->ackResolvers[] = $resolver = new \pocketmine\promise\PromiseResolver();
+			return $resolver->getPromise();
 		});
 		$this->session->method("queueCompressed")->willReturnCallback(function($bytes) : void{ $this->wire[] = $bytes; });
 	}
@@ -224,6 +233,48 @@ final class DimensionTransitionTest extends TestCase{
 		self::assertSame(1, $transition->getReceivedChunkCount());
 		$transition->recordReceipt(20);
 		self::assertSame(2, $transition->getReceivedChunkCount());
+	}
+
+	public function testSendingOldAckCannotAcknowledgeReentrantNewTransition() : void{
+		$this->begin(1);
+		$this->onSend = function($packet) : void{
+			if($packet instanceof PlayerActionPacket && $packet->action === PlayerAction::DIMENSION_CHANGE_ACK){
+				$this->onSend = null;
+				$this->world = $this->world("world_the_end");
+				$this->position = new Position(32.5, 70, 48.5, $this->world);
+				$this->session->onEnterWorld();
+			}
+		};
+		$this->sendArrival();
+		self::assertSame("world_the_end", $this->session->getDimensionTransition()->getTargetWorld());
+		self::assertNull($this->session->getDimensionTransition()->getServerAckAt());
+		self::assertCount(9, $this->session->getDimensionArrivalChunks());
+	}
+
+	public function testOptInReceiptsUseRealQueueAndDoNotLeakIntoReplacement() : void{
+		(new \ReflectionProperty(DimensionManager::class, "settings"))->setValue($this->dimensionManager, DimensionSettings::fromArray(["portal" => ["transition-diagnostics" => true]]));
+		(new \ReflectionProperty(NetworkSession::class, "compressedQueue"))->setValue($this->session, new \SplQueue());
+		$sender = $this->createMock(PacketSender::class);
+		$receipts = [];
+		$sender->method("send")->willReturnCallback(function($payload, $immediate, $receipt) use(&$receipts) : void{ $receipts[] = $receipt; });
+		(new \ReflectionProperty(NetworkSession::class, "sender"))->setValue($this->session, $sender);
+		$this->begin(1);
+		$this->send($this->world, -1, -1);
+		self::assertCount(1, $receipts);
+		$this->world = $this->world("world_the_end");
+		$this->position = new Position(32.5, 70, 48.5, $this->world);
+		$this->begin(2);
+		$this->session->handleAckReceipt($receipts[0]);
+		self::assertSame(0, $this->session->getDimensionTransition()->getReceivedChunkCount());
+		$this->send($this->world, 2, 3);
+		$this->session->handleAckReceipt($receipts[1]);
+		$this->session->handleAckReceipt($receipts[1]);
+		self::assertSame(1, $this->session->getDimensionTransition()->getReceivedChunkCount());
+		$this->sendArrival();
+		self::assertCount(1, $this->ackResolvers);
+		self::assertNotNull($this->session->getDimensionTransition()->getServerAckAt());
+		$this->ackResolvers[0]->resolve(true);
+		self::assertNotNull($this->session->getDimensionTransition());
 	}
 
 }

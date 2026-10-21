@@ -1600,9 +1600,11 @@ class NetworkSession{
 		}else{
 			$this->sendDataPacket($packet);
 		}
-		$this->dimensionTransition?->recordServerAck(microtime(true));
-		$this->traceDimension("server_ack_queued");
-		$this->completeObservedDimensionTransition();
+		if($this->dimensionTransition === $transition){
+			$transition?->recordServerAck(microtime(true));
+			$this->traceDimension("server_ack_queued");
+			$this->completeObservedDimensionTransition();
+		}
 	}
 
 	public function syncGameRules(World $world) : void{

@@ -32,6 +32,7 @@ final class DimensionChunkPriorityTest extends TestCase{
 		});
 		$player = $this->createPartialMock(Player::class, ["getWorld", "getNetworkSession", "isConnected"]);
 		(new \ReflectionProperty(Entity::class, "closed"))->setValue($player, true);
+		(new \ReflectionProperty(Player::class, "logger"))->setValue($player, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
 		$player->method("getWorld")->willReturn($world);
 		$player->method("getNetworkSession")->willReturn($session);
 		$player->method("isConnected")->willReturn(true);

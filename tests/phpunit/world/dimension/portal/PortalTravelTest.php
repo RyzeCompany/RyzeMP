@@ -409,7 +409,7 @@ final class PortalTravelTest extends TestCase{
 		$teleports = 0;
 		$this->entity->expects(self::once())->method("teleport")->willReturnCallback(function($to, $yaw) use(&$teleports) : bool{
 			++$teleports;
-			self::assertSame([32.5, 49.0, 32.5, 45.0], [$to->x, $to->y, $to->z, $yaw]);
+			self::assertSame([32.5, 49, 32.5, 45.0], [$to->x, $to->y, $to->z, $yaw]);
 			return true;
 		});
 		$this->enter();
