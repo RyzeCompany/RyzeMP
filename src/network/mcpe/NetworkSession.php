@@ -53,6 +53,7 @@ use pocketmine\network\mcpe\handler\DeathPacketHandler;
 use pocketmine\network\mcpe\handler\HandshakePacketHandler;
 use pocketmine\network\mcpe\handler\InGamePacketHandler;
 use pocketmine\network\mcpe\handler\LoginPacketHandler;
+use pocketmine\network\mcpe\handler\LegacySessionBootstrap;
 use pocketmine\network\mcpe\handler\PacketHandler;
 use pocketmine\network\mcpe\handler\PacketHandlerAction;
 use pocketmine\network\mcpe\handler\PacketHandlerInspector;
@@ -126,6 +127,7 @@ use pocketmine\timings\Timings;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\TextFormat;
+use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
@@ -460,6 +462,20 @@ class NetworkSession{
 				throw new PacketHandlingException("No bytes in payload");
 			}
 
+			if($this->protocolId === null && $this->handler instanceof SessionStartPacketHandler && $this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_ENABLE_EXPERIMENTAL_1_16_100, false) && !LegacySessionBootstrap::isNetworkSettingsRequest($payload)){
+				try{
+					$login = LegacySessionBootstrap::decodeLogin($payload, $this->compressor);
+				}catch(DecompressionException|PacketDecodeException|DataDecodeException $e){
+					throw PacketHandlingException::wrap($e, "Legacy Login preflight failed");
+				}
+				$this->setProtocolId(ProtocolInfo::PROTOCOL_1_16_100);
+				$this->onSessionStartSuccess();
+				$this->gamePacketLimiter->decrement();
+				$encoded = new ByteBufferWriter();
+				$login->encode($encoded, ProtocolInfo::PROTOCOL_1_16_100);
+				$this->handleDataPacket($login, $encoded->getData());
+				return;
+			}
 			if($this->enableCompression){
 				if($this->protocolId >= ProtocolInfo::PROTOCOL_1_20_60){
 					$compressionType = ord($payload[0]);
@@ -1010,6 +1026,11 @@ class NetworkSession{
 				$error = "Missing client public key"; //failsafe
 			}
 		}
+		$this->logger->debug("Authentication result: protocol=" . $this->getProtocolId() .
+			" game=" . Utils::printable(substr($this->getGameVersion() ?? "unknown", 0, 32)) .
+			" authenticated=" . ($authenticated && $error === null ? "yes" : "no") .
+			" required=" . ($authRequired ? "yes" : "no") .
+			" verification=" . ($error === null ? "valid" : "failed"));
 
 		if($error !== null){
 			$this->disconnectWithError(
@@ -1088,7 +1109,7 @@ class NetworkSession{
 				}
 				$this->sendDataPacket(ServerToClientHandshakePacket::create($handshakeJwt), true); //make sure this gets sent before encryption is enabled
 
-				$this->cipher = EncryptionContext::fakeGCM($encryptionKey);
+				$this->cipher = EncryptionContext::forProtocol($encryptionKey, $this->getProtocolId());
 
 				$this->setHandler(new HandshakePacketHandler($this->onServerLoginSuccess(...)));
 				$this->logger->debug("Enabled encryption");
@@ -1278,15 +1299,24 @@ class NetworkSession{
 			], null, null, null);
 		}
 
-		$this->sendDataPacket(UpdateAbilitiesPacket::create(new AbilitiesData(
+		$data = new AbilitiesData(
 			$isOp ? CommandPermissions::OPERATOR : CommandPermissions::NORMAL,
 			$isOp ? PlayerPermissions::OPERATOR : PlayerPermissions::MEMBER,
 			$for->getId(),
 			$layers
-		)));
+		);
+		if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			$this->sendDataPacket(\pocketmine\network\mcpe\protocol\AdventureSettingsPacket::fromAbilitiesData($data, $for->hasAutoJump()));
+		}else{
+			$this->sendDataPacket(UpdateAbilitiesPacket::create($data));
+		}
 	}
 
 	public function syncAdventureSettings() : void{
+		if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			if($this->player !== null){ $this->syncAbilities($this->player); }
+			return;
+		}
 		if($this->player === null){
 			throw new \LogicException("Cannot sync adventure settings for a player that is not yet created");
 		}

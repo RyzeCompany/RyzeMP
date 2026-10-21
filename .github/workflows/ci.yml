@@ -37,5 +37,5 @@ jobs:
           php build/codegen/pocketmine-yml-property-consts.php
           git diff --exit-code -- generated/YmlServerProperties.php
       - name: Run PHPUnit
-        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --display-warnings tests/phpunit
 

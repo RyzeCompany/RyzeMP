@@ -38,6 +38,7 @@ use pocketmine\crafting\TagWildcardRecipeIngredient;
 use pocketmine\data\bedrock\item\BlockItemIdMap;
 use pocketmine\data\bedrock\item\downgrade\ItemIdMetaDowngrader;
 use pocketmine\data\bedrock\item\ItemTypeNames;
+use pocketmine\data\bedrock\item\ItemTypeSerializeException;
 use pocketmine\data\SavedDataLoadingException;
 use pocketmine\entity\Skin;
 use pocketmine\item\Item;
@@ -110,7 +111,8 @@ class TypeConverter{
 			GlobalItemDataHandlers::getSerializer(),
 			GlobalItemDataHandlers::getDeserializer(),
 			$this->blockItemIdMap,
-			$this->itemDataDowngrader
+			$this->itemDataDowngrader,
+			$protocolId === ProtocolInfo::PROTOCOL_1_16_100
 		);
 
 		$this->skinAdapter = new LegacySkinAdapter();
@@ -194,6 +196,9 @@ class TypeConverter{
 				? new StringIdMetaItemDescriptor($this->itemTypeDictionary->fromIntId($id), $meta)
 				: new IntIdMetaItemDescriptor($id, $meta);
 		}elseif($ingredient instanceof TagWildcardRecipeIngredient){
+			if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+				throw new ItemTypeSerializeException("Legacy recipe tags must be expanded into numeric ingredients");
+			}
 			$descriptor = new TagItemDescriptor($ingredient->getTagName());
 		}else{
 			throw new \LogicException("Unsupported recipe ingredient type " . get_class($ingredient) . ", only " . ExactRecipeIngredient::class . " and " . MetaWildcardRecipeIngredient::class . " are supported");

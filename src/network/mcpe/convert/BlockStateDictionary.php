@@ -98,7 +98,10 @@ final class BlockStateDictionary{
 			}
 		}
 
-		$standardSkull = $this->stateDataToStateIdLookup[BlockTypeNames::SKELETON_SKULL];
+		$standardSkull = $this->stateDataToStateIdLookup[BlockTypeNames::SKELETON_SKULL] ?? null;
+		if($standardSkull === null){
+			return; //Subset palettes cannot provide skull aliases without a source state.
+		}
 		foreach([
 			BlockTypeNames::WITHER_SKELETON_SKULL,
 			BlockTypeNames::ZOMBIE_HEAD,
@@ -123,7 +126,9 @@ final class BlockStateDictionary{
 			//TODO: if we ever allow mutating the dictionary, this would need to be rebuilt on modification
 
 			foreach($this->states as $i => $state){
-				$table[$state->getStateName()][$state->getMeta()] = $i;
+				if(($meta = $state->getMeta()) !== null){
+					$table[$state->getStateName()][$meta] = $i;
+				}
 			}
 
 			$this->idMetaToStateIdLookupCache = [];
@@ -213,7 +218,7 @@ final class BlockStateDictionary{
 	/**
 	 * @param int[]|null $networkIds when set, states are keyed by these (hashed) network ids instead of their index
 	 */
-	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null) : self{
+	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null, bool $allowUnknownMetadata = false) : self{
 		$upgrader = GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader();
 		$metaMap = json_decode($metaMapContents, flags: JSON_THROW_ON_ERROR);
 		if(!is_array($metaMap)){
@@ -238,10 +243,10 @@ final class BlockStateDictionary{
 		}
 		foreach($palette as $i => $state){
 			$meta = $metaMap[$i] ?? null;
-			if($meta === null){
+			if($meta === null && !$allowUnknownMetadata){
 				throw new \InvalidArgumentException("Missing associated meta value for state $i (" . $state->toNbt() . ")");
 			}
-			if(!is_int($meta)){
+			if(!is_int($meta) && !($allowUnknownMetadata && $meta === null)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
 			$newState = $upgrader->upgrade($state);

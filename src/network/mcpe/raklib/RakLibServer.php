@@ -26,6 +26,7 @@ namespace pocketmine\network\mcpe\raklib;
 use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
 use pocketmine\snooze\SleeperHandlerEntry;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\thread\log\ThreadSafeLogger;
 use pocketmine\thread\NonThreadSafeValue;
 use pocketmine\thread\Thread;
@@ -35,7 +36,6 @@ use raklib\server\ipc\RakLibToUserThreadMessageSender;
 use raklib\server\ipc\UserToRakLibThreadMessageReceiver;
 use raklib\server\Server;
 use raklib\server\ServerSocket;
-use raklib\server\SimpleProtocolAcceptor;
 use raklib\utils\ExceptionTraceCleaner;
 use raklib\utils\InternetAddress;
 use function gc_disable;
@@ -59,7 +59,8 @@ class RakLibServer extends Thread{
 		protected int $serverId,
 		protected int $maxMtuSize,
 		protected int $protocolVersion,
-		protected SleeperHandlerEntry $sleeperEntry
+		protected SleeperHandlerEntry $sleeperEntry,
+		protected bool $allowExperimentalLegacy = false
 	){
 		$this->mainPath = \pocketmine\PATH;
 		$this->address = new NonThreadSafeValue($address);
@@ -96,7 +97,7 @@ class RakLibServer extends Thread{
 			$this->logger,
 			$socket,
 			$this->maxMtuSize,
-			new SimpleProtocolAcceptor($this->protocolVersion),
+			new MinecraftProtocolAcceptor($this->protocolVersion, $this->allowExperimentalLegacy || in_array(ProtocolInfo::PROTOCOL_1_16_100, ProtocolInfo::ACCEPTED_PROTOCOL, true)),
 			new UserToRakLibThreadMessageReceiver(new PthreadsChannelReader($this->mainToThreadBuffer)),
 			new RakLibToUserThreadMessageSender(new SnoozeAwarePthreadsChannelWriter($this->threadToMainBuffer, $this->sleeperEntry->createNotifier())),
 			new ExceptionTraceCleaner($this->mainPath),

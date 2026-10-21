@@ -181,6 +181,13 @@ final class BlockTranslator{
 	private int $fallbackStateId;
 
 	public static function loadFromProtocolId(int $protocolId) : BlockTranslator{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			$palette = Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "legacy/1.16.100/canonical_block_states.nbt");
+			// 419 has no block runtime ID in item stacks. Item metadata is handled by
+			// the item upgrader/downgrader, never fabricated from a different palette.
+			$unknownMetas = array_fill(0, count(BlockStateDictionary::loadPaletteFromString($palette)), null);
+			return new self(BlockStateDictionary::loadFromString($palette, json_encode($unknownMetas, JSON_THROW_ON_ERROR), null, true), GlobalBlockStateHandlers::getSerializer());
+		}
 		$canonicalBlockStatesRaw = Filesystem::fileGetContents(str_replace(".nbt", self::PATHS[$protocolId][self::CANONICAL_BLOCK_STATES_PATH] . ".nbt", BedrockDataFiles::CANONICAL_BLOCK_STATES_NBT));
 		$metaMappingRaw = Filesystem::fileGetContents(str_replace(".json", self::PATHS[$protocolId][self::BLOCK_STATE_META_MAP_PATH] . ".json", BedrockDataFiles::BLOCK_STATE_META_MAP_JSON));
 		$translator = new self(

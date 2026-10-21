@@ -118,11 +118,20 @@ class StaticPacketCache{
 		private AvailableActorIdentifiersPacket $availableActorIdentifiers
 	){}
 
+	private ?BiomeDefinitionListPacket $biomeDefs419 = null;
+	private ?AvailableActorIdentifiersPacket $actors419 = null;
+
 	public function getBiomeDefs(int $protocolId) : BiomeDefinitionListPacket{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			return $this->biomeDefs419 ??= BiomeDefinitionListPacket::createLegacy(self::loadCompoundFromFile(\pocketmine\BEDROCK_DATA_PATH . "legacy/1.16.100/biome_definitions.nbt"));
+		}
 		return $protocolId >= ProtocolInfo::PROTOCOL_1_21_80 ? $this->biomeDefs : $this->legacyBiomeDefs;
 	}
 
-	public function getAvailableActorIdentifiers() : AvailableActorIdentifiersPacket{
+	public function getAvailableActorIdentifiers(int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : AvailableActorIdentifiersPacket{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			return $this->actors419 ??= AvailableActorIdentifiersPacket::create(self::loadCompoundFromFile(\pocketmine\BEDROCK_DATA_PATH . "legacy/1.16.100/entity_identifiers.nbt"));
+		}
 		return $this->availableActorIdentifiers;
 	}
 }

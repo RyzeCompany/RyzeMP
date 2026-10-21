@@ -101,6 +101,7 @@ final class YmlServerProperties{
 	public const NETWORK_BATCH_THRESHOLD = 'network.batch-threshold';
 	public const NETWORK_COMPRESSION_LEVEL = 'network.compression-level';
 	public const NETWORK_ENABLE_ENCRYPTION = 'network.enable-encryption';
+	public const NETWORK_ENABLE_EXPERIMENTAL_1_16_100 = 'network.enable-experimental-1-16-100';
 	public const NETWORK_MAX_MTU_SIZE = 'network.max-mtu-size';
 	public const NETWORK_UPNP_FORWARDING = 'network.upnp-forwarding';
 	public const PLAYER = 'player';

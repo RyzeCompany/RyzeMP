@@ -50,6 +50,7 @@ final class ItemTranslator{
 		private ItemDeserializer $itemDeserializer,
 		private BlockItemIdMap $blockItemIdMap,
 		private ItemIdMetaDowngrader $itemDataDowngrader,
+		private bool $legacy419 = false,
 	){}
 
 	/**
@@ -83,6 +84,9 @@ final class ItemTranslator{
 
 		$blockStateData = $itemData->getBlock();
 
+		if($this->legacy419){
+			return [$numericId, $itemData->getMeta(), null];
+		}
 		if($blockStateData !== null){
 			$blockRuntimeId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
 			if($blockRuntimeId === null){
@@ -117,6 +121,14 @@ final class ItemTranslator{
 		}
 
 		$blockStateData = null;
+		if($this->legacy419){
+			try{
+				$data = GlobalItemDataHandlers::getUpgrader()->upgradeItemTypeDataString($stringId, $networkMeta, 1, null)->getTypeData();
+				return $this->itemDeserializer->deserializeType($data);
+			}catch(\pocketmine\data\SavedDataLoadingException|ItemTypeDeserializeException $e){
+				throw TypeConversionException::wrap($e, "Invalid legacy itemstack data");
+			}
+		}
 		if($this->blockItemIdMap->lookupBlockId($stringId) !== null){
 			$blockStateData = $this->blockStateDictionary->generateCurrentDataFromStateId($networkBlockRuntimeId);
 			if($blockStateData === null){
@@ -137,6 +149,7 @@ final class ItemTranslator{
 
 	public static function getItemSchemaId(int $protocolId) : int{
 		return match($protocolId){
+			ProtocolInfo::PROTOCOL_1_16_100 => 21,
 			ProtocolInfo::PROTOCOL_1_26_51,
 			ProtocolInfo::PROTOCOL_1_26_45,
 			ProtocolInfo::PROTOCOL_1_26_40 => 271,

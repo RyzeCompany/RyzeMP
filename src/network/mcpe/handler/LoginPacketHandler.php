@@ -162,6 +162,12 @@ class LoginPacketHandler extends PacketHandler{
 				}catch(\JsonMapper_Exception $e){
 					throw PacketHandlingException::wrap($e, "Error mapping self-signed certificate chain");
 				}
+				if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+					$rawChain = $chainData->chain ?? null;
+					$this->session->getLogger()->debug("Legacy 419 certificate input: raw-links=" . (is_array($rawChain) ? count($rawChain) : "invalid") .
+						" mapped-links=" . count($chain->chain) .
+						" preserved=" . ($rawChain === $chain->chain ? "yes" : "no"));
+				}
 				if($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93){
 					if(count($chain->chain) > 1 || !isset($chain->chain[0])){
 						throw new PacketHandlingException("Expected exactly one certificate in self-signed certificate chain, got " . count($chain->chain));
@@ -377,6 +383,12 @@ class LoginPacketHandler extends PacketHandler{
 			throw PacketHandlingException::wrap($e);
 		}
 
+		if($this->session->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+			$clientDataClaims += [
+				"CompatibleWithClientSideChunkGen" => false, "IsEditorMode" => false,
+				"PlayFabId" => "", "SkinGeometryDataEngineVersion" => "", "TrustedSkin" => false
+			];
+		}
 		$mapper = $this->defaultJsonMapper("ClientData JWT body");
 		try{
 			$clientData = $mapper->map($clientDataClaims, new ClientData());
@@ -418,11 +430,15 @@ class LoginPacketHandler extends PacketHandler{
 	protected function processLegacySelfSignedLogin(array $legacyCertificate, string $clientDataJwt, bool $authRequired) : void{
 		$this->session->setHandler(null); //drop packets received during login verification
 
-		$rootAuthKeyDer = $this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93 ? null : base64_decode(ProcessLegacyLoginTask::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true);
-		if($rootAuthKeyDer === false){ //should never happen unless the constant is messed up
-			throw new \InvalidArgumentException("Failed to base64-decode hardcoded Mojang root public key");
-		}
-		$this->server->getAsyncPool()->submitTask(new ProcessLegacyLoginTask($legacyCertificate, $clientDataJwt, rootAuthKeyDer: $rootAuthKeyDer, authRequired: $authRequired, onCompletion: $this->authCallback));
+		$rootAuthKeyDer = ProcessLegacyLoginTask::rootKeyForProtocol($this->session->getProtocolId());
+		$this->server->getAsyncPool()->submitTask(new ProcessLegacyLoginTask(
+			$legacyCertificate, $clientDataJwt,
+			rootAuthKeyDer: $rootAuthKeyDer,
+			authRequired: $authRequired,
+			onCompletion: $this->authCallback,
+			alternateRootAuthKeyDer: ProcessLegacyLoginTask::alternateRootKeyForProtocol($this->session->getProtocolId()),
+			onDiagnostic: fn(string $message) => $this->session->getLogger()->debug($message)
+		));
 	}
 
 	private function defaultJsonMapper(string $logContext) : \JsonMapper{

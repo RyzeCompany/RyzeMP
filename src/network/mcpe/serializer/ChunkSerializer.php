@@ -31,7 +31,9 @@ use pocketmine\data\bedrock\BiomeIds;
 use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\network\mcpe\convert\BlockTranslator;
+use pocketmine\network\mcpe\convert\LegacyBiomeMap;
 use pocketmine\network\mcpe\convert\TypeConverter;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\world\format\Chunk;
@@ -52,7 +54,14 @@ final class ChunkSerializer{
 	 * @return int[]
 	 * @phpstan-return array{int, int}
 	 */
-	public static function getDimensionChunkBounds(int $dimensionId) : array{
+	public static function getDimensionChunkBounds(int $dimensionId, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : array{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			return match($dimensionId){
+				DimensionIds::OVERWORLD, DimensionIds::THE_END => [0, 15],
+				DimensionIds::NETHER => [0, 7],
+				default => throw new \InvalidArgumentException("Unknown dimension ID $dimensionId"),
+			};
+		}
 		return match($dimensionId){
 			DimensionIds::OVERWORLD => [-4, 19],
 			DimensionIds::NETHER => [0, 7],
@@ -67,10 +76,10 @@ final class ChunkSerializer{
 	 *
 	 * @phpstan-param DimensionIds::* $dimensionId
 	 */
-	public static function getSubChunkCount(Chunk $chunk, int $dimensionId) : int{
+	public static function getSubChunkCount(Chunk $chunk, int $dimensionId, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : int{
 		//if the protocol world bounds ever exceed the PM supported bounds again in the future, we might need to
 		//polyfill some stuff here
-		[$minSubChunkIndex, $maxSubChunkIndex] = self::getDimensionChunkBounds($dimensionId);
+		[$minSubChunkIndex, $maxSubChunkIndex] = self::getDimensionChunkBounds($dimensionId, $protocolId);
 		for($y = $maxSubChunkIndex, $count = $maxSubChunkIndex - $minSubChunkIndex + 1; $y >= $minSubChunkIndex; --$y, --$count){
 			if($chunk->getSubChunk($y)->isEmptyFast()){
 				continue;
@@ -89,13 +98,13 @@ final class ChunkSerializer{
 		$stream = new ByteBufferWriter();
 		$subChunks = [];
 
-		$subChunkCount = self::getSubChunkCount($chunk, $dimensionId);
+		$subChunkCount = self::getSubChunkCount($chunk, $dimensionId, $typeConverter->getProtocolId());
 		$writtenCount = 0;
 
-		[$minSubChunkIndex, ] = self::getDimensionChunkBounds($dimensionId);
+		[$minSubChunkIndex, ] = self::getDimensionChunkBounds($dimensionId, $typeConverter->getProtocolId());
 		for($y = $minSubChunkIndex; $writtenCount < $subChunkCount; ++$y, ++$writtenCount){
 			$stream->clear();
-			self::serializeSubChunk($chunk->getSubChunk($y), $typeConverter->getBlockTranslator(), $stream, false);
+			self::serializeSubChunk($chunk->getSubChunk($y), $typeConverter->getBlockTranslator(), $stream, false, $typeConverter->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100);
 			$subChunks[] = $stream->getData();
 		}
 
@@ -112,8 +121,8 @@ final class ChunkSerializer{
 			$stream->writeByteArray($subChunk);
 		}
 
-		self::serializeBiomes($chunk, $dimensionId, $stream);
-		self::serializeChunkData($chunk, $stream, $typeConverter, $tiles);
+		self::serializeBiomes($chunk, $dimensionId, $stream, $typeConverter->getProtocolId());
+		self::serializeChunkData($chunk, $stream, $typeConverter, $tiles, $dimensionId);
 
 		return $stream->getData();
 	}
@@ -121,7 +130,21 @@ final class ChunkSerializer{
 	/**
 	 * @phpstan-param DimensionIds::* $dimensionId
 	 */
-	public static function serializeBiomes(Chunk $chunk, int $dimensionId, ByteBufferWriter $stream) : void{
+	public static function serializeBiomes(Chunk $chunk, int $dimensionId, ByteBufferWriter $stream, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : void{
+		if($protocolId === ProtocolInfo::PROTOCOL_1_16_100){
+			[, $maxSubChunkIndex] = self::getDimensionChunkBounds($dimensionId, $protocolId);
+			$maxY = ($maxSubChunkIndex << 4) | 15;
+			// The historical layout is one unsigned biome byte per X/Z column.
+			$biomes = str_repeat("\x00", 256);
+			for($x = 0; $x < 16; ++$x){
+				for($z = 0; $z < 16; ++$z){
+					$y = max(0, min($maxY, $chunk->getHighestBlockAt($x, $z) ?? 0));
+					$biomes[($z << 4) | $x] = chr(LegacyBiomeMap::toLegacyId($chunk->getBiomeId($x, $y, $z)));
+				}
+			}
+			$stream->writeByteArray($biomes);
+			return;
+		}
 		[$minSubChunkIndex, $maxSubChunkIndex] = self::getDimensionChunkBounds($dimensionId);
 		$biomeIdMap = LegacyBiomeIdToStringIdMap::getInstance();
 		//all biomes must always be written :(
@@ -135,17 +158,17 @@ final class ChunkSerializer{
 		//Border block entry format: 1 byte (4 bits X, 4 bits Z). These are however useless since they crash the regular client.
 	}
 
-	public static function serializeChunkData(Chunk $chunk, ByteBufferWriter $stream, TypeConverter $typeConverter, ?string $tiles = null) : void{
+	public static function serializeChunkData(Chunk $chunk, ByteBufferWriter $stream, TypeConverter $typeConverter, ?string $tiles = null, int $dimensionId = DimensionIds::OVERWORLD) : void{
 		self::serializeBorderBlocks($stream);
 
 		if($tiles !== null){
 			$stream->writeByteArray($tiles);
 		}else{
-			$stream->writeByteArray(self::serializeTiles($chunk, $typeConverter));
+			$stream->writeByteArray(self::serializeTiles($chunk, $typeConverter, $dimensionId));
 		}
 	}
 
-	public static function serializeSubChunk(SubChunk $subChunk, BlockTranslator $blockTranslator, ByteBufferWriter $stream, bool $persistentBlockStates) : void{
+	public static function serializeSubChunk(SubChunk $subChunk, BlockTranslator $blockTranslator, ByteBufferWriter $stream, bool $persistentBlockStates, bool $legacy419 = false) : void{
 		$layers = $subChunk->getBlockLayers();
 		Byte::writeUnsigned($stream, 8); //version
 
@@ -156,6 +179,11 @@ final class ChunkSerializer{
 		foreach($layers as $blocks){
 			$bitsPerBlock = $blocks->getBitsPerBlock();
 			$words = $blocks->getWordArray();
+			if($legacy419 && $bitsPerBlock === 0){
+				// Emit the historical one-bit representation for uniform palettes.
+				$bitsPerBlock = 1;
+				$words = str_repeat("\x00", 512);
+			}
 			Byte::writeUnsigned($stream, ($bitsPerBlock << 1) | ($persistentBlockStates ? 0 : 1));
 			$stream->writeByteArray($words);
 			$palette = $blocks->getPalette();
@@ -201,9 +229,13 @@ final class ChunkSerializer{
 		}
 	}
 
-	public static function serializeTiles(Chunk $chunk, TypeConverter $typeConverter) : string{
+	public static function serializeTiles(Chunk $chunk, TypeConverter $typeConverter, int $dimensionId = DimensionIds::OVERWORLD) : string{
 		$stream = new ByteBufferWriter();
+		[, $maxSubChunk] = self::getDimensionChunkBounds($dimensionId, $typeConverter->getProtocolId());
 		foreach($chunk->getTiles() as $tile){
+			if($typeConverter->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100 && ($tile->getPosition()->getFloorY() < 0 || $tile->getPosition()->getFloorY() > (($maxSubChunk << 4) | 15))){
+				continue;
+			}
 			if($tile instanceof Spawnable){
 				$stream->writeByteArray($tile->getSerializedSpawnCompound($typeConverter)->getEncodedNbt());
 			}

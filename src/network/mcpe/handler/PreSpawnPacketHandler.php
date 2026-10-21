@@ -124,7 +124,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 
 			$blockNetworkIdsAreHashes = $protocolId >= ProtocolInfo::PROTOCOL_1_26_50;
 			$blockPalette = [];
-			if(!$blockNetworkIdsAreHashes){
+			if(!$blockNetworkIdsAreHashes && $protocolId !== ProtocolInfo::PROTOCOL_1_16_100){
 				foreach($typeConverter->getBlockTranslator()->getBlockStateDictionary()->getStates() as $state){
 					$blockPalette[] = new BlockPaletteEntry(
 						$state->getStateName(),
@@ -150,7 +150,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 				0,
 				0,
 				"",
-				true,
+				true, // server-authoritative inventory, including 419 ItemStackRequest
 				sprintf("%s %s", VersionInfo::NAME, VersionInfo::VERSION()->getFullVersion(true)),
 				Uuid::fromString(Uuid::NIL),
 				false,
@@ -171,7 +171,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 			}
 
 			$this->session->getLogger()->debug("Sending actor identifiers");
-			$this->session->sendDataPacket(StaticPacketCache::getInstance()->getAvailableActorIdentifiers());
+			$this->session->sendDataPacket(StaticPacketCache::getInstance()->getAvailableActorIdentifiers($protocolId));
 
 			$this->session->getLogger()->debug("Sending biome definitions");
 			$this->session->sendDataPacket(StaticPacketCache::getInstance()->getBiomeDefs($this->session->getProtocolId()));

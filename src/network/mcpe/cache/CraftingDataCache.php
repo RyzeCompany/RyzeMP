@@ -99,6 +99,15 @@ final class CraftingDataCache{
 		foreach($manager->getCraftingRecipeIndex() as $index => $recipe){
 			//the client doesn't like recipes with an ID of 0, so we need to offset them
 			$recipeNetId = $index + self::RECIPE_ID_OFFSET;
+			if($this->getProtocolId() === ProtocolInfo::PROTOCOL_1_16_100){
+				try{
+					foreach($recipe->getResults() as $result){
+						$converter->getItemTranslator()->toNetworkId($result);
+					}
+				}catch(ItemTypeSerializeException){
+					continue;
+				}
+			}
 			if($recipe instanceof ShapelessRecipe){
 				$typeTag = match($recipe->getType()){
 					ShapelessRecipeType::CRAFTING => CraftingRecipeBlockName::CRAFTING_TABLE,
