@@ -143,6 +143,8 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 			throw new NetworkInterfaceStartException($e->getMessage(), 0, $e);
 		}
 		$this->server->getLogger()->debug("RakLib booted successfully");
+		$legacyEnabled = $this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_ENABLE_EXPERIMENTAL_1_16_100, false);
+		$this->server->getLogger()->debug("Bedrock 1.16.100 (419): " . ($legacyEnabled ? "enabled; RakNet 10 accepted" : "disabled; set network.enable-experimental-1-16-100: true in pocketmine.yml and restart"));
 	}
 
 	public function setNetwork(Network $network) : void{

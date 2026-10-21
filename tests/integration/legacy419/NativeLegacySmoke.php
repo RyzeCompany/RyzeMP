@@ -6,6 +6,13 @@ namespace ryzemp\integration;
 
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
+use pocketmine\block\VanillaBlocks;
+use pocketmine\event\EventPriority;
+use pocketmine\event\inventory\InventoryTransactionEvent;
+use pocketmine\inventory\Inventory;
+use pocketmine\network\mcpe\protocol\types\inventory as I;
+use pocketmine\network\mcpe\protocol\types\inventory\stackrequest as R;
+use pocketmine\network\mcpe\protocol\types\inventory\stackresponse\ItemStackResponse;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\math\Vector2;
 use pocketmine\math\Vector3;
@@ -43,6 +50,9 @@ final class NativeLegacySmoke extends PluginBase{
 	private bool $started = false;
 	private bool $expectAuthRejection = false;
 	private bool $sawAuthRejection = false;
+	private bool $cancelNextTransaction = false;
+	private array $responses = [];
+	private int $recipeCount = 0;
 
 	protected function onEnable() : void{
 		$this->expectAuthRejection = getenv('RYZEMP_419_EXPECT_AUTH_REJECTION') === '1';
@@ -84,7 +94,8 @@ final class NativeLegacySmoke extends PluginBase{
 				}elseif($this->probeTick !== null && $this->ticks > $this->probeTick + 4){
 					if($this->cipher === null || $this->probeTexts < 2){ throw new \RuntimeException('Encrypted chat/command exchange did not complete'); }
 					if($this->session->getPlayer()->getPosition()->distance($this->probePosition) > 0.05){ throw new \RuntimeException('Native movement was not applied'); }
-					$this->getLogger()->info('LEGACY419_JOIN_SMOKE_OK encrypted=cfb8 chunks=' . $this->chunks . ' movement=1 chat=1 command=1');
+					$this->runInventoryChecks();
+					$this->getLogger()->info('LEGACY419_JOIN_SMOKE_OK encrypted=cfb8 chunks=' . $this->chunks . ' movement=1 chat=1 command=1 inventory=1 crafting=1');
 					$this->finished = true;
 					$this->session->disconnect('Smoke completed');
 					$this->getServer()->shutdown();
@@ -95,6 +106,112 @@ final class NativeLegacySmoke extends PluginBase{
 				$this->getServer()->shutdown();
 			}
 		}), 1);
+	}
+
+	private function slot(int $container, Inventory $inventory, int $slot) : R\ItemStackRequestSlotInfo{
+		$info = $this->session->getInvManager()->getItemStackInfo($inventory, $slot);
+		if($info === null){ throw new \RuntimeException('Untracked inventory slot'); }
+		return new R\ItemStackRequestSlotInfo(new I\FullContainerName($container), $slot, $info->getStackId());
+	}
+
+	private function request(int $id, array $actions, bool $success = true) : void{
+		$this->send(P\ItemStackRequestPacket::create([new R\ItemStackRequest($id, $actions, [], 0)]));
+		$this->session->tick();
+		$this->pump();
+		$expected = $success ? ItemStackResponse::RESULT_OK : ItemStackResponse::RESULT_ERROR;
+		if(($this->responses[$id] ?? null) !== $expected){ throw new \RuntimeException("Unexpected response for request $id: " . ($this->responses[$id] ?? 'missing')); }
+	}
+
+	private function runInventoryChecks() : void{
+		$player = $this->session->getPlayer();
+		$inventory = $player->getInventory();
+		$cursor = $player->getCursorInventory();
+		$manager = $this->session->getInvManager();
+		$inventory->clearAll();
+		$cursor->clearAll();
+		$inventory->setItem(0, VanillaBlocks::OAK_LOG()->asItem()->setCount(3));
+		$manager->syncAll();
+		$this->request(-1, [new R\TakeStackRequestAction(2, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 0), $this->slot(I\ContainerUIIds::CURSOR, $cursor, 0))]);
+		if($inventory->getItem(0)->getCount() !== 1 || $cursor->getItem(0)->getCount() !== 2){ throw new \RuntimeException('Take failed'); }
+		$this->request(-3, [new R\PlaceStackRequestAction(1, $this->slot(I\ContainerUIIds::CURSOR, $cursor, 0), $this->slot(I\ContainerUIIds::HOTBAR, $inventory, 5))]);
+		$this->request(-5, [new R\SwapStackRequestAction($this->slot(I\ContainerUIIds::HOTBAR, $inventory, 5), $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 1))]);
+		if(!$inventory->getItem(5)->isNull() || $inventory->getItem(1)->getCount() !== 1){ throw new \RuntimeException('Place/swap failed'); }
+		$this->request(-7, [new R\DropStackRequestAction(1, $this->slot(I\ContainerUIIds::CURSOR, $cursor, 0), false)]);
+		if(!$cursor->getItem(0)->isNull()){ throw new \RuntimeException('Drop failed'); }
+
+		// A stale stack ID must reject the request without modifying either slot.
+		$stale = new R\ItemStackRequestSlotInfo(new I\FullContainerName(I\ContainerUIIds::INVENTORY), 1, 123456);
+		$this->request(-9, [new R\TakeStackRequestAction(1, $stale, $this->slot(I\ContainerUIIds::CURSOR, $cursor, 0))], false);
+		if($inventory->getItem(1)->getCount() !== 1 || !$cursor->getItem(0)->isNull()){ throw new \RuntimeException('Stale stack request changed inventory'); }
+
+		$this->getServer()->getPluginManager()->registerEvent(InventoryTransactionEvent::class, function(InventoryTransactionEvent $event) : void{
+			if($this->cancelNextTransaction && $event->getTransaction()->getSource() === $this->session->getPlayer()){
+				$this->cancelNextTransaction = false;
+				$event->cancel();
+			}
+		}, EventPriority::NORMAL, $this);
+		$this->cancelNextTransaction = true;
+		$this->request(-11, [new R\TakeStackRequestAction(1, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 1), $this->slot(I\ContainerUIIds::CURSOR, $cursor, 0))], false);
+		if($this->cancelNextTransaction || $inventory->getItem(1)->getCount() !== 1 || !$cursor->getItem(0)->isNull()){ throw new \RuntimeException('Plugin cancellation was not preserved'); }
+
+		// Use an actual registered recipe index; the client never supplies the resulting item.
+		$recipeId = null;
+		foreach($this->getServer()->getCraftingManager()->getCraftingRecipeIndex() as $index => $recipe){
+			if(count($recipe->getIngredientList()) === 1 && $recipe->getIngredientList()[0]->accepts(VanillaBlocks::OAK_LOG()->asItem())){
+				$results = $recipe->getResults();
+				if(count($results) === 1 && $results[0]->equals(VanillaBlocks::OAK_PLANKS()->asItem()) && $results[0]->getCount() === 4){
+					$recipeId = $index + 1;
+					break;
+				}
+			}
+		}
+		if($recipeId === null || $this->recipeCount === 0){ throw new \RuntimeException('Native 419 recipes missing'); }
+		$inventory->clearAll();
+		$inventory->setItem(0, VanillaBlocks::OAK_LOG()->asItem());
+		$manager->syncAll();
+		$created = new R\ItemStackRequestSlotInfo(new I\FullContainerName(I\ContainerUIIds::CREATED_OUTPUT), 50, -13);
+		$this->request(-13, [new R\CraftRecipeStackRequestAction($recipeId, 1), new R\CraftingConsumeInputStackRequestAction(1, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 0)), new R\TakeStackRequestAction(4, $created, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 2))]);
+		if(!$inventory->getItem(0)->isNull() || !$inventory->getItem(2)->equalsExact(VanillaBlocks::OAK_PLANKS()->asItem()->setCount(4))){ throw new \RuntimeException('Crafting failed'); }
+
+		// Crafting without consuming the registered inputs must fail atomically.
+		$this->request(-15, [new R\CraftRecipeStackRequestAction($recipeId, 1), new R\TakeStackRequestAction(4, new R\ItemStackRequestSlotInfo(new I\FullContainerName(I\ContainerUIIds::CREATED_OUTPUT), 50, -15), $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 3))], false);
+		if(!$inventory->getItem(3)->isNull() || $inventory->getItem(2)->getCount() !== 4){ throw new \RuntimeException('Invalid craft created items'); }
+		$inventory->setItem(0, VanillaBlocks::OAK_LOG()->asItem()->setCount(2));
+		$manager->syncAll();
+		$this->request(-17, [new R\CraftRecipeAutoStackRequestAction($recipeId, 2, 2, []), new R\CraftingConsumeInputStackRequestAction(2, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 0)), new R\TakeStackRequestAction(8, new R\ItemStackRequestSlotInfo(new I\FullContainerName(I\ContainerUIIds::CREATED_OUTPUT), 50, -17), $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 4))]);
+		if(!$inventory->getItem(0)->isNull() || $inventory->getItem(4)->getCount() !== 8){ throw new \RuntimeException('Automatic crafting failed'); }
+
+		$world = $player->getWorld();
+		$chestPosition = $player->getPosition()->floor()->add(2, 0, 0);
+		$world->setBlock($chestPosition, VanillaBlocks::CHEST());
+		$chest = $world->getTile($chestPosition);
+		if(!$chest instanceof \pocketmine\block\tile\Chest || !$player->setCurrentWindow($chest->getInventory())){ throw new \RuntimeException('Could not open native chest'); }
+		$chestInventory = $chest->getInventory();
+		$chestInventory->clearAll();
+		$manager->syncContents($chestInventory);
+		$this->request(-19, [new R\PlaceStackRequestAction(2, $this->slot(I\ContainerUIIds::INVENTORY, $inventory, 4), $this->slot(I\ContainerUIIds::LEVEL_ENTITY, $chestInventory, 0))]);
+		if($inventory->getItem(4)->getCount() !== 6 || $chestInventory->getItem(0)->getCount() !== 2){ throw new \RuntimeException('Chest transfer failed'); }
+		$player->removeCurrentWindow();
+		$this->session->tick();
+		$this->pump();
+
+		// Keyboard-style drop uses the legacy normal transaction, not an ItemStackRequest.
+		$converter = $this->session->getTypeConverter();
+		$source = new I\NetworkInventoryAction();
+		$source->sourceType = I\NetworkInventoryAction::SOURCE_CONTAINER;
+		$source->windowId = I\ContainerIds::INVENTORY;
+		$source->inventorySlot = 2;
+		$source->oldItem = I\ItemStackWrapper::legacy($converter->coreItemStackToNet($inventory->getItem(2)));
+		$source->newItem = I\ItemStackWrapper::legacy($converter->coreItemStackToNet($inventory->getItem(2)->setCount(3)));
+		$drop = new I\NetworkInventoryAction();
+		$drop->sourceType = I\NetworkInventoryAction::SOURCE_WORLD;
+		$drop->sourceFlags = 0;
+		$drop->inventorySlot = I\NetworkInventoryAction::ACTION_MAGIC_SLOT_DROP_ITEM;
+		$drop->oldItem = I\ItemStackWrapper::legacy(I\ItemStack::null());
+		$drop->newItem = I\ItemStackWrapper::legacy($converter->coreItemStackToNet(VanillaBlocks::OAK_PLANKS()->asItem()));
+		$this->send(P\InventoryTransactionPacket::create(0, null, I\NormalTransactionData::new([$source, $drop])));
+		if($inventory->getItem(2)->getCount() !== 3){ throw new \RuntimeException('Normal drop transaction failed'); }
+		$this->getLogger()->info('LEGACY419_INVENTORY_SMOKE_OK take=1 place=1 swap=1 drop=1 stale=reject cancelled=reject craft=1 auto=1 chest=1 normal-drop=1 unbalanced=reject recipes=' . $this->recipeCount);
 	}
 
 	private function startClient() : void{
@@ -167,9 +284,15 @@ final class NativeLegacySmoke extends PluginBase{
 				}elseif($packet instanceof P\ResourcePackStackPacket){
 					$this->send(P\ResourcePackClientResponsePacket::create(P\ResourcePackClientResponsePacket::STATUS_COMPLETED, []));
 				}elseif($packet instanceof P\StartGamePacket){
-					if($packet->blockPalette !== [] || $packet->enableNewInventorySystem){ throw new \RuntimeException('Unexpected legacy bootstrap settings'); }
+					if($packet->blockPalette !== [] || !$packet->enableNewInventorySystem){ throw new \RuntimeException('Unexpected legacy bootstrap settings'); }
 					$this->send(P\RequestChunkRadiusPacket::create(4, 4));
 					$this->send(P\SetLocalPlayerAsInitializedPacket::create($packet->actorRuntimeId));
+				}elseif($packet instanceof P\ContainerClosePacket){
+					$this->send(P\ContainerClosePacket::create($packet->windowId, 0, false));
+				}elseif($packet instanceof P\CraftingDataPacket){
+					$this->recipeCount = count($packet->recipesWithTypeIds);
+				}elseif($packet instanceof P\ItemStackResponsePacket){
+					foreach($packet->getResponses() as $response){ $this->responses[$response->getRequestId()] = $response->getResult(); }
 				}elseif($packet instanceof P\LevelChunkPacket){
 					++$this->chunks;
 				}

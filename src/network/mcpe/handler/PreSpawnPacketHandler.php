@@ -150,7 +150,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 				0,
 				0,
 				"",
-				$protocolId !== ProtocolInfo::PROTOCOL_1_16_100,
+				true, // server-authoritative inventory, including 419 ItemStackRequest
 				sprintf("%s %s", VersionInfo::NAME, VersionInfo::VERSION()->getFullVersion(true)),
 				Uuid::fromString(Uuid::NIL),
 				false,

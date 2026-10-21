@@ -154,12 +154,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeMCBE/BedrockProtocol.git",
-                "reference": "68762532b601e3f64fff67336b76f91450f1077f"
+                "reference": "76135946cdff19591437b0d01cee8b1ec821834c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/68762532b601e3f64fff67336b76f91450f1077f",
-                "reference": "68762532b601e3f64fff67336b76f91450f1077f",
+                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/76135946cdff19591437b0d01cee8b1ec821834c",
+                "reference": "76135946cdff19591437b0d01cee8b1ec821834c",
                 "shasum": ""
             },
             "require": {

@@ -152,6 +152,8 @@ jobs:
           test "$status" -eq 0
           if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY|LEGACY419_JOIN_SMOKE_FAILED' /tmp/ryzemp-419-smoke.log; then exit 1; fi
           grep -q 'LEGACY419_JOIN_SMOKE_OK encrypted=cfb8' /tmp/ryzemp-419-smoke.log
+          grep -q 'LEGACY419_INVENTORY_SMOKE_OK.*auto=1 chest=1 normal-drop=1' /tmp/ryzemp-419-smoke.log
+          grep -q 'Bedrock 1.16.100 (419): enabled; RakNet 10 accepted' /tmp/ryzemp-419-auth-required-smoke.log
 
       - name: Upload build artifact (best effort, Actions quota dependent)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
