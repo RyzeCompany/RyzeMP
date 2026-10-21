@@ -62,6 +62,21 @@ Usa un mundo simulado para probar las transiciones de los componentes. La suite
 general verifica además estados y serialización; esto no sustituye las pruebas
 de juego ni de carga con un servidor real.
 
+Validación de esta base: 558 pruebas y 148.763 comprobaciones con PHP 8.4.16.
+Las 17 pruebas nuevas aportan 1.831 comprobaciones. Se usaron las dependencias
+del PHAR anterior y se contrastaron los archivos de código con `main`.
+
+También se verificó un circuito con un mundo real: palanca → tres cables
+(15, 14, 13) → lámpara; al retirar la fuente se apagaron los cables y después
+la lámpara. El servidor arrancó y se detuvo correctamente. El constructor del
+plugin de prueba está en `tests/integration/build-redstone-smoke.php`; debe
+ejecutarse exclusivamente con datos temporales de pruebas, pues reemplaza el
+chunk de origen de ese mundo.
+
+La ejecución de GitHub Actions se detuvo al instalar dependencias por un error
+de autenticación de Composer contra GitHub, antes de ejecutar PHPUnit. No se
+modificaron secretos ni workflows para evitar ese error.
+
 ## Referencia
 
 Se revisó [Cosmoverse/Redstone](https://github.com/Cosmoverse/Redstone), revisión

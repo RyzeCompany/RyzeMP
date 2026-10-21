@@ -103,9 +103,8 @@ class Hopper extends Transparent implements PoweredByRedstone{
 	}
 
 	/**
-	 * Detects the direct power sources supported by the current PM5 fork.
-	 * This is intentionally not a general redstone graph solver: indirect
-	 * strong power through an opaque block is not currently implemented.
+	 * Legacy direct-source classifier retained for plugin compatibility.
+	 * Native hopper ticking uses RedstoneSignal, including indirect power.
 	 *
 	 * @param int $directionFromHopper Direction of the neighbour.
 	 */
