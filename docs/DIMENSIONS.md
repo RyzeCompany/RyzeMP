@@ -22,6 +22,8 @@ end:
     create-platform: true
 portal:
   load-timeout-ticks: 600
+  transition-diagnostics: false
+  transition-timeout-seconds: 120
 ```
 
 Los nombres identifican carpetas dentro de `worlds/`; no son rutas. Nether y End
@@ -164,8 +166,7 @@ y los controles de reentrada de `NetherPortalReentryGuard` de
 La implementación usa las entidades, eventos, promesas y tareas de generación de
 RyzeMP/PocketMine. No incorpora el tick de dimensiones en paralelo de Allay.
 
-Quedan para cambios independientes: protección y confirmación de carga por
-cliente Bedrock, asociación entre
+Quedan para cambios independientes: protección durante la carga, asociación entre
 varios Overworlds y sus dimensiones, y búsqueda de portales sin recorrer hasta
 289 posiciones de chunks de forma síncrona.
 
@@ -251,3 +252,80 @@ La instrumentación temporal de `aa588a95939bd854aaedfaa81e4203ca2635791c`
 queda disponible en el historial para retomar el diagnóstico; la distribución
 normal utiliza el envío habitual de chunks sin recibos, hashes ni observadores
 adicionales de pantalla. Esta limpieza no pretende corregir el tiempo de carga.
+
+
+
+## Seguimiento nativo de la transición
+
+La sesión mantiene el seguimiento después de encolar su confirmación. La API
+`$player->getNetworkSession()->getDimensionTransition()` devuelve una copia del
+estado activo, o `null`. Contiene ID interno, origen/destino, dimensión, ID de
+pantalla cuando el protocolo lo permite y tiempos de confirmaciones/avisos.
+Modificar esa copia no cambia la sesión.
+
+`pocketmine\event\player\PlayerDimensionChangeEvent` es una notificación no
+cancelable. `getState()` distingue `started`, `screen_stopped`,
+`client_acknowledged`, `replaced`, `disconnected` y `timed_out`;
+`getTransition()` entrega una copia del estado observado. Puede producirse
+`started` antes de que el cliente informe del inicio visible de su pantalla.
+
+En protocolos desde 1.21.20 el cambio lleva un ID de pantalla. Solo un aviso STOP
+con el mismo ID completa ese seguimiento, después de encolar la confirmación del
+servidor. Los avisos sin ID o con otro ID se registran cuando el diagnóstico está
+activo, pero no completan un viaje moderno. El ACK de jugador no lleva un ID:
+se observa por separado, y en versiones anteriores solo permite el resultado
+`client_acknowledged`. No es prueba de renderizado ni permite correlacionar de
+forma infalible un ACK tardío de una versión antigua.
+
+Un nuevo cambio de mundo o una llegada sustituida cancela el seguimiento anterior.
+Los recibos atrasados no se asignan al viaje nuevo. La desconexión elimina el
+seguimiento. `transition-timeout-seconds` (10–600, predeterminado 120) limita su
+vida: no cierra pantallas, no fuerza un ACK, no transporta ni expulsa al jugador.
+Tampoco bloquea movimiento o combate. Los chunks pendientes siguen su ruta normal.
+
+Los nueve chunks de llegada que ya estén en la cola tienen prioridad sobre el
+terreno distante. Se conserva `chunk-sending.per-tick` y su presupuesto de
+solicitudes en vuelo: no aumenta a 40 ni añade chunks fuera de la cola de visión.
+La prioridad termina cuando se encola el terreno de llegada.
+
+## Eventos nativos de portales
+
+- `pocketmine\event\entity\EntityPortalEnterEvent`: una vez por contacto
+  continuo; permite cancelar o ajustar `setTeleportDelay($ticks)` entre 0 y 12000.
+  `getPortalType()` distingue Nether/End y `getPortalPosition()` entrega una copia.
+  Una cancelación persiste hasta abandonar el portal. Sin listeners se mantienen
+  Nether 80 ticks, creativo inmediato y End inmediato.
+- `pocketmine\event\entity\EntityPortalTeleportEvent`: antes del teletransporte;
+  permite cancelar o usar `setTo($position, $yaw, $pitch)`. `getTo()` es una copia.
+  Si cambia las coordenadas o el mundo, se prepara la nueva zona y se comprueban
+  límites, suelo y espacio del cuerpo antes de viajar. Salir del portal, morir,
+  cambiar de mundo, otro TP o sustituir el enlace invalida esa preparación.
+
+Ambos eventos incluyen jugadores y otras entidades. Los eventos generales de
+teletransporte continúan ejecutándose después; el plugin que cambie el destino
+mediante esos eventos generales conserva la responsabilidad de validarlo.
+
+## Prueba de seguimiento de la incidencia #36
+
+En `dimensions.yml`, activar `portal.transition-diagnostics: true`; en
+`pocketmine.yml`, `debug.level: 2`; reiniciar. La opción viene apagada y los
+recibos adicionales solo se solicitan para los nueve chunks de llegada y la
+confirmación del cambio mientras el diagnóstico está activo.
+
+El log `Dimension trace #<id>` identifica mundo, tiempo transcurrido, tamaño/hash
+comprimido de chunks, recibos de transporte, confirmación encolada, recepción de
+esa confirmación, ACK del jugador y avisos START/STOP con su ID. Un recibo RakNet
+solo acredita transporte; un STOP es una señal del cliente, no inspección de su
+imagen renderizada. Las señales que llegan cuando ya no hay seguimiento activo
+no completan otro viaje.
+
+Comparar dos idas/vueltas al Nether generado y dos al personalizado usando el
+mismo PHAR, cliente y configuración de envío. Anotar el tiempo visual y conservar
+el `server.log` completo para correlacionar el mismo ID. Incluir un primer viaje
+con chunks fríos y otro con caché; repetir regreso, End y reconexión. Después,
+desactivar `transition-diagnostics` para volver al envío sin recibos adicionales.
+
+Las pruebas automáticas comprueban el orden del servidor, IDs antiguos/incorrectos,
+resultados de seguimiento, cancelaciones/redirecciones de plugins y límites de
+prioridad. No acreditan una reducción de los 30 segundos. #36 permanece pendiente
+hasta reproducir y validar la causa con Minecraft real.

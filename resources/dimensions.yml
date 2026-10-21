@@ -25,3 +25,8 @@ portal:
   # Cancel the portal request after this many server ticks (600 = 30s at 20 TPS).
   # This is a server-side loading deadline, not a client loading-screen timer.
   load-timeout-ticks: 600
+  # Opt-in transport receipts and client loading-screen observations; use debug.level: 2.
+  transition-diagnostics: false
+  # Expires tracking only. Does not close the screen, teleport, kick or lock the player.
+  transition-timeout-seconds: 120
+

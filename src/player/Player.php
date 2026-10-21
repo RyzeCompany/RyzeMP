@@ -868,7 +868,14 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$world = $this->getWorld();
 
 		$limit = $this->chunksPerTick - count($this->activeChunkGenerationRequests);
-		foreach($this->loadQueue as $index => $distance){
+		$priority = [];
+		foreach($this->getNetworkSession()->getDimensionArrivalChunks() as $hash => $_){
+			if(isset($this->loadQueue[$hash])){
+				$priority[$hash] = $this->loadQueue[$hash];
+			}
+		}
+		// Keep the configured per-tick and in-flight limits; never add unrequested chunks.
+		foreach($priority + $this->loadQueue as $index => $distance){
 			if($count >= $limit){
 				break;
 			}
@@ -2989,3 +2996,4 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}
 	}
 }
+

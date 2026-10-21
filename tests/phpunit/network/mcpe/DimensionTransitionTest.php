@@ -5,6 +5,15 @@ declare(strict_types=1);
 namespace pocketmine\network\mcpe;
 
 use PHPUnit\Framework\TestCase;
+use pocketmine\world\dimension\DimensionSettings;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
+use pocketmine\event\player\PlayerDimensionChangeEvent;
+use pocketmine\event\HandlerListManager;
+use pocketmine\event\RegisteredListener;
+use pocketmine\event\EventPriority;
+use pocketmine\plugin\Plugin;
+use pocketmine\timings\TimingsHandler;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Location;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
@@ -28,6 +37,8 @@ final class DimensionTransitionTest extends TestCase{
 	private Player $player;
 	private Position $position;
 	private array $wire = [];
+	private array $states = [];
+	private RegisteredListener $listener;
 
 	protected function setUp() : void{
 		$this->world = $this->world("world_nether");
@@ -42,7 +53,10 @@ final class DimensionTransitionTest extends TestCase{
 		$server = $this->createMock(Server::class);
 		$manager = (new \ReflectionClass(DimensionManager::class))->newInstanceWithoutConstructor();
 		(new \ReflectionProperty(DimensionManager::class, "dimensions"))->setValue($manager, new Dimensions($server, [1 => "world_nether", 2 => "world_the_end"]));
+		(new \ReflectionProperty(DimensionManager::class, "settings"))->setValue($manager, DimensionSettings::fromArray([]));
 		$server->method("getDimensionManager")->willReturn($manager);
+		$this->listener = new RegisteredListener(function(PlayerDimensionChangeEvent $event) : void{ $this->states[] = $event; }, EventPriority::NORMAL, $this->createMock(Plugin::class), true, new TimingsHandler("dimension test"));
+		HandlerListManager::global()->getListFor(PlayerDimensionChangeEvent::class)->register($this->listener);
 		$this->session = $this->createPartialMock(NetworkSession::class, ["sendDataPacket", "queueCompressed", "syncWorldTime", "syncGameRules", "syncWorldDifficulty", "syncWorldSpawnPoint"]);
 		(new \ReflectionProperty(NetworkSession::class, "player"))->setValue($this->session, $this->player);
 		(new \ReflectionProperty(NetworkSession::class, "server"))->setValue($this->session, $server);
@@ -128,5 +142,90 @@ final class DimensionTransitionTest extends TestCase{
 		for($x = 1; $x <= 3; ++$x){ for($z = 2; $z <= 4; ++$z){ $this->send($this->world, $x, $z); } }
 		self::assertSame(1, $this->ackCount());
 	}
+	protected function tearDown() : void{
+		HandlerListManager::global()->unregisterAll($this->listener);
+	}
+
+	private function sendArrival() : void{
+		$cx = $this->position->getFloorX() >> 4;
+		$cz = $this->position->getFloorZ() >> 4;
+		for($x = $cx - 1; $x <= $cx + 1; ++$x){ for($z = $cz - 1; $z <= $cz + 1; ++$z){ $this->send($this->world, $x, $z); } }
+	}
+
+	public function testModernTransitionNeedsMatchingScreenStopAfterServerAck() : void{
+		$this->begin(1);
+		$id = $this->session->getDimensionTransition()->getLoadingScreenId();
+		self::assertNotNull($id);
+		$this->session->onClientLoadingScreen(LoadingScreenType::START_LOADING_SCREEN, $id);
+		$this->sendArrival();
+		self::assertNotNull($this->session->getDimensionTransition());
+		$this->session->onClientDimensionChangeAck();
+		self::assertNotNull($this->session->getDimensionTransition());
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, $id + 1);
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, null);
+		self::assertNotNull($this->session->getDimensionTransition());
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, $id);
+		self::assertNull($this->session->getDimensionTransition());
+		self::assertSame(["started", "screen_stopped"], array_map(fn($e) => $e->getState(), $this->states));
+		self::assertNotNull($this->states[1]->getTransition()->getScreenStoppedAt());
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, $id);
+		self::assertCount(2, $this->states);
+	}
+
+	public function testLegacyAckDoesNotCompleteBeforeServerAckAndIsLabelledAsAckOnly() : void{
+		(new \ReflectionProperty(NetworkSession::class, "protocolId"))->setValue($this->session, ProtocolInfo::PROTOCOL_1_20_0);
+		$this->begin(1);
+		self::assertNull($this->session->getDimensionTransition()->getLoadingScreenId());
+		$this->session->onClientDimensionChangeAck();
+		$this->sendArrival();
+		self::assertNotNull($this->session->getDimensionTransition());
+		$this->session->onClientDimensionChangeAck();
+		self::assertNull($this->session->getDimensionTransition());
+		self::assertSame("client_acknowledged", $this->states[1]->getState());
+		self::assertNull($this->states[1]->getTransition()->getScreenStoppedAt());
+	}
+
+	public function testReplacementRejectsOldScreenIdAndSnapshotMutations() : void{
+		$this->begin(1);
+		$old = $this->session->getDimensionTransition();
+		$old->finish("tampered");
+		self::assertNull($this->session->getDimensionTransition()->getResult());
+		$this->world = $this->world("world_the_end");
+		$this->position = new Position(32.5, 70, 48.5, $this->world);
+		$this->begin(2);
+		$new = $this->session->getDimensionTransition();
+		self::assertNotSame($old->getId(), $new->getId());
+		self::assertSame("replaced", $this->states[1]->getState());
+		$this->sendArrival();
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, $old->getLoadingScreenId());
+		self::assertNotNull($this->session->getDimensionTransition());
+		$this->session->onClientLoadingScreen(LoadingScreenType::STOP_LOADING_SCREEN, $new->getLoadingScreenId());
+		self::assertNull($this->session->getDimensionTransition());
+	}
+
+	public function testTrackingDeadlineDoesNotForceAckOrDiscardUnsentTerrain() : void{
+		$this->begin(1);
+		$started = $this->session->getDimensionTransition()->getStartedAt();
+		(new \ReflectionMethod(NetworkSession::class, "checkDimensionTransitionTimeout"))->invoke($this->session, $started + 120);
+		self::assertNull($this->session->getDimensionTransition());
+		self::assertSame("timed_out", $this->states[1]->getState());
+		self::assertSame(0, $this->ackCount());
+		self::assertCount(9, $this->session->getDimensionArrivalChunks());
+		$this->sendArrival();
+		self::assertSame(1, $this->ackCount());
+		self::assertCount(2, $this->states);
+	}
+
+	public function testReceiptCountsOnlyUniqueArrivalChunks() : void{
+		$transition = new DimensionTransition(1, 5, "world", "nether", 1, 0.0, [10 => true, 20 => true], true);
+		$transition->recordReceipt(10);
+		$transition->recordReceipt(10);
+		$transition->recordReceipt(99);
+		self::assertSame(1, $transition->getReceivedChunkCount());
+		$transition->recordReceipt(20);
+		self::assertSame(2, $transition->getReceivedChunkCount());
+	}
+
 }
+
 
