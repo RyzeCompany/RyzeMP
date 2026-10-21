@@ -116,6 +116,8 @@ use pocketmine\world\particle\BlockParticle;
 use pocketmine\world\particle\ItemParticle;
 use pocketmine\world\particle\Particle;
 use pocketmine\world\particle\ProtocolParticle;
+use pocketmine\world\redstone\ComparatorInput;
+use pocketmine\world\redstone\RedstoneCircuit;
 use pocketmine\world\sound\BlockPlaceSound;
 use pocketmine\world\sound\BlockSound;
 use pocketmine\world\sound\ProtocolSound;
@@ -384,6 +386,8 @@ class World implements ChunkManager{
 	public float $tickRateTime = 0;
 
 	private bool $doingTick = false;
+	private ?RedstoneCircuit $redstoneCircuit = null;
+	private int $redstoneTick = 0;
 
 	private bool $unloaded = false;
 	/**
@@ -1034,6 +1038,7 @@ class World implements ChunkManager{
 	}
 
 	protected function actuallyDoTick(int $currentTick) : void{
+		$this->redstoneTick = $currentTick;
 		if(!$this->stopTime){
 			//this simulates an overflow, as would happen in any language which doesn't do stupid things to var types
 			if($this->time === PHP_INT_MAX){
@@ -1058,6 +1063,7 @@ class World implements ChunkManager{
 		}
 
 		$this->timings->scheduledBlockUpdates->startTiming();
+		$this->redstoneCircuit?->tick($currentTick);
 		//Delayed updates
 		while($this->scheduledBlockUpdateQueue->count() > 0 && $this->scheduledBlockUpdateQueue->current()["priority"] <= $currentTick){
 			/** @var Vector3 $vec */
@@ -1575,6 +1581,10 @@ class World implements ChunkManager{
 		}finally{
 			$this->timings->syncChunkSave->stopTiming();
 		}
+	}
+
+	public function getRedstoneCircuit() : RedstoneCircuit{
+		return $this->redstoneCircuit ??= new RedstoneCircuit($this, $this->doingTick ? $this->redstoneTick : $this->server->getTick());
 	}
 
 	/**
@@ -2166,7 +2176,10 @@ class World implements ChunkManager{
 		}
 
 		$this->timings->setBlock->startTiming();
-		$previousBlock = $update ? $this->getBlockAt($x, $y, $z) : null;
+		$previousBlock = $update || $this->redstoneCircuit !== null ? $this->getBlockAt($x, $y, $z) : null;
+		if($previousBlock !== null){
+			$this->redstoneCircuit?->onBlockChanged($previousBlock);
+		}
 
 		$this->unlockChunk($chunkX, $chunkZ, null);
 
@@ -2213,6 +2226,8 @@ class World implements ChunkManager{
 			}
 			if($notifyRedstone){
 				RedstoneSignal::notifyNeighbours($this, $pos);
+			}else{
+				ComparatorInput::notifyAt($block->getPosition());
 			}
 		}
 

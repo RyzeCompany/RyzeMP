@@ -28,6 +28,8 @@ use pocketmine\block\utils\HorizontalFacingTrait;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
 use pocketmine\block\utils\RedstonePowerSource;
+use pocketmine\block\utils\RedstoneSignal;
+use pocketmine\block\utils\RedstoneTickingComponent;
 use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -38,7 +40,7 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 
-class RedstoneRepeater extends Flowable implements PoweredByRedstone, HorizontalFacing, RedstonePowerSource{
+class RedstoneRepeater extends Flowable implements PoweredByRedstone, HorizontalFacing, RedstonePowerSource, RedstoneTickingComponent{
 	use HorizontalFacingTrait;
 	use PoweredByRedstoneTrait;
 	use StaticSupportTrait;
@@ -97,6 +99,49 @@ class RedstoneRepeater extends Flowable implements PoweredByRedstone, Horizontal
 		return $block->getAdjacentSupportType(Facing::DOWN) !== SupportType::NONE;
 	}
 
-	//TODO: redstone functionality
+	public function isLocked() : bool{
+		foreach(Facing::HORIZONTAL as $side){
+			if($side === $this->facing || $side === Facing::opposite($this->facing)){
+				continue;
+			}
+			$pos = $this->position->getSide($side);
+			$source = RedstoneSignal::getBlockAt($this->position->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+			if(($source instanceof self || $source instanceof RedstoneComparator) && $source->getWeakPower(Facing::opposite($side)) > 0){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function onNearbyBlockChange() : void{
+		if(!$this->canBeSupportedAt($this)){
+			$this->position->getWorld()->useBreakOn($this->position);
+		}elseif(!$this->isLocked()){
+			$power = RedstoneSignal::getPowerFromSide($this, Facing::opposite($this->facing)) > 0 ? 15 : 0;
+			if($this->powered !== ($power > 0)){
+				$this->position->getWorld()->getRedstoneCircuit()->schedule($this, $this->delay * 2, $power);
+			}
+		}
+	}
+
+	public function onRedstoneUpdate(int $targetPower) : void{
+		if(!$this->canBeSupportedAt($this)){
+			$this->position->getWorld()->useBreakOn($this->position);
+			return;
+		}
+		if($this->isLocked()){
+			return;
+		}
+		if($targetPower === 0 && RedstoneSignal::getPowerFromSide($this, Facing::opposite($this->facing)) > 0){
+			return;
+		}
+		$powered = RedstoneSignal::filterChange($this, $this->powered ? 15 : 0, $targetPower) > 0;
+		if($this->powered !== $powered){
+			$this->powered = $powered;
+			$this->position->getWorld()->setBlock($this->position, $this);
+			// Preserve short input pulses for at least the configured delay.
+			$this->onNearbyBlockChange();
+		}
+	}
 }
 

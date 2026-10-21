@@ -38,4 +38,22 @@ jobs:
           git diff --exit-code -- generated/YmlServerProperties.php
       - name: Run PHPUnit
         run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
+      - name: Verify native redstone in a disposable world
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_root="$RUNNER_TEMP/ryzemp-redstone-smoke"
+          mkdir -p "$test_root/plugins"
+          cp resources/pocketmine.yml "$test_root/pocketmine.yml"
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' "$test_root/pocketmine.yml"
+          printf '%s\n' 'server-ip=127.0.0.1' 'server-port=19183' 'enable-ipv6=off' 'level-type=flat' 'xbox-auth=off' > "$test_root/server.properties"
+          php -dphar.readonly=0 tests/integration/build-redstone-smoke.php "$test_root/plugins/NativeRedstoneSmoke.phar"
+          status=0
+          timeout 60s php src/PocketMine.php --no-wizard --disable-ansi --data="$test_root" --plugins="$test_root/plugins" > "$test_root/server.log" 2>&1 || status=$?
+          cat "$test_root/server.log"
+          test "$status" -eq 0
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' "$test_root/server.log"; then exit 1; fi
+          grep -Fq 'NATIVE_REDSTONE_WORLD_SMOKE_OK wire=15,14,13 off=0 lamp=on,off' "$test_root/server.log"
+          grep -Fq 'NATIVE_REDSTONE_TIMING_SMOKE_OK repeater=6gt torch=2gt comparator=1,15,0 tile=15' "$test_root/server.log"
+
 

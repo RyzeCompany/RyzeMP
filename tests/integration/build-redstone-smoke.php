@@ -16,6 +16,11 @@ $p['src/smoke/NativeRedstoneSmoke.php'] = <<<'PHP'
 namespace smoke;
 use pocketmine\plugin\PluginBase;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\block\tile\Chest;
+use pocketmine\block\tile\Comparator;
+use pocketmine\block\utils\LeverFacing;
+use pocketmine\item\VanillaItems;
+use pocketmine\math\Facing;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\World;
 final class NativeRedstoneSmoke extends PluginBase{
@@ -41,6 +46,47 @@ final class NativeRedstoneSmoke extends PluginBase{
   $world->doTick($tick + 6);
   if($world->getBlockAt(4, 64, 0)->isLit()){ throw new \RuntimeException('Lamp remained powered'); }
   $this->getLogger()->info('NATIVE_REDSTONE_WORLD_SMOKE_OK wire=15,14,13 off=0 lamp=on,off');
+  for($x = 6; $x <= 9; ++$x){
+   foreach([4, 8, 12] as $z){ $world->setBlockAt($x, 63, $z, VanillaBlocks::STONE()); }
+  }
+  $world->setBlockAt(7, 64, 4, VanillaBlocks::REDSTONE());
+  $world->setBlockAt(8, 64, 4, VanillaBlocks::REDSTONE_REPEATER()->setFacing(Facing::EAST)->setDelay(3));
+  $world->setBlockAt(9, 64, 4, VanillaBlocks::REDSTONE_LAMP());
+  $world->setBlockAt(7, 63, 8, VanillaBlocks::LEVER()->setFacing(LeverFacing::WEST)->setActivated(true));
+  $world->setBlockAt(8, 64, 8, VanillaBlocks::REDSTONE_TORCH());
+  $world->setBlockAt(6, 64, 12, VanillaBlocks::CHEST());
+  $world->setBlockAt(7, 64, 12, VanillaBlocks::STONE());
+  $world->setBlockAt(8, 64, 12, VanillaBlocks::REDSTONE_COMPARATOR()->setFacing(Facing::EAST));
+  $chest = $world->getTileAt(6, 64, 12);
+  if(!$chest instanceof Chest){ throw new \RuntimeException('Chest tile missing'); }
+  $chest->getInventory()->setItem(0, VanillaItems::DIAMOND()->setCount(64));
+  $world->doTick($tick + 7);
+  $world->doTick($tick + 8);
+  if(!$world->getBlockAt(8, 64, 8)->isLit()){ throw new \RuntimeException('Torch changed before its deadline'); }
+  $world->doTick($tick + 9);
+  if($world->getBlockAt(8, 64, 8)->isLit()){ throw new \RuntimeException('Torch inversion failed'); }
+  if($world->getBlockAt(8, 64, 12)->getOutputSignalStrength() !== 1){ throw new \RuntimeException('Container readout failed'); }
+  $world->doTick($tick + 12);
+  if($world->getBlockAt(8, 64, 4)->isPowered()){ throw new \RuntimeException('Repeater changed before its deadline'); }
+  $world->doTick($tick + 13);
+  if(!$world->getBlockAt(8, 64, 4)->isPowered() || !$world->getBlockAt(9, 64, 4)->isLit()){ throw new \RuntimeException('Delayed repeater output failed'); }
+  $chest->getInventory()->setContents(array_fill(0, 27, VanillaItems::DIAMOND()->setCount(64)));
+  $world->doTick($tick + 14);
+  $world->doTick($tick + 16);
+  $comparator = $world->getTileAt(8, 64, 12);
+  if(!$comparator instanceof Comparator || $comparator->getSignalStrength() !== 15 || $world->getBlockAt(8, 64, 12)->getOutputSignalStrength() !== 15){ throw new \RuntimeException('Positive-to-positive analogue change was not persisted'); }
+  $world->setBlockAt(6, 64, 12, VanillaBlocks::AIR());
+  $world->setBlockAt(7, 63, 8, VanillaBlocks::AIR());
+  $world->setBlockAt(7, 64, 4, VanillaBlocks::AIR());
+  $world->doTick($tick + 17);
+  $world->doTick($tick + 19);
+  if($world->getBlockAt(8, 64, 12)->getOutputSignalStrength() !== 0){ throw new \RuntimeException('Removed container left stale comparator output'); }
+  if(!$world->getBlockAt(8, 64, 8)->isLit()){ throw new \RuntimeException('Torch failed to relight'); }
+  $world->doTick($tick + 23);
+  if($world->getBlockAt(8, 64, 4)->isPowered()){ throw new \RuntimeException('Repeater did not deactivate after its delay'); }
+  $world->doTick($tick + 27);
+  if($world->getBlockAt(9, 64, 4)->isLit()){ throw new \RuntimeException('Repeater-driven lamp remained lit'); }
+  $this->getLogger()->info('NATIVE_REDSTONE_TIMING_SMOKE_OK repeater=6gt torch=2gt comparator=1,15,0 tile=15');
   $this->getServer()->shutdown();
  }
 }

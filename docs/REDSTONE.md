@@ -1,17 +1,17 @@
-# Redstone nativa: base de desarrollo
+# Redstone nativa: propagación y componentes temporizados
 
-Trabajo aislado en `feature/native-redstone`. Esta primera etapa prepara la
-propagación eléctrica; todavía no representa una implementación completa de
-redstone Bedrock.
+Trabajo aislado en `feature/native-redstone`. Estas etapas preparan la
+propagación eléctrica y los componentes temporizados; todavía no representan
+una implementación completa de redstone Bedrock.
 
-## Implementado en esta etapa
+## Implementado
 
 - Contrato `pocketmine\block\utils\RedstonePowerSource`: potencia débil y fuerte
   por cara. La cara apunta desde la fuente hacia el receptor; valores 0–15.
 - Consultas compartidas en `RedstoneSignal`, sin cargar chunks y sin encadenar
   indefinidamente la conducción entre bloques sólidos.
 - Fuentes: bloque de redstone, palancas, botones, placas normales y ponderadas,
-  sensor solar, y estados existentes de antorchas, repetidores y comparadores.
+  sensor solar, antorchas, repetidores y comparadores.
   Las placas ponderadas conservan su intensidad analógica.
 - Polvo: propagación horizontal, escalones, atenuación de una unidad por bloque,
   direcciones de salida y apagado al retirar las fuentes.
@@ -21,14 +21,28 @@ redstone Bedrock.
   se conservan los inventarios, transferencias y eventos existentes.
 - Notificaciones deduplicadas mediante la cola nativa de vecinos del mundo,
   incluyendo receptores al otro lado de los bloques de soporte.
+- Antorchas: inversión de la alimentación del soporte y cambio tras dos ticks de
+  juego; se mantienen las reglas nativas de soporte e iluminación.
+- Repetidores: entrada posterior, salida direccional, retardos de 2/4/6/8 ticks
+  de juego y bloqueo por diodos laterales orientados hacia el repetidor. Conservan
+  los pulsos cortos; una entrada restablecida evita un apagado pendiente.
+- Comparadores: modos comparación/resta, entradas laterales y recálculo tras dos
+  ticks de juego. Lectura de inventarios nativos, incluidos cofres dobles y
+  contenedores detrás de un único bloque conductor. Las mutaciones de inventario
+  notifican sólo a los comparadores afectados, sin sondeo periódico.
+- Cola eléctrica por mundo: conserva el primer pulso pendiente, ordena por plazo
+  y secuencia, comprueba estado/chunk antes de ejecutar e invalida actualizaciones
+  cuando el bloque se reemplaza, incluidas las escrituras silenciosas.
 
 ## API para plugins
 
 `BlockRedstoneUpdateEvent` se emite antes de cambiar la intensidad del cable,
-el encendido eléctrico de una lámpara o el bloqueo eléctrico de una tolva.
+el encendido eléctrico de una lámpara, el bloqueo eléctrico de una tolva o la
+salida de una antorcha, repetidor o comparador.
 `getOldPower()` y `getNewPower()` permiten consultar la transición;
 `setNewPower(0..15)` permite ajustarla y `cancel()` conserva el estado anterior.
-Lámparas y tolvas interpretan cualquier valor positivo como activado.
+Lámparas, tolvas, antorchas y repetidores interpretan cualquier valor positivo
+como activado; los comparadores conservan la intensidad analógica ajustada.
 
 Las interacciones con palancas, botones y placas mantienen sus eventos nativos.
 El evento nuevo no reemplaza las protecciones de interacción ni aplica reglas
@@ -37,9 +51,10 @@ de modificar bloques, inventarios o entidades.
 
 ## Pendiente antes de declarar redstone completa
 
-1. Temporización e inversión de antorchas, agotamiento y recuperación;
-   retardos/bloqueo de repetidores; cálculo y lectura de comparadores.
-   Esta etapa sólo expone eléctricamente sus estados existentes.
+1. Agotamiento/recuperación de antorchas y prioridad de diodos simultáneos
+   conforme a Bedrock; lecturas de comparadores en bloques sin inventario
+   (atriles, tocadiscos, tartas, calderos, marcos, etc.). No se importa el
+   agotamiento Java del plugin de referencia como comportamiento Bedrock.
 2. Recuperación de circuitos y actualizaciones pendientes al cargar/descargar
    chunks y reiniciar. Las consultas actuales sólo consideran terreno cargado;
    no se promete aún reanudación automática de circuitos guardados.
@@ -62,20 +77,22 @@ Usa un mundo simulado para probar las transiciones de los componentes. La suite
 general verifica además estados y serialización; esto no sustituye las pruebas
 de juego ni de carga con un servidor real.
 
-Validación de esta base: 558 pruebas y 148.763 comprobaciones con PHP 8.4.16.
-Las 17 pruebas nuevas aportan 1.831 comprobaciones. Se usaron las dependencias
-del PHAR anterior y se contrastaron los archivos de código con `main`.
+La suite completa pasa con PHP 8.4.16: 575 pruebas y 149.563 comprobaciones.
+`RedstoneTimingTest.php` añade 17 pruebas de retardos, pulsos cortos, bloqueo,
+reemplazo de bloques, chunks descargados, inversión de antorchas, comparación y
+resta, inventarios simples/dobles y cancelación/ajuste de eventos.
 
-También se verificó un circuito con un mundo real: palanca → tres cables
-(15, 14, 13) → lámpara; al retirar la fuente se apagaron los cables y después
-la lámpara. El servidor arrancó y se detuvo correctamente. El constructor del
-plugin de prueba está en `tests/integration/build-redstone-smoke.php`; debe
-ejecutarse exclusivamente con datos temporales de pruebas, pues reemplaza el
+La prueba de servidor real verifica palanca → tres cables (15, 14, 13) → lámpara,
+repetidor de seis ticks → lámpara, inversión de antorcha de dos ticks y cofre →
+sólido → comparador con salidas 1, 15 y 0 al retirar el cofre. Comprueba además
+que el cambio analógico positivo se conserva en la tile nativa del comparador.
+El servidor arranca y se detiene correctamente. El constructor está en
+`tests/integration/build-redstone-smoke.php` y también se ejecuta desde CI.
+Debe usarse exclusivamente con datos temporales de pruebas, pues reemplaza el
 chunk de origen de ese mundo.
 
-La ejecución de GitHub Actions se detuvo al instalar dependencias por un error
-de autenticación de Composer contra GitHub, antes de ejecutar PHPUnit. No se
-modificaron secretos ni workflows para evitar ese error.
+El bloqueo anterior de autenticación de Composer está resuelto: la revisión
+`87d832d` superó regresión, integración HCF y construcción/validación del PHAR.
 
 ## Referencia
 
