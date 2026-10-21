@@ -1479,7 +1479,10 @@ class NetworkSession{
 			$settings = $this->server->getDimensionManager()->getSettings();
 			$screenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? ($sequence & 0x7fffffff) : null;
 			$started = $this->dimensionTransition = new DimensionTransition($sequence, $screenId, $sourceWorld, $world->getFolderName(), $dimension, microtime(true), $this->dimensionChangeTerrain["chunks"], $settings->transitionDiagnostics);
-			$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $screenId));
+			if(!$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $screenId))){
+				if($this->dimensionTransition === $started){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+				return;
+			}
 			$this->traceDimension("begin source=" . ($sourceWorld ?? "unknown") . " dimension=$dimension screen_id=" . ($screenId ?? "none"));
 		}elseif($this->pendingDimensionChangeAck){
 			$this->beginDimensionTerrain($world);
@@ -1596,9 +1599,14 @@ class NetworkSession{
 		if($transition !== null && $transition->hasDiagnostics()){
 			$this->sendDataPacketWithReceipt($packet)->onCompletion(function() use($transition) : void{
 				if($this->dimensionTransition === $transition){ $this->traceDimension("server_ack_transport_received"); }
-			}, static function() : void{});
+			}, function() use($transition) : void{
+				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+			});
 		}else{
-			$this->sendDataPacket($packet);
+			if(!$this->sendDataPacket($packet)){
+				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+				return;
+			}
 		}
 		if($this->dimensionTransition === $transition){
 			$transition?->recordServerAck(microtime(true));

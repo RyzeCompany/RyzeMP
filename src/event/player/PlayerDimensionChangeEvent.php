@@ -16,6 +16,7 @@ final class PlayerDimensionChangeEvent extends PlayerEvent{
 	public const REPLACED = "replaced";
 	public const DISCONNECTED = "disconnected";
 	public const TIMED_OUT = "timed_out";
+	public const SEND_CANCELLED = "send_cancelled";
 
 	public function __construct(Player $player, private DimensionTransition $transition, private string $state){
 		$this->player = $player;

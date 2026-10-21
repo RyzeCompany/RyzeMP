@@ -68,7 +68,7 @@ final class DimensionTransitionTest extends TestCase{
 		\GlobalLogger::set($this->createMock(\Logger::class));
 		$this->session->method("sendDataPacket")->willReturnCallback(function($packet) : bool{
 			$this->wire[] = $packet;
-			if($this->onSend !== null){ ($this->onSend)($packet); }
+			if($this->onSend !== null && ($this->onSend)($packet) === false){ return false; }
 			return true;
 		});
 		$this->session->method("sendDataPacketWithReceipt")->willReturnCallback(function($packet){
@@ -275,6 +275,15 @@ final class DimensionTransitionTest extends TestCase{
 		self::assertNotNull($this->session->getDimensionTransition()->getServerAckAt());
 		$this->ackResolvers[0]->resolve(true);
 		self::assertNotNull($this->session->getDimensionTransition());
+	}
+
+	public function testCancelledServerAckDoesNotReportItAsQueued() : void{
+		$this->begin(1);
+		$this->onSend = fn($packet) => !($packet instanceof PlayerActionPacket);
+		$this->sendArrival();
+		self::assertNull($this->session->getDimensionTransition());
+		self::assertSame("send_cancelled", $this->states[1]->getState());
+		self::assertNull($this->states[1]->getTransition()->getServerAckAt());
 	}
 
 }

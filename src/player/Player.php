@@ -874,6 +874,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 				$priority[$hash] = $this->loadQueue[$hash];
 			}
 		}
+		\asort($priority, SORT_NUMERIC);
 		// Keep the configured per-tick and in-flight limits; never add unrequested chunks.
 		foreach($priority + $this->loadQueue as $index => $distance){
 			if($count >= $limit){

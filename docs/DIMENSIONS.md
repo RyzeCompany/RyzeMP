@@ -265,7 +265,7 @@ Modificar esa copia no cambia la sesión.
 
 `pocketmine\event\player\PlayerDimensionChangeEvent` es una notificación no
 cancelable. `getState()` distingue `started`, `screen_stopped`,
-`client_acknowledged`, `replaced`, `disconnected` y `timed_out`;
+`client_acknowledged`, `replaced`, `disconnected`, `timed_out` y `send_cancelled`;
 `getTransition()` entrega una copia del estado observado. Puede producirse
 `started` antes de que el cliente informe del inicio visible de su pantalla.
 
