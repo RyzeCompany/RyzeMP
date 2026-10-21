@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\LeverFacing;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
 use pocketmine\math\Axis;
@@ -35,7 +36,7 @@ use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\RedstonePowerOffSound;
 use pocketmine\world\sound\RedstonePowerOnSound;
 
-class Lever extends Flowable{
+class Lever extends Flowable implements RedstonePowerSource{
 	protected LeverFacing $facing = LeverFacing::UP_AXIS_X;
 	protected bool $activated = false;
 
@@ -105,5 +106,12 @@ class Lever extends Flowable{
 		return $block->getAdjacentSupportType($face)->hasCenterSupport();
 	}
 
-	//TODO
+	public function getWeakPower(int $face) : int{
+		return $this->activated ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $face === Facing::opposite($this->facing->getFacing()) ? $this->getWeakPower($face) : 0;
+	}
 }
+

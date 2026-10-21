@@ -28,6 +28,7 @@ use pocketmine\item\VanillaItems;
 use pocketmine\player\Player;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\Utils;
+use pocketmine\world\redstone\ComparatorInput;
 use function array_slice;
 use function count;
 use function max;
@@ -367,6 +368,7 @@ abstract class BaseInventory implements Inventory, SlotValidatedInventory{
 	}
 
 	protected function onSlotChange(int $index, Item $before) : void{
+		ComparatorInput::notifyInventoryChange($this);
 		foreach($this->listeners as $listener){
 			$listener->onSlotChange($this, $index, $before);
 		}
@@ -384,6 +386,7 @@ abstract class BaseInventory implements Inventory, SlotValidatedInventory{
 	 * @phpstan-param array<int, Item> $itemsBefore
 	 */
 	protected function onContentChange(array $itemsBefore) : void{
+		ComparatorInput::notifyInventoryChange($this);
 		foreach($this->listeners as $listener){
 			$listener->onContentChange($this, $itemsBefore);
 		}

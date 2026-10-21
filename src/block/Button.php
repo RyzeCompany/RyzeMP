@@ -25,6 +25,7 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\AnyFacing;
 use pocketmine\block\utils\AnyFacingTrait;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
 use pocketmine\math\Facing;
@@ -34,7 +35,7 @@ use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\RedstonePowerOffSound;
 use pocketmine\world\sound\RedstonePowerOnSound;
 
-abstract class Button extends Flowable implements AnyFacing{
+abstract class Button extends Flowable implements AnyFacing, RedstonePowerSource{
 	use AnyFacingTrait;
 
 	protected bool $pressed = false;
@@ -45,6 +46,14 @@ abstract class Button extends Flowable implements AnyFacing{
 	}
 
 	public function isPressed() : bool{ return $this->pressed; }
+
+	public function getWeakPower(int $face) : int{
+		return $this->pressed ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $face === Facing::opposite($this->facing) ? $this->getWeakPower($face) : 0;
+	}
 
 	/** @return $this */
 	public function setPressed(bool $pressed) : self{
@@ -93,3 +102,4 @@ abstract class Button extends Flowable implements AnyFacing{
 		return $block->getAdjacentSupportType(Facing::opposite($face))->hasCenterSupport();
 	}
 }
+

@@ -30,6 +30,9 @@ use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
+use pocketmine\block\utils\RedstonePowerSource;
+use pocketmine\block\utils\RedstoneSignal;
+use pocketmine\block\utils\RedstoneTickingComponent;
 use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -39,15 +42,26 @@ use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\redstone\ComparatorInput;
 use function assert;
+use function max;
+use function min;
 
-class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter, PoweredByRedstone, HorizontalFacing{
+class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter, PoweredByRedstone, HorizontalFacing, RedstonePowerSource, RedstoneTickingComponent{
 	use HorizontalFacingTrait;
 	use AnalogRedstoneSignalEmitterTrait;
 	use PoweredByRedstoneTrait;
 	use StaticSupportTrait;
 
 	protected bool $isSubtractMode = false;
+
+	public function getWeakPower(int $face) : int{
+		return $face === $this->facing ? $this->signalStrength : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->getWeakPower($face);
+	}
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->horizontalFacing($this->facing);
@@ -59,7 +73,7 @@ class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter
 		parent::readStateFromWorld();
 		$tile = $this->position->getWorld()->getTile($this->position);
 		if($tile instanceof Comparator){
-			$this->signalStrength = $tile->getSignalStrength();
+			$this->signalStrength = max(0, min(15, $tile->getSignalStrength()));
 		}
 
 		return $this;
@@ -103,5 +117,60 @@ class RedstoneComparator extends Flowable implements AnalogRedstoneSignalEmitter
 		return $block->getAdjacentSupportType(Facing::DOWN) !== SupportType::NONE;
 	}
 
-	//TODO: redstone functionality
+	private function calculateOutput() : int{
+		$rear = Facing::opposite($this->facing);
+		$input = RedstoneSignal::getPowerFromSide($this, $rear);
+		$world = $this->position->getWorld();
+		$pos = $this->position->getSide($rear);
+		$block = RedstoneSignal::getBlockAt($world, $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+		if($block !== null){
+			$override = ComparatorInput::getOverride($block);
+			if($override !== null){
+				$input = $override;
+			}elseif($input < 15 && RedstoneSignal::isConductor($block)){
+				$pos = $pos->getSide($rear);
+				$block = RedstoneSignal::getBlockAt($world, $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+				if($block !== null && ($override = ComparatorInput::getOverride($block)) !== null){
+					$input = $override;
+				}
+			}
+		}
+		$sidePower = 0;
+		foreach(Facing::HORIZONTAL as $side){
+			if($side === $rear || $side === $this->facing){
+				continue;
+			}
+			$pos = $this->position->getSide($side);
+			$source = RedstoneSignal::getBlockAt($world, $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+			// Lateral inputs accept dust, redstone blocks and diodes, not arbitrary powered supports.
+			if($source instanceof RedstoneWire){
+				$sidePower = max($sidePower, $source->getOutputSignalStrength());
+			}elseif($source instanceof Redstone || $source instanceof self || $source instanceof RedstoneRepeater){
+				$sidePower = max($sidePower, $source->getWeakPower(Facing::opposite($side)));
+			}
+		}
+		return $this->isSubtractMode ? max(0, $input - $sidePower) : ($input >= $sidePower ? $input : 0);
+	}
+
+	public function onNearbyBlockChange() : void{
+		if(!$this->canBeSupportedAt($this)){
+			$this->position->getWorld()->useBreakOn($this->position);
+		}elseif($this->signalStrength !== $this->calculateOutput() || $this->powered !== ($this->signalStrength > 0)){
+			$this->position->getWorld()->getRedstoneCircuit()->schedule($this, 2, 0);
+		}
+	}
+
+	public function onRedstoneUpdate(int $targetPower) : void{
+		if(!$this->canBeSupportedAt($this)){
+			$this->position->getWorld()->useBreakOn($this->position);
+			return;
+		}
+		$power = RedstoneSignal::filterChange($this, $this->signalStrength, $this->calculateOutput());
+		if($power !== $this->signalStrength || $this->powered !== ($power > 0)){
+			$this->signalStrength = $power;
+			$this->powered = $power > 0;
+			$this->position->getWorld()->setBlock($this->position, $this);
+		}
+	}
 }
+

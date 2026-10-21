@@ -26,10 +26,28 @@ namespace pocketmine\block;
 use pocketmine\block\utils\Lightable;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
+use pocketmine\block\utils\RedstoneSignal;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 
 class RedstoneLamp extends Opaque implements PoweredByRedstone, Lightable{
 	use PoweredByRedstoneTrait;
+
+	public function onNearbyBlockChange() : void{
+		$power = RedstoneSignal::getReceivedPower($this);
+		if($power > 0 && !$this->powered){
+			if(RedstoneSignal::filterChange($this, 0, 15) > 0){
+				$this->position->getWorld()->setBlock($this->position, $this->setPowered(true));
+			}
+		}elseif($power === 0 && $this->powered){
+			$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 4);
+		}
+	}
+
+	public function onScheduledUpdate() : void{
+		if($this->powered && RedstoneSignal::getReceivedPower($this) === 0 && RedstoneSignal::filterChange($this, 15, 0) === 0){
+			$this->position->getWorld()->setBlock($this->position, $this->setPowered(false));
+		}
+	}
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->bool($this->powered);
@@ -49,3 +67,4 @@ class RedstoneLamp extends Opaque implements PoweredByRedstone, Lightable{
 		return $this;
 	}
 }
+

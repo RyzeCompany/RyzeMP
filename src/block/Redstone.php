@@ -23,6 +23,15 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
-class Redstone extends Opaque{
+use pocketmine\block\utils\RedstonePowerSource;
 
+class Redstone extends Opaque implements RedstonePowerSource{
+	public function getWeakPower(int $face) : int{
+		return 15;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return 0;
+	}
 }
+
