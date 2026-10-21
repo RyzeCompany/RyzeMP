@@ -5,6 +5,13 @@ declare(strict_types=1);
 namespace pocketmine\world\dimension\portal;
 
 use LogicException;
+use pocketmine\event\entity\EntityPortalEnterEvent;
+use pocketmine\event\entity\EntityPortalTeleportEvent;
+use pocketmine\event\HandlerListManager;
+use pocketmine\event\RegisteredListener;
+use pocketmine\event\EventPriority;
+use pocketmine\plugin\Plugin;
+use pocketmine\timings\TimingsHandler;
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
@@ -24,6 +31,7 @@ use pocketmine\world\WorldManager;
 
 final class PortalTravelTest extends TestCase{
 
+	private array $listeners = [];
 	private World $source;
 	private World $target;
 	private World $currentWorld;
@@ -351,4 +359,84 @@ final class PortalTravelTest extends TestCase{
 		}
 		self::assertCount(4, $this->loads);
 	}
+	private function listen(string $eventClass, \Closure $handler) : void{
+		$listener = new RegisteredListener($handler, EventPriority::NORMAL, $this->createMock(Plugin::class), true, new TimingsHandler("portal test"));
+		$this->listeners[] = $listener;
+		HandlerListManager::global()->getListFor($eventClass)->register($listener);
+	}
+
+	protected function tearDown() : void{
+		foreach($this->listeners as $listener){ HandlerListManager::global()->unregisterAll($listener); }
+	}
+
+	public function testEntryCancellationIsOncePerContactAndStopsLoading() : void{
+		$calls = 0;
+		$this->listen(EntityPortalEnterEvent::class, function($event) use(&$calls) : void{ ++$calls; $event->cancel(); });
+		$this->entity->expects(self::never())->method("teleport");
+		$this->enter();
+		$this->enter();
+		self::assertSame(1, $calls);
+		self::assertSame([], $this->loads);
+		$this->touching = false;
+		$this->travel->tick();
+		$this->touching = true;
+		$this->enter();
+		self::assertSame(2, $calls);
+	}
+
+	public function testEntryEventCanDelayEndWithoutChangingDefaultNetherRules() : void{
+		$this->listen(EntityPortalEnterEvent::class, function($event) : void{ $event->setTeleportDelay(3); });
+		$this->enter();
+		$this->enter();
+		self::assertSame([], $this->loads);
+		$this->enter();
+		self::assertNotEmpty($this->loads);
+	}
+
+	public function testTeleportEventCanCancelAfterLoading() : void{
+		$this->listen(EntityPortalTeleportEvent::class, function($event) : void{ $event->cancel(); });
+		$this->entity->expects(self::never())->method("teleport");
+		$this->enter();
+		$this->resolveLoads();
+	}
+
+	public function testRedirectedDestinationIsLoadedAndCheckedBeforeTeleportOnce() : void{
+		$calls = 0;
+		$this->listen(EntityPortalTeleportEvent::class, function($event) use(&$calls) : void{
+			++$calls;
+			$event->setTo(new Position(32.5, 49, 32.5, $this->target), 45.0, 0.0);
+		});
+		$teleports = 0;
+		$this->entity->expects(self::once())->method("teleport")->willReturnCallback(function($to, $yaw) use(&$teleports) : bool{
+			++$teleports;
+			self::assertSame([32.5, 49, 32.5, 45.0], [$to->x, $to->y, $to->z, $yaw]);
+			return true;
+		});
+		$this->enter();
+		$firstLoads = count($this->loads);
+		$this->resolveLoads();
+		self::assertGreaterThan($firstLoads, count($this->loads));
+		self::assertSame(0, $teleports);
+		$this->resolveLoads($firstLoads);
+		self::assertSame(1, $teleports);
+		self::assertSame(1, $calls);
+	}
+
+	public function testUnsafeRedirectCannotTeleport() : void{
+		$this->listen(EntityPortalTeleportEvent::class, function($event) : void{ $event->setTo(new Position(32.5, 70, 32.5, $this->target)); });
+		$this->entity->expects(self::never())->method("teleport");
+		$this->enter();
+		$firstLoads = count($this->loads);
+		$this->resolveLoads();
+		$this->resolveLoads($firstLoads);
+	}
+
+	public function testTeleportHandlerCannotCompleteTripAfterEntityMoved() : void{
+		$this->listen(EntityPortalTeleportEvent::class, function($event) : void{ ++$this->entityVersion; });
+		$this->entity->expects(self::never())->method("teleport");
+		$this->enter();
+		$this->resolveLoads();
+	}
+
 }
+

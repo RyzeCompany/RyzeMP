@@ -15,6 +15,8 @@ final class DimensionSettingsTest extends TestCase{
 		$settings = DimensionSettings::fromArray([]);
 		self::assertSame([DimensionIds::NETHER => "world_nether", DimensionIds::THE_END => "world_the_end"], $settings->getWorldNames());
 		self::assertSame(600, $settings->portalLoadTimeoutTicks);
+		self::assertFalse($settings->transitionDiagnostics);
+		self::assertSame(120, $settings->transitionTimeoutSeconds);
 		self::assertSame([100, 49, 0], [$settings->endX, $settings->endY, $settings->endZ]);
 		self::assertFalse($settings->endUseWorldSpawn);
 		self::assertNull($settings->getSourceDimension(DimensionIds::NETHER));
@@ -50,6 +52,9 @@ final class DimensionSettingsTest extends TestCase{
 		yield "high End arrival" => [["end" => ["arrival" => ["y" => 254]]]];
 		yield "unbounded coordinate" => [["end" => ["arrival" => ["x" => 30000000]]]];
 		yield "fractional coordinate" => [["end" => ["arrival" => ["x" => 1.5]]]];
+		yield "short transition timeout" => [["portal" => ["transition-timeout-seconds" => 9]]];
+		yield "unbounded transition timeout" => [["portal" => ["transition-timeout-seconds" => 601]]];
+		yield "invalid transition diagnostics" => [["portal" => ["transition-diagnostics" => "true"]]];
 		yield "short timeout" => [["portal" => ["load-timeout-ticks" => 0]]];
 		yield "unbounded timeout" => [["portal" => ["load-timeout-ticks" => 12001]]];
 	}
@@ -66,3 +71,4 @@ final class DimensionSettingsTest extends TestCase{
 		DimensionSettings::fromArray([])->validateOverworld("world_nether");
 	}
 }
+

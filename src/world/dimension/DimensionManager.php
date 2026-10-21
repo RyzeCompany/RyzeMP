@@ -48,6 +48,10 @@ final class DimensionManager{
 		$this->endCrystalSpawner = new EndCrystalSpawner($this->dimensions);
 	}
 
+	public function getSettings() : DimensionSettings{
+		return $this->settings;
+	}
+
 	public function getDimensions() : Dimensions{
 		return $this->dimensions;
 	}
@@ -135,4 +139,5 @@ final class DimensionManager{
 		$this->server->getLogger()->info("Native dimensions: created {$name}");
 	}
 }
+
 

@@ -62,6 +62,8 @@ use pocketmine\network\mcpe\handler\SessionStartPacketHandler;
 use pocketmine\network\mcpe\handler\SpawnResponsePacketHandler;
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
 use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
+use pocketmine\event\player\PlayerDimensionChangeEvent;
+use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
@@ -171,6 +173,9 @@ class NetworkSession{
 	private bool $pendingDimensionChangeAck = false;
 	/** @var array{world: World, chunks: array<int, true>, centerX: int, centerZ: int, startedAt: float}|null */
 	private ?array $dimensionChangeTerrain = null;
+	private ?DimensionTransition $dimensionTransition = null;
+	private int $dimensionTransitionSequence = 0;
+	private ?string $clientWorldName = null;
 	protected ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
@@ -873,6 +878,9 @@ class NetworkSession{
 	private function tryDisconnect(\Closure $func, Translatable|string $reason) : void{
 		if($this->connected && !$this->disconnectGuard){
 			$this->disconnectGuard = true;
+			$this->finishDimensionTransition(PlayerDimensionChangeEvent::DISCONNECTED);
+			$this->pendingDimensionChangeAck = false;
+			$this->dimensionChangeTerrain = null;
 			$func();
 
 			$event = new SessionDisconnectEvent($this);
@@ -1166,7 +1174,11 @@ class NetworkSession{
 				($pos->getFloorZ() >> Chunk::COORD_BIT_SIZE) !== $this->dimensionChangeTerrain["centerZ"])
 			){
 				// An external teleport must replace the footprint whose old requests Player will cancel.
+				$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
 				$this->beginDimensionTerrain($this->player->getWorld());
+			}
+			if($mode === MovePlayerPacket::MODE_TELEPORT && $this->dimensionChangeTerrain === null){
+				$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
 			}
 			$location = $this->player->getLocation();
 			$yaw = $yaw ?? $location->getYaw();
@@ -1192,6 +1204,8 @@ class NetworkSession{
 
 	/** @phpstan-param DimensionIds::* $dimension */
 	public function setClientDimension(int $dimension) : void{
+		$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
+		$this->clientWorldName = $this->player?->getWorld()->getFolderName();
 		$this->clientDimension = $dimension;
 		$this->pendingDimensionChangeAck = false;
 		$this->dimensionChangeTerrain = null;
@@ -1382,7 +1396,21 @@ class NetworkSession{
 	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world, int $chunkX, int $chunkZ) : void{
 		$world->timings->syncChunkSend->startTiming();
 		try{
-			$this->queueCompressed($chunkPacket);
+			$transition = $this->dimensionTransition;
+			$hash = World::chunkHash($chunkX, $chunkZ);
+			if($transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash)){
+				$receipt = new PromiseResolver();
+				$receipt->getPromise()->onCompletion(function() use($transition, $hash, $chunkX, $chunkZ) : void{
+					if($this->dimensionTransition !== $transition){ return; }
+					$transition->recordReceipt($hash);
+					$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
+				}, static function() : void{});
+				$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
+				$this->flushGamePacketQueue();
+				$this->queueCompressedNoGamePacketFlush($chunkPacket, ackPromises: [$receipt]);
+			}else{
+				$this->queueCompressed($chunkPacket);
+			}
 			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
 			$onCompletion();
 		}finally{
@@ -1433,24 +1461,104 @@ class NetworkSession{
 	}
 
 	public function onEnterWorld() : void{
-		if($this->player !== null){
-			$world = $this->player->getWorld();
-			$dimension = $this->server->getDimensionManager()->getDimension($world);
-			$cache = ChunkCache::getInstance($world, $this->compressor);
-			$cache->setDimensionId($dimension);
-			if($dimension !== $this->clientDimension){
-				$this->clientDimension = $dimension;
-				$this->pendingDimensionChangeAck = true;
-				$this->beginDimensionTerrain($world);
-				$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, null));
-			}elseif($this->pendingDimensionChangeAck){
-				// A second world change can replace a destination before its terrain was sent.
-				$this->beginDimensionTerrain($world);
+		if($this->player === null || $this->disconnectGuard || !$this->connected){ return; }
+		$world = $this->player->getWorld();
+		$dimension = $this->server->getDimensionManager()->getDimension($world);
+		$sourceWorld = $this->clientWorldName;
+		$sequence = ++$this->dimensionTransitionSequence;
+		$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
+		if($sequence !== $this->dimensionTransitionSequence || $this->player->getWorld() !== $world){ return; }
+		$this->clientWorldName = $world->getFolderName();
+		$cache = ChunkCache::getInstance($world, $this->compressor);
+		$cache->setDimensionId($dimension);
+		$started = null;
+		if($dimension !== $this->clientDimension){
+			$this->clientDimension = $dimension;
+			$this->pendingDimensionChangeAck = true;
+			$this->beginDimensionTerrain($world);
+			$settings = $this->server->getDimensionManager()->getSettings();
+			$screenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? ($sequence & 0x7fffffff) : null;
+			$started = $this->dimensionTransition = new DimensionTransition($sequence, $screenId, $sourceWorld, $world->getFolderName(), $dimension, microtime(true), $this->dimensionChangeTerrain["chunks"], $settings->transitionDiagnostics);
+			if(!$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $screenId))){
+				if($this->dimensionTransition === $started){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+				return;
 			}
-			$this->syncWorldTime($world->getTime());
-			$this->syncGameRules($world);
-			$this->syncWorldDifficulty($world->getDifficulty());
-			$this->syncWorldSpawnPoint($world->getSpawnLocation());
+			$this->traceDimension("begin source=" . ($sourceWorld ?? "unknown") . " dimension=$dimension screen_id=" . ($screenId ?? "none"));
+		}elseif($this->pendingDimensionChangeAck){
+			$this->beginDimensionTerrain($world);
+		}
+		if($this->player->getWorld() !== $world || $sequence !== $this->dimensionTransitionSequence){ return; }
+		$this->syncWorldTime($world->getTime());
+		$this->syncGameRules($world);
+		$this->syncWorldDifficulty($world->getDifficulty());
+		$this->syncWorldSpawnPoint($world->getSpawnLocation());
+		if($started !== null && $this->dimensionTransition === $started){
+			(new PlayerDimensionChangeEvent($this->player, $started, PlayerDimensionChangeEvent::STARTED))->call();
+		}
+	}
+
+	/** Returns an isolated snapshot; modifying it cannot affect the session. */
+	public function getDimensionTransition() : ?DimensionTransition{
+		return $this->dimensionTransition === null ? null : clone $this->dimensionTransition;
+	}
+
+	/** @internal @return array<int, true> Only existing chunk requests should be prioritized. */
+	public function getDimensionArrivalChunks() : array{
+		return $this->dimensionChangeTerrain["chunks"] ?? [];
+	}
+
+	public function onClientDimensionChangeAck() : void{
+		$transition = $this->dimensionTransition;
+		if($transition === null){ return; }
+		if($transition->getServerAckAt() === null){
+			$this->traceDimension("client_ack ignored=server_ack_not_queued");
+			return;
+		}
+		$transition->recordClientAck(microtime(true));
+		$this->traceDimension("client_ack untagged=yes");
+		$this->completeObservedDimensionTransition();
+	}
+
+	public function onClientLoadingScreen(LoadingScreenType $type, ?int $screenId) : void{
+		$transition = $this->dimensionTransition;
+		if($transition === null){ return; }
+		if($type !== LoadingScreenType::START_LOADING_SCREEN && $type !== LoadingScreenType::STOP_LOADING_SCREEN){ return; }
+		$matched = $transition->recordScreen($type === LoadingScreenType::START_LOADING_SCREEN, $screenId, microtime(true));
+		$this->traceDimension("client_screen=" . $type->name . " screen_id=" . ($screenId ?? "none") . " matched=" . ($matched ? "yes" : "no"));
+		$this->completeObservedDimensionTransition();
+	}
+
+	private function completeObservedDimensionTransition() : void{
+		$transition = $this->dimensionTransition;
+		if($transition === null || $transition->getServerAckAt() === null){ return; }
+		if($transition->getScreenStoppedAt() !== null){
+			$this->finishDimensionTransition(PlayerDimensionChangeEvent::SCREEN_STOPPED);
+		}elseif($transition->getLoadingScreenId() === null && $transition->getClientAckAt() !== null){
+			$this->finishDimensionTransition(PlayerDimensionChangeEvent::CLIENT_ACKNOWLEDGED);
+		}
+	}
+
+	private function finishDimensionTransition(string $result) : void{
+		$transition = $this->dimensionTransition;
+		if($transition === null){ return; }
+		$this->traceDimension("end result=$result transport_receipts=" . $transition->getReceivedChunkCount() . "/9");
+		$this->dimensionTransition = null;
+		$transition->finish($result);
+		if($this->player !== null){
+			(new PlayerDimensionChangeEvent($this->player, $transition, $result))->call();
+		}
+	}
+
+	private function checkDimensionTransitionTimeout(float $now) : void{
+		if($this->dimensionTransition !== null && $now - $this->dimensionTransition->getStartedAt() >= $this->server->getDimensionManager()->getSettings()->transitionTimeoutSeconds){
+			$this->finishDimensionTransition(PlayerDimensionChangeEvent::TIMED_OUT);
+		}
+	}
+
+	private function traceDimension(string $message) : void{
+		$transition = $this->dimensionTransition;
+		if($transition !== null && $transition->hasDiagnostics()){
+			$this->logger->debug(sprintf("Dimension trace #%d world=%s elapsed=%.3f %s", $transition->getId(), $transition->getTargetWorld(), microtime(true) - $transition->getStartedAt(), $message));
 		}
 	}
 
@@ -1486,7 +1594,25 @@ class NetworkSession{
 		$this->pendingDimensionChangeAck = false;
 		$this->dimensionChangeTerrain = null;
 		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
-		$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0));
+		$packet = PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0);
+		$transition = $this->dimensionTransition;
+		if($transition !== null && $transition->hasDiagnostics()){
+			$this->sendDataPacketWithReceipt($packet)->onCompletion(function() use($transition) : void{
+				if($this->dimensionTransition === $transition){ $this->traceDimension("server_ack_transport_received"); }
+			}, function() use($transition) : void{
+				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+			});
+		}else{
+			if(!$this->sendDataPacket($packet)){
+				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
+				return;
+			}
+		}
+		if($this->dimensionTransition === $transition){
+			$transition?->recordServerAck(microtime(true));
+			$this->traceDimension("server_ack_queued");
+			$this->completeObservedDimensionTransition();
+		}
 	}
 
 	public function syncGameRules(World $world) : void{
@@ -1607,6 +1733,8 @@ class NetworkSession{
 			return;
 		}
 
+		$this->checkDimensionTransitionTimeout(microtime(true));
+
 		if($this->info === null){
 			if(time() >= $this->connectTime + 10){
 				$this->disconnectWithError(KnownTranslationFactory::pocketmine_disconnect_error_loginTimeout());
@@ -1636,5 +1764,6 @@ class NetworkSession{
 		$this->flushGamePacketQueue();
 	}
 }
+
 
 

@@ -868,7 +868,15 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$world = $this->getWorld();
 
 		$limit = $this->chunksPerTick - count($this->activeChunkGenerationRequests);
-		foreach($this->loadQueue as $index => $distance){
+		$priority = [];
+		foreach($this->getNetworkSession()->getDimensionArrivalChunks() as $hash => $_){
+			if(isset($this->loadQueue[$hash])){
+				$priority[$hash] = $this->loadQueue[$hash];
+			}
+		}
+		\asort($priority, SORT_NUMERIC);
+		// Keep the configured per-tick and in-flight limits; never add unrequested chunks.
+		foreach($priority + $this->loadQueue as $index => $distance){
 			if($count >= $limit){
 				break;
 			}
@@ -902,7 +910,8 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 					unset($this->activeChunkGenerationRequests[$index]);
 					$this->usedChunks[$index] = UsedChunkStatus::REQUESTED_SENDING;
 
-					$this->getNetworkSession()->startUsingChunk($X, $Z, function() use ($X, $Z, $index) : void{
+					$this->getNetworkSession()->startUsingChunk($X, $Z, function() use ($X, $Z, $index, $world) : void{
+						if($world !== $this->getWorld() || ($this->usedChunks[$index] ?? null) !== UsedChunkStatus::REQUESTED_SENDING){ return; }
 						$this->usedChunks[$index] = UsedChunkStatus::SENT;
 						if($this->spawnChunkLoadCount === -1){
 							$this->spawnEntitiesOnChunk($X, $Z);
@@ -2989,3 +2998,4 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}
 	}
 }
+

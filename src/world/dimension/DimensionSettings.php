@@ -26,7 +26,9 @@ final class DimensionSettings{
 		public readonly int $endZ,
 		public readonly bool $endCreatePlatform,
 		/** @var array<int, int|null> */
-		private array $sourceDimensions = []
+		private array $sourceDimensions = [],
+		public readonly bool $transitionDiagnostics = false,
+		public readonly int $transitionTimeoutSeconds = 120
 	){}
 
 	/** @param mixed[] $config */
@@ -66,7 +68,11 @@ final class DimensionSettings{
 		if($timeout < 20 || $timeout > 12000){
 			throw new InvalidArgumentException("dimensions.yml: portal.load-timeout-ticks must be between 20 and 12000");
 		}
-		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true), $sourceDimensions);
+		$transitionTimeout = self::integer($portal, "transition-timeout-seconds", 120);
+		if($transitionTimeout < 10 || $transitionTimeout > 600){
+			throw new InvalidArgumentException("dimensions.yml: portal.transition-timeout-seconds must be between 10 and 600");
+		}
+		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true), $sourceDimensions, self::boolean($portal, "transition-diagnostics", false), $transitionTimeout);
 	}
 
 	/** null means automatic detection; this is storage identity, not the client's dimension. */
@@ -114,3 +120,4 @@ final class DimensionSettings{
 		return $value;
 	}
 }
+

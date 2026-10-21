@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace pocketmine\world\dimension\portal;
 
 use Closure;
+use pocketmine\event\entity\EntityPortalEnterEvent;
+use pocketmine\event\entity\EntityPortalTeleportEvent;
 use pocketmine\world\dimension\Dimensions;
 use pocketmine\block\NetherPortal;
 use pocketmine\math\Vector3;
@@ -42,6 +44,10 @@ final class PortalTravel{
 
 	/** @var array<int, int> */
 	private array $netherPortalTicks = [];
+	/** @var array<int, array{nether: bool, delay: int}> */
+	private array $entryDelays = [];
+	/** @var array<int, int> */
+	private array $endPortalTicks = [];
 	/** @var array<int, true> */
 	private array $inEndPortal = [];
 	/** @var array<int, array{token: int, entity: Entity, version: int, source: World, nether: bool, deadline: int, link: ?PortalLink}> */
@@ -92,15 +98,16 @@ final class PortalTravel{
 				$this->forget($id);
 				continue;
 			}
+			$delay = $this->entryDelay($entity, true);
+			if($delay === null){ continue; }
 			$ticks = $this->netherPortalTicks[$id] ?? 0;
-			if($entity instanceof Player && $entity->isCreative() && $ticks < self::NETHER_PORTAL_DELAY){
-				$ticks = self::NETHER_PORTAL_DELAY;
-			}else{
-				$ticks = min($ticks + 1, self::NETHER_PORTAL_DELAY + 1);
-			}
-			$this->netherPortalTicks[$id] = $ticks;
-			if($ticks === self::NETHER_PORTAL_DELAY && !isset($this->pending[$id])){
-				$this->travelThroughNetherPortal($entity);
+			if($ticks <= $delay){
+				$ticks = $delay === 0 ? 0 : $ticks + 1;
+				$this->netherPortalTicks[$id] = $ticks;
+				if($ticks === $delay){
+					$this->netherPortalTicks[$id] = $delay + 1;
+					if(!isset($this->pending[$id])){ $this->travelThroughNetherPortal($entity); }
+				}
 			}
 		}
 
@@ -118,19 +125,28 @@ final class PortalTravel{
 				$this->forget($id);
 				continue;
 			}
+			$delay = $this->entryDelay($entity, false);
+			if($delay === null){ continue; }
 			if(!isset($this->inEndPortal[$id])){
-				$this->inEndPortal[$id] = true;
-				if(!isset($this->pending[$id])){
-					$this->travelThroughEndPortal($entity);
+				$ticks = $this->endPortalTicks[$id] = ($this->endPortalTicks[$id] ?? 0) + 1;
+				if($ticks >= $delay){
+					$this->inEndPortal[$id] = true;
+					if(!isset($this->pending[$id])){ $this->travelThroughEndPortal($entity); }
 				}
 			}
 		}
 		foreach(array_keys($this->inEndPortal) as $id){
 			if(!isset($this->endTouches[$id])){
-				unset($this->inEndPortal[$id]);
+				unset($this->inEndPortal[$id], $this->endPortalTicks[$id]);
 			}
 		}
 
+		foreach($this->entryDelays as $id => $entry){
+			$touches = $entry["nether"] ? $this->netherTouches : $this->endTouches;
+			if(!isset($touches[$id])){
+				unset($this->entryDelays[$id], $this->endPortalTicks[$id]);
+			}
+		}
 		$this->netherTouches = [];
 		$this->endTouches = [];
 	}
@@ -150,6 +166,8 @@ final class PortalTravel{
 	public function forget(int $entityId) : void{
 		unset(
 			$this->netherPortalTicks[$entityId],
+			$this->entryDelays[$entityId],
+			$this->endPortalTicks[$entityId],
 			$this->inEndPortal[$entityId],
 			$this->pending[$entityId],
 			$this->linkedArrivals[$entityId],
@@ -168,6 +186,26 @@ final class PortalTravel{
 		return true;
 	}
 
+
+	private function entryDelay(Entity $entity, bool $nether) : ?int{
+		$id = $entity->getId();
+		$entry = $this->entryDelays[$id] ?? null;
+		if($entry === null || $entry["nether"] !== $nether){
+			foreach($this->touchingPortalBlocks($entity, $nether) as [$x, $y, $z]){
+				$source = $entity->getWorld();
+				$version = $entity->getPortalTravelVersion();
+				$delay = $nether && !($entity instanceof Player && $entity->isCreative()) ? self::NETHER_PORTAL_DELAY : 0;
+				$event = new EntityPortalEnterEvent($entity, $nether ? PortalType::NETHER : PortalType::END, new Position($x, $y, $z, $source), $delay);
+				$event->call();
+				$entry = $this->entryDelays[$id] = ["nether" => $nether, "delay" => $event->isCancelled() ? -1 : $event->getTeleportDelay()];
+				if(!$this->canTravel($entity) || $entity->getWorld() !== $source || $entity->getPortalTravelVersion() !== $version || !$this->isTouchingPortal($entity, $nether)){
+					return null;
+				}
+				break;
+			}
+		}
+		return $entry !== null && $entry["delay"] >= 0 ? $entry["delay"] : null;
+	}
 
 	private function travelThroughNetherPortal(Entity $entity) : void{
 		if($this->tryLinkedTravel($entity, true)){
@@ -207,9 +245,9 @@ final class PortalTravel{
 			}else{
 				$destination = NetherPortalLocator::build($target, $x, $y, $z);
 			}
-			if($entity->teleport(Position::fromObject($destination, $target))){
-				$this->netherPortalTicks[$entity->getId()] = self::NETHER_PORTAL_DELAY + 1;
-			}
+			$this->teleport($entity, true, Position::fromObject($destination, $target), null, null, function() use($entity) : void{
+				$this->netherPortalTicks[$entity->getId()] = PHP_INT_MAX;
+			});
 		});
 	}
 
@@ -239,9 +277,9 @@ final class PortalTravel{
 					$target->getServer()->getLogger()->warning("No safe End arrival found; existing blocks were preserved and portal travel was cancelled");
 					return;
 				}
-				if($entity->teleport(Position::fromObject($destination, $target), 90.0, 0.0)){
+				$this->teleport($entity, false, Position::fromObject($destination, $target), 90.0, 0.0, function() use($entity) : void{
 					$this->inEndPortal[$entity->getId()] = true;
-				}
+				});
 			});
 		}elseif($from === DimensionIds::THE_END){
 			$overworld = $this->dimensions->getWorld(DimensionIds::OVERWORLD);
@@ -254,7 +292,7 @@ final class PortalTravel{
 			}
 			$spawnWorld = $spawn->getWorld();
 			$this->populate($entity, $spawnWorld, $spawn->getFloorX(), $spawn->getFloorZ(), false, 1, function() use($entity, $spawnWorld, $spawn) : void{
-				$entity->teleport($spawnWorld->getSafeSpawn($spawn));
+				$this->teleport($entity, false, $spawnWorld->getSafeSpawn($spawn), null, null, static function() : void{});
 			});
 		}
 	}
@@ -278,17 +316,50 @@ final class PortalTravel{
 		}
 		$box = LinkedPortalArrival::boundingBox($entity, $destination);
 		$radius = (int) ceil(max($box->maxX - $box->minX, $box->maxZ - $box->minZ) / 2) + 1;
-		$this->populate($entity, $world, (int) floor($destination->x), (int) floor($destination->z), $nether, $radius, function() use($entity, $world, $destination, $dimension, $link) : void{
+		$this->populate($entity, $world, (int) floor($destination->x), (int) floor($destination->z), $nether, $radius, function() use($entity, $world, $destination, $dimension, $link, $nether) : void{
 			if(!LinkedPortalArrival::isSafe($entity, $world, $destination, $dimension)){
 				$world->getServer()->getLogger()->warning("Portal link " . $link->id . ": arrival is obstructed or has no safe floor; travel cancelled");
 				return;
 			}
-			if($entity->teleport(new Position($destination->x, $destination->y, $destination->z, $world), $destination->yaw, $destination->pitch)){
+			$this->teleport($entity, $nether, new Position($destination->x, $destination->y, $destination->z, $world), $destination->yaw, $destination->pitch, function() use($entity) : void{
 				// Also blocks cross-type links, such as Nether portal -> End portal.
 				$this->linkedArrivals[$entity->getId()] = ["entity" => $entity, "outsideTicks" => 0];
-			}
+			}, $link);
 		}, $link);
 		return true;
+	}
+
+	/** Dispatch once; a redirected target must pass the same loading and safety guards as a linked target. */
+	private function teleport(Entity $entity, bool $nether, Position $to, ?float $yaw, ?float $pitch, Closure $onSuccess, ?PortalLink $link = null) : void{
+		$source = $entity->getWorld();
+		$version = $entity->getPortalTravelVersion();
+		$event = new EntityPortalTeleportEvent($entity, $nether ? PortalType::NETHER : PortalType::END, $to, $yaw, $pitch);
+		$event->call();
+		if($event->isCancelled() || !$this->canTravel($entity) || $entity->getWorld() !== $source || $entity->getPortalTravelVersion() !== $version || !$this->isTouchingPortal($entity, $nether) || $this->findTouchedLink($entity, $nether) !== $link){
+			return;
+		}
+		$target = $event->getTo();
+		if(!$target->isValid() || !$target->getWorld()->isLoaded()){ return; }
+		$targetYaw = $event->getYaw();
+		$targetPitch = $event->getPitch();
+		$complete = function() use($entity, $target, $targetYaw, $targetPitch, $onSuccess) : void{
+			if($entity->teleport($target, $targetYaw, $targetPitch)){ $onSuccess(); }
+		};
+		if($target->getWorld() === $to->getWorld() && $target->equals($to)){
+			$complete();
+			return;
+		}
+		$world = $target->getWorld();
+		try{
+			$destination = new PortalDestination($world->getFolderName(), $target->x, $target->y, $target->z, $event->getYaw() ?? 0.0, $event->getPitch() ?? 0.0);
+		}catch(\InvalidArgumentException){ return; }
+		$dimension = $this->dimensions->getDimension($world);
+		if(!LinkedPortalArrival::isWithinBounds($entity, $world, $destination, $dimension)){ return; }
+		$box = LinkedPortalArrival::boundingBox($entity, $destination);
+		$radius = (int) ceil(max($box->maxX - $box->minX, $box->maxZ - $box->minZ) / 2) + 1;
+		$this->populate($entity, $world, $target->getFloorX(), $target->getFloorZ(), $nether, $radius, function() use($entity, $world, $destination, $dimension, $complete) : void{
+			if(LinkedPortalArrival::isSafe($entity, $world, $destination, $dimension)){ $complete(); }
+		}, $link);
 	}
 
 	private function findTouchedLink(Entity $entity, bool $nether) : ?PortalLink{
@@ -401,3 +472,4 @@ final class PortalTravel{
 		}
 	}
 }
+
