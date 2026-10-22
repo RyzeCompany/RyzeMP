@@ -1398,21 +1398,39 @@ class NetworkSession{
 		try{
 			$transition = $this->dimensionTransition;
 			$hash = World::chunkHash($chunkX, $chunkZ);
-			if($transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash)){
+			$diagnosticReceipt = $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
+			// Legacy Bedrock clients must receive the terrain before the corresponding actors.
+			$waitForLegacyReceipt = $this->getProtocolId() <= ProtocolInfo::PROTOCOL_1_21_111;
+			if($diagnosticReceipt || $waitForLegacyReceipt){
 				$receipt = new PromiseResolver();
-				$receipt->getPromise()->onCompletion(function() use($transition, $hash, $chunkX, $chunkZ) : void{
-					if($this->dimensionTransition !== $transition){ return; }
-					$transition->recordReceipt($hash);
-					$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
-				}, static function() : void{});
-				$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
+				$receipt->getPromise()->onCompletion(
+					function() use ($transition, $hash, $chunkX, $chunkZ, $diagnosticReceipt, $waitForLegacyReceipt, $onCompletion) : void{
+						if($diagnosticReceipt && $this->dimensionTransition === $transition){
+							$transition->recordReceipt($hash);
+							$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
+						}
+						if($waitForLegacyReceipt){
+							$onCompletion();
+						}
+					},
+					function() use ($world, $chunkX, $chunkZ, $waitForLegacyReceipt) : void{
+						if($waitForLegacyReceipt){
+							$this->player?->retryFailedChunkSend($world, $chunkX, $chunkZ);
+						}
+					}
+				);
+				if($diagnosticReceipt){
+					$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
+				}
 				$this->flushGamePacketQueue();
 				$this->queueCompressedNoGamePacketFlush($chunkPacket, ackPromises: [$receipt]);
 			}else{
 				$this->queueCompressed($chunkPacket);
 			}
 			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
-			$onCompletion();
+			if(!$waitForLegacyReceipt){
+				$onCompletion();
+			}
 		}finally{
 			$world->timings->syncChunkSend->stopTiming();
 		}
@@ -1679,6 +1697,7 @@ class NetworkSession{
 	}
 
 	public function onPlayerAdded(Player $p) : void{
+		$this->debugCrossVersionPlayerSync($p, "player-added");
 		$this->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($p->getUniqueId(), $p->getId(), $p->getDisplayName(), $this->typeConverter->coreSkinToNet($p->getSkin()), $p->getXuid())]));
 	}
 
