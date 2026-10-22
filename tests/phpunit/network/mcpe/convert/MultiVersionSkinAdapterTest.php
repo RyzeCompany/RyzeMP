@@ -192,6 +192,28 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame("1.21.0", $decoded->getGeometryDataEngineVersion());
 	}
 
+	public function testModernClassicGeometryDowngradesForLegacyViewer() : void{
+		$geometry = '{"format_version":"1.26.52","minecraft:geometry":[]}';
+		$incoming = new SkinData(
+			'modern-classic',
+			'',
+			'{"geometry":{"default":"geometry.custom.ryze"}}',
+			new SkinImage(64, 64, str_repeat("\xaa\xbb\xcc\xff", 64 * 64)),
+			geometryData: $geometry
+		);
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+		$legacy = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+		$modern = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame('{"geometry":{"default":"geometry.humanoid.custom"}}', $legacy->getResourcePatch());
+		self::assertSame("{}", $legacy->getGeometryData());
+		self::assertTrue($legacy->isVerified());
+		self::assertSame($skin->getSkinData(), $legacy->getSkinImage()->getData());
+		self::assertSame('{"geometry":{"default":"geometry.custom.ryze"}}', $modern->getResourcePatch());
+		self::assertSame($geometry, $modern->getGeometryData());
+	}
+
 	public function testClassicSkinUsesRecipientGeometryVersionAndStableId() : void{
 		$skin = new Skin("classic-recipient", str_repeat("\xff", 64 * 64 * 4));
 		$adapter = new LegacySkinAdapter();
