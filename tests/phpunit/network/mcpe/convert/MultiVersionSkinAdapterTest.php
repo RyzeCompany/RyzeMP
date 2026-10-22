@@ -111,7 +111,7 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
 
 		self::assertFalse($outgoing->isPersona());
-		self::assertSame("false", $outgoing->getTrustedSkinFlag());
+		self::assertSame("true", $outgoing->getTrustedSkinFlag());
 		self::assertSame("", $outgoing->getProfileHash());
 		self::assertSame(128, $outgoing->getSkinImage()->getWidth());
 		self::assertSame(128, $outgoing->getSkinImage()->getHeight());
@@ -154,6 +154,51 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
 
 		self::assertSame($incoming, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50));
+	}
+
+	public function testModernPersonaFallsBackToClassicFor844() : void{
+		$incoming = new SkinData(
+			'modern-persona-844',
+			'',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(256, 256, str_repeat("\x31\x42\x53\xff", 256 * 256)),
+			geometryData: '{}',
+			persona: true,
+			trustedSkinFlag: "true",
+			profileHash: str_repeat("d", 44)
+		);
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, ProtocolInfo::PROTOCOL_1_26_50);
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+
+		self::assertFalse($outgoing->isPersona());
+		self::assertTrue($outgoing->isVerified());
+		self::assertSame("true", $outgoing->getTrustedSkinFlag());
+		self::assertSame("1.21.0", $outgoing->getGeometryDataEngineVersion());
+		self::assertSame("{}", $outgoing->getGeometryData());
+		self::assertSame(128, $outgoing->getSkinImage()->getWidth());
+		self::assertSame("", $outgoing->getProfileHash());
+		self::assertSame($outgoing, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111));
+
+		$wire = new ByteBufferWriter();
+		CommonTypes::putSkin($wire, $outgoing, ProtocolInfo::PROTOCOL_1_21_111);
+		$decoded = CommonTypes::getSkin(new ByteBufferReader($wire->getData()), ProtocolInfo::PROTOCOL_1_21_111);
+		self::assertFalse($decoded->isPersona());
+		self::assertSame($outgoing->getSkinImage()->getData(), $decoded->getSkinImage()->getData());
+		self::assertSame("1.21.0", $decoded->getGeometryDataEngineVersion());
+	}
+
+	public function testClassicSkinUsesRecipientGeometryVersionAndStableId() : void{
+		$skin = new Skin("classic-recipient", str_repeat("\xff", 64 * 64 * 4));
+		$adapter = new LegacySkinAdapter();
+		$legacy = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+		$modern = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_26_50);
+
+		self::assertSame("1.21.0", $legacy->getGeometryDataEngineVersion());
+		self::assertSame(ProtocolInfo::MINECRAFT_VERSION_NETWORK, $modern->getGeometryDataEngineVersion());
+		self::assertSame($legacy->getFullSkinId(), $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111)->getFullSkinId());
+		self::assertTrue($legacy->isVerified());
+		self::assertNotSame($legacy->getFullSkinId(), $modern->getFullSkinId());
 	}
 
 	public function testLegacyOverrideSignatureRemainsCompatible() : void{
@@ -227,7 +272,7 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 
 		self::assertSame(!$expectClassicFallback, $outgoing->isPersona());
 		if($expectClassicFallback){
-			self::assertSame("false", $outgoing->getTrustedSkinFlag());
+			self::assertSame("true", $outgoing->getTrustedSkinFlag());
 			self::assertSame("", $outgoing->getProfileHash());
 			self::assertContains($outgoing->getSkinImage()->getWidth(), [64, 128]);
 			self::assertSame($outgoing->getSkinImage()->getWidth(), $outgoing->getSkinImage()->getHeight());
