@@ -1056,6 +1056,24 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	}
 
 	/**
+	 * Re-request a legacy client's chunk if the transport failed to acknowledge it.
+	 * Never mark the terrain as sent: this also prevents actors spawning ahead of it.
+	 */
+	public function retryFailedChunkSend(World $world, int $chunkX, int $chunkZ) : void{
+		if(!$this->isConnected() || $this->getWorld() !== $world){
+			return;
+		}
+		$hash = World::chunkHash($chunkX, $chunkZ);
+		if(($this->usedChunks[$hash] ?? null) !== UsedChunkStatus::REQUESTED_SENDING){
+			return;
+		}
+		$this->usedChunks[$hash] = UsedChunkStatus::NEEDED;
+		$this->loadQueue[$hash] = 0;
+		$this->nextChunkOrderRun = 0;
+		$this->logger->debug("Retrying unacknowledged legacy chunk $chunkX,$chunkZ");
+	}
+
+	/**
 	 * Returns whether the player is using the chunk with the given coordinates, irrespective of whether the chunk has
 	 * been sent yet.
 	 */

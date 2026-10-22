@@ -113,6 +113,7 @@ abstract class Entity{
 	 * @phpstan-var array<int, Player>
 	 */
 	protected array $hasSpawned = [];
+	private bool $spawnPacketQueued = true;
 
 	protected int $id;
 
@@ -1528,7 +1529,7 @@ abstract class Entity{
 	 * Called by spawnTo() to send whatever packets needed to spawn the entity to the client.
 	 */
 	protected function sendSpawnPacket(Player $player) : void{
-		$player->getNetworkSession()->sendDataPacket(AddActorPacket::create(
+		$queued = $player->getNetworkSession()->sendDataPacket(AddActorPacket::create(
 			$this->getId(), //TODO: actor unique ID
 			$this->getId(),
 			static::getNetworkTypeId(),
@@ -1545,6 +1546,17 @@ abstract class Entity{
 			new PropertySyncData([], []),
 			[] //TODO: entity links
 		));
+		if(!$queued){
+			$this->markSpawnPacketRejected();
+		}
+	}
+
+	/**
+	 * Keep the existing sendSpawnPacket() signature for plugin subclasses.
+	 * Built-in entity types report canceled packet sends through this hook.
+	 */
+	protected function markSpawnPacketRejected() : void{
+		$this->spawnPacketQueued = false;
 	}
 
 	public function spawnTo(Player $player) : void{
@@ -1554,8 +1566,16 @@ abstract class Entity{
 		//the player by sending them entities too early.
 		if(!isset($this->hasSpawned[$id]) && $player->getWorld() === $this->getWorld() && $player->hasReceivedChunk($this->location->getFloorX() >> Chunk::COORD_BIT_SIZE, $this->location->getFloorZ() >> Chunk::COORD_BIT_SIZE)){
 			$this->hasSpawned[$id] = $player;
-
-			$this->sendSpawnPacket($player);
+			$this->spawnPacketQueued = true;
+			try{
+				$this->sendSpawnPacket($player);
+			}catch(\Throwable $e){
+				unset($this->hasSpawned[$id]);
+				throw $e;
+			}
+			if(!$this->spawnPacketQueued){
+				unset($this->hasSpawned[$id]);
+			}
 		}
 	}
 

@@ -53,6 +53,7 @@ use pocketmine\network\mcpe\NetworkBroadcastUtils;
 use pocketmine\network\mcpe\protocol\AddPlayerPacket;
 use pocketmine\network\mcpe\protocol\PlayerListPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\AbilitiesData;
 use pocketmine\network\mcpe\protocol\types\AbilitiesLayer;
 use pocketmine\network\mcpe\protocol\types\command\CommandPermissions;
@@ -509,11 +510,13 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 				" protocol=$targetProtocol"
 			);
 		}
-		if(!($this instanceof Player)){
-			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]));
+		$isNpc = !($this instanceof Player);
+		if($isNpc && !$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]))){
+			$this->markSpawnPacketRejected();
+			return;
 		}
 
-		$networkSession->sendDataPacket(AddPlayerPacket::create(
+		$addPlayerPacket = AddPlayerPacket::create(
 			$this->getUniqueId(),
 			$this->getName(),
 			$this->getId(),
@@ -539,7 +542,34 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			[], //TODO: entity links
 			"", //device ID (we intentionally don't send this - secvuln)
 			DeviceOS::UNKNOWN //we intentionally don't send this (secvuln)
-		));
+		);
+		if($targetProtocol < ProtocolInfo::PROTOCOL_1_26_40){
+			// Legacy clients may need the list entry until AddPlayer has reached the client.
+			// A transport receipt does not guarantee rendering, but avoids removing it
+			// in the same outgoing packet batch as the spawn.
+			$networkSession->sendDataPacketWithReceipt($addPlayerPacket)->onCompletion(
+				function() use ($networkSession, $player, $isNpc) : void{
+					if($isNpc && $player->isConnected()){
+						$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
+					}
+				},
+				function() use ($networkSession, $player, $isNpc) : void{
+					if($player->isConnected()){
+						if($isNpc){
+							$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
+						}
+						$this->despawnFrom($player, false);
+						$networkSession->getLogger()->debug("Failed to deliver human spawn to " . $player->getName() . "; cleared viewer state for retry");
+					}
+				}
+			);
+		}elseif(!$networkSession->sendDataPacket($addPlayerPacket)){
+			$this->markSpawnPacketRejected();
+			if($isNpc){
+				$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
+			}
+			return;
+		}
 		if($crossVersionPlayerSpawn){
 			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-add-player-queued] source=" . $this->getName());
 		}
@@ -557,7 +587,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-equipment-queued] source=" . $this->getName());
 		}
 
-		if(!($this instanceof Player)){
+		if($isNpc && $targetProtocol >= ProtocolInfo::PROTOCOL_1_26_40){
 			$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
 		}
 	}
