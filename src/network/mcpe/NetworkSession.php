@@ -1399,13 +1399,13 @@ class NetworkSession{
 			$transition = $this->dimensionTransition;
 			$hash = World::chunkHash($chunkX, $chunkZ);
 			$diagnosticReceipt = $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
-			// Legacy Bedrock clients must receive the terrain before the corresponding actors.
-			$waitForLegacyReceipt = $this->getProtocolId() <= ProtocolInfo::PROTOCOL_1_21_111;
+			// Protocol 844 (1.21.111/114) must receive terrain before actors.
+			$waitForLegacyReceipt = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_21_111;
 			if($diagnosticReceipt || $waitForLegacyReceipt){
 				$receipt = new PromiseResolver();
 				$receipt->getPromise()->onCompletion(
 					function() use ($transition, $hash, $chunkX, $chunkZ, $diagnosticReceipt, $waitForLegacyReceipt, $onCompletion) : void{
-						if($diagnosticReceipt && $this->dimensionTransition === $transition){
+						if($diagnosticReceipt && $transition !== null && $this->dimensionTransition === $transition){
 							$transition->recordReceipt($hash);
 							$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
 						}
