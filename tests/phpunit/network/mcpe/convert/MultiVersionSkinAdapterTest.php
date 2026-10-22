@@ -11,9 +11,13 @@ use pmmp\encoding\ByteBufferWriter;
 use pocketmine\entity\InvalidSkinException;
 use pocketmine\entity\Skin;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\PlayerListPacket;
+use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
+use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\serializer\CommonTypes;
 use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\network\mcpe\protocol\types\skin\SkinImage;
+use Ramsey\Uuid\Uuid;
 
 final class MultiVersionSkinAdapterTest extends TestCase{
 
@@ -217,6 +221,42 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 
 		self::assertSame(64, $outgoing->getSkinImage()->getWidth());
 		self::assertSame(64, $outgoing->getSkinImage()->getHeight());
+	}
+
+	/** @return array<string, array{int}> */
+	public static function actorVisibilityProtocols() : array{
+		return [
+			'legacy 844' => [ProtocolInfo::PROTOCOL_1_21_111],
+			'modern 2193' => [ProtocolInfo::PROTOCOL_1_26_50]
+		];
+	}
+
+	#[DataProvider('actorVisibilityProtocols')]
+	public function testPlayerListAndSkinPacketRoundTripForMixedVersions(int $protocolId) : void{
+		$uuid = Uuid::uuid4();
+		$skin = new Skin('visible', str_repeat("\xff", 64 * 64 * 4));
+		$networkSkin = (new LegacySkinAdapter())->toSkinDataForProtocol($skin, $protocolId);
+		$add = PlayerListPacket::add([PlayerListEntry::createAdditionEntry($uuid, 321, 'VisiblePlayer', $networkSkin)]);
+		$out = new ByteBufferWriter();
+		$add->encode($out, $protocolId);
+
+		$decoded = new PlayerListPacket();
+		$decoded->decode(new ByteBufferReader($out->getData()), $protocolId);
+		self::assertSame(PlayerListPacket::TYPE_ADD, $decoded->type);
+		self::assertCount(1, $decoded->entries);
+		self::assertTrue($decoded->entries[0]->uuid->equals($uuid));
+		self::assertSame(321, $decoded->entries[0]->actorUniqueId);
+		self::assertTrue($decoded->entries[0]->skinData->isVerified());
+		self::assertSame($networkSkin->getSkinImage()->getData(), $decoded->entries[0]->skinData->getSkinImage()->getData());
+
+		$change = PlayerSkinPacket::create($uuid, '', '', $networkSkin);
+		$out = new ByteBufferWriter();
+		$change->encode($out, $protocolId);
+		$decodedChange = new PlayerSkinPacket();
+		$decodedChange->decode(new ByteBufferReader($out->getData()), $protocolId);
+		self::assertTrue($decodedChange->uuid->equals($uuid));
+		self::assertTrue($decodedChange->skin->isVerified());
+		self::assertSame($networkSkin->getFullSkinId(), $decodedChange->skin->getFullSkinId());
 	}
 
 	public function testUnsupportedPersonaImageFallsBackDeterministically() : void{
