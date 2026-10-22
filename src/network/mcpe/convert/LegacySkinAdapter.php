@@ -70,7 +70,7 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 		return 0; // Legacy Persona wire format (1.26.30 and older)
 	}
 
-\tpublic function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
+	public function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
 		$cached = self::$outgoingSkinCache[$skin] ?? [];
 		if(isset($cached[$targetProtocol])){
 			return $cached[$targetProtocol];
