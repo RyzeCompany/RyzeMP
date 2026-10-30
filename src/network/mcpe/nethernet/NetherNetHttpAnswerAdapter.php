@@ -29,7 +29,7 @@ final class NetherNetHttpAnswerAdapter implements TransportListener{
 
 	public function __construct(
 		private NetherNetSharedPortSignalingBridge $bridge,
-		private string $advertisedIp,
+		private \Closure $resolveAdvertisedIp,
 		private int $advertisedPort
 	){}
 
@@ -46,8 +46,12 @@ final class NetherNetHttpAnswerAdapter implements TransportListener{
 
 	public function onAnswer(int $id, string $answerSdp) : void{
 		$connectionId = (string) $id;
+		$publicIp = ($this->resolveAdvertisedIp)($id);
+		if(!is_string($publicIp) || NetherNetHostAddress::resolve($publicIp, null) === null || $publicIp === "0.0.0.0"){
+			throw new \InvalidArgumentException("Cannot infer a concrete public IPv4 from server-ip or the join Host header");
+		}
 		$answer = $this->bridge->preparedAnswer(
-			$connectionId, $answerSdp, $this->advertisedIp, $this->advertisedPort
+			$connectionId, $answerSdp, $publicIp, $this->advertisedPort
 		);
 		try{
 			$this->signaling()->onAnswer($id, $answer);
