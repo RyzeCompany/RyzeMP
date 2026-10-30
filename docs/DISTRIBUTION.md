@@ -2,7 +2,7 @@
 
 RyzeMP ships through two complementary channels. Both distribute **the same server source**; neither automatically bundles a PHP interpreter or bypasses the PocketMine-specific extensions.
 
-> Publication status: preparation only. The matching multiversion BedrockProtocol, BedrockData, and RyzeMP repositories are currently private in RyzeCompany. Public installation is **not** available until the main repository is public, packages are registered and tested releases exist. No tag or GitHub Release is created by this document.
+> Publication status: preparation only. The three RyzeCompany repositories are public, but version tags and Packagist registration still need to be completed and verified. A public GitHub repository by itself does not make a Composer package installable by name.
 
 ## Channel A: Composer project (developers)
 
@@ -10,7 +10,7 @@ The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 
 Public distribution checklist:
 
-1. Make **all three** RyzeCompany repositories public, or use a [private Composer repository](https://packagist.com/) and suitable credentials for private distribution. Keep the protocol and data packages consistent across published versions; all three RyzeCompany repositories must be publicly accessible before Packagist.org submission.
+1. Confirm the three RyzeCompany repositories remain public, their Composer package names are unique, and their licenses/third-party attribution are suitable for publication. Keep the protocol and data package versions consistent with the RyzeMP core.
 2. Keep the root `composer.json` and `composer.lock` consistent. The updated lockfile references concrete commits of `ryzemcbe/bedrock-data` and `ryzemcbe/bedrock-protocol` on `dev-main`; verify those commits remain accessible before every release; do **not** regenerate the lockfile without reviewing the actual resolved dependency versions.
 3. For a versioned public distribution, tag and register the **two libraries first**, then replace the temporary `dev-main` requirements in RyzeMP with reviewed release constraints and regenerate/test its lockfile using Composer. Do not choose/tag dependency versions solely to make Composer resolve: their API compatibility must be verified.
 4. Submit the source URLs to [Packagist.org](https://packagist.org/packages/submit): `RyzeCompany/BedrockData`, `RyzeCompany/BedrockProtocol`, then `RyzeCompany/RyzeMP`. Enable the update webhook so new version tags are detected.
@@ -29,11 +29,11 @@ Use a compatible 64-bit PHP environment with the PocketMine-specific extensions 
 php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
 ```
 
-`composer create-project` installs the source project **and dependencies**; it does **not** produce a PHAR by itself. An authenticated Git clone followed by `composer install` is the supported development workflow while RyzeMP is private.
+`composer create-project` installs the source project **and dependencies**; it does **not** produce a PHAR by itself. Before Packagist registration, developers can clone the now-public GitHub repository and run `composer install` with its committed VCS repository declarations.
 
 ### Private distribution
 
-If keeping the repositories private, use an authenticated GitHub VCS configuration, or [Private Packagist](https://packagist.com/). Public Packagist.org is not a shortcut for exposing private GitHub repositories. Never commit access tokens into Composer files, workflows, or installation examples.
+Private enterprise deployments can instead use a [private Composer repository](https://packagist.com/) and appropriate access controls. Never commit access tokens into Composer files, workflows, or installation examples.
 
 ## Channel B: GitHub Releases PHAR (server operators)
 
@@ -75,4 +75,4 @@ The `php7` directory name is not proof of the runtime's PHP version. Use `./bin/
 5. Tag RyzeMP only after its `BASE_VERSION`, tested lockfile, dependencies, and release notes correspond to the chosen version.
 6. Verify both the Composer installation and the downloadable GitHub Release archive, including its SHA-256 hash.
 
-**Do not publish tags, releases, or change visibility automatically as part of this preparation.** Those actions are performed explicitly by the maintainer.
+**Do not announce the public Composer installation command until each version is registered on Packagist and a fresh installation succeeds.**
