@@ -1312,7 +1312,7 @@ class Server{
 			// for older clients, but do not silently omit the native listener.
 			// This diagnostic is especially useful when the experimental PHAR
 			// is installed on a host without the separate ext-rtc binary.
-			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= ProtocolInfo::PROTOCOL_1_26_60){
+			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= 2225){
 				if(!extension_loaded("rtc")){
 					$this->logger->warning("NetherNet UNAVAILABLE: PHP native extension 'rtc' is not loaded. 1.26.60 cannot establish WebRTC; install ext-rtc for the same PHP runtime. Legacy RakNet stays available.");
 				}elseif(!class_exists(\amber\nethernet\Transport::class)){
