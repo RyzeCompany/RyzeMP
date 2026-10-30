@@ -16,7 +16,6 @@ on:
 jobs:
   tests:
     uses: ./.github/workflows/ci.yml
-    secrets: inherit
   build:
     needs: tests
     permissions:
@@ -28,7 +27,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: false
-          token: ${{ secrets.SUBMODULE_TOKEN }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -55,8 +53,6 @@ jobs:
 
       - name: Install dependencies
         run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs
-        env:
-          COMPOSER_AUTH: '{"github-oauth": {"github.com": "${{ secrets.SUBMODULE_TOKEN }}"}}'
 
       - name: Validate PHP syntax
         shell: bash

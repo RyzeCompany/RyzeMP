@@ -3,9 +3,6 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
-    secrets:
-      SUBMODULE_TOKEN:
-        required: true
 permissions:
   contents: read
 jobs:
@@ -23,8 +20,6 @@ jobs:
         run: composer validate --no-check-publish --no-interaction
       - name: Install locked dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
-        env:
-          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
       - name: Validate PHP syntax including tests
         run: find src lib generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -n -l
       - name: Verify generated block registry and state fixture

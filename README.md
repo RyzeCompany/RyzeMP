@@ -15,6 +15,15 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 
 ## Get RyzeMP — two distribution channels
 
+**Composer/Packagist:** all dependencies are resolved from public Packagist packages. For a new installation, use a compatible PocketMine PHP runtime and run:
+
+```bash
+composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist
+```
+
+For development from source, run `composer install` in the checked-out repository. Dependencies are pinned in `composer.lock`; no GitHub VCS override or private token is required. For future Bedrock upgrades, publish compatible dependency tags to Packagist first and then update the Composer constraints/lockfile in RyzeMP.
+
+
 - **Composer (source project for developers):** [ryzemcbe/ryzemp](https://packagist.org/packages/ryzemcbe/ryzemp) is publicly available. Install beta.3 with `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist` using a compatible PocketMine PHP runtime.
 - **GitHub Releases (ready-built server PHAR):** download [RyzeMP v1.0.0-beta.3](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.3) and its SHA-256 checksum, then run the PHAR with a compatible PocketMine PHP environment.
 
