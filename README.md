@@ -2,7 +2,7 @@
 
 **RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeCompany and based on PocketMine-MP 5.
 
-> Development status: **1.0.0-beta.3**. This version is in development; no stable RyzeMP release has been published yet.
+> Latest public prerelease: **v1.0.0-beta.3**. RyzeMP remains in beta; no stable release has been published.
 
 ## Features and purpose
 
@@ -15,10 +15,10 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 
 ## Get RyzeMP — two distribution channels
 
-- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the dependencies and RyzeMP have tested release tags registered on Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
-- **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.3.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
+- **Composer (source project for developers):** [ryzemcbe/ryzemp](https://packagist.org/packages/ryzemcbe/ryzemp) is publicly available. Install beta.3 with `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist` using a compatible PocketMine PHP runtime.
+- **GitHub Releases (ready-built server PHAR):** download [RyzeMP v1.0.0-beta.3](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.3) and its SHA-256 checksum, then run the PHAR with a compatible PocketMine PHP environment.
 
-**Public Composer distribution is not available yet.** RyzeMP and its matching multiversion libraries are now public on GitHub. Their Composer package names are prepared, but publication still requires versioned dependency releases, Packagist registration, a final Composer install test, and live game tests.
+**Public distribution is live.** RyzeMP beta.3 and both Bedrock beta.1 libraries are published on Packagist and verified by a clean `composer create-project` installation. Automated CI verifies Composer resolution, PHPUnit and PHAR startup; in-game compatibility still requires real Bedrock client testing.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
