@@ -1,5 +1,9 @@
 name: Experimental 2225 NetherNet PHAR
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [feature/bedrock-1.26.60-nethernet]
