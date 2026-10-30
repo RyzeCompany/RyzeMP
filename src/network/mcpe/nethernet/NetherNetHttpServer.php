@@ -107,7 +107,7 @@ final class NetherNetHttpServer{
 	}
 
 	private function captureHost(int $id, string $chunk) : void{
-		if(!isset($this->clients[$id]) || $this->clients[$id]["input"] === "" && $this->clients[$id]["host"] !== null){
+		if(!isset($this->clients[$id]) || $this->clients[$id]["hostComplete"]){
 			return;
 		}
 		// A zero byte in the first header is safe for Host inference: the
@@ -116,9 +116,11 @@ final class NetherNetHttpServer{
 		$headerEnd = strpos($this->clients[$id]["input"], "\r\n\r\n");
 		if($headerEnd !== false){
 			$this->clients[$id]["host"] = NetherNetHostAddress::requestHost(substr($this->clients[$id]["input"], 0, $headerEnd + 4));
+			$this->clients[$id]["hostComplete"] = true;
 			$this->clients[$id]["input"] = "";
 		}elseif(strlen($this->clients[$id]["input"]) > $this->config->maxHttpHeaderBytes){
 			$this->clients[$id]["input"] = "";
+			$this->clients[$id]["hostComplete"] = true;
 		}
 	}
 
@@ -151,6 +153,7 @@ final class NetherNetHttpServer{
 				"deadline" => microtime(true) + $this->config->httpHeaderTimeoutSeconds,
 				"input" => "",
 				"host" => null,
+				"hostComplete" => false,
 				"reading" => true,
 				"output" => "",
 				"offset" => 0
@@ -203,6 +206,9 @@ final class NetherNetHttpServer{
 		}
 		$client["offset"] += $length;
 		if($client["offset"] === strlen($client["output"])){
+			if(($transportId = $this->signaling->getTransportId($id)) !== null){
+				unset($this->hostsByTransport[$transportId]);
+			}
 			unset($client);
 			$this->signaling->finish($id);
 			$this->drop($id);
