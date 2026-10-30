@@ -3,7 +3,10 @@ name: Experimental 2225 NetherNet PHAR
 on:
   push:
     branches: [feature/bedrock-1.26.60-nethernet]
-    paths: [".github/workflows/ci-2225-phar-preview.yml"]
+    paths:
+      - ".github/workflows/ci-2225-phar-preview.yml"
+      - "tests/phpunit/network/mcpe/nethernet/**"
+      - "src/network/mcpe/nethernet/**"
   workflow_dispatch:
 
 permissions:
