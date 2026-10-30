@@ -7,7 +7,6 @@ use amber\nethernet\Transport;
 use amber\nethernet\TransportConfig;
 use amber\nethernet\backend\ExtRtcPeer;
 use amber\nethernet\identity\ServerIdentity;
-use amber\nethernet\signaling\HttpServer;
 use amber\nethernet\signaling\HttpSignaling;
 use amber\nethernet\signaling\ServerMetadata;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -28,7 +27,8 @@ use pocketmine\Server;
  */
 final class NetherNetInterface implements NetworkInterface{
 	private ?Transport $transport = null;
-	private ?HttpServer $http = null;
+	private ?NetherNetHttpServer $http = null;
+	private int $privateIcePort = 0;
 	private ?NetherNetHttpAnswerAdapter $answer = null;
 	private ?NetherNetSharedPortSignalingBridge $bridge = null;
 	private ?NetherNetGameTransportListener $game = null;
@@ -41,9 +41,7 @@ final class NetherNetInterface implements NetworkInterface{
 		private EntityEventBroadcaster $entityEventBroadcaster,
 		private TypeConverter $typeConverter,
 		private string $bindIp,
-		private int $publicPort,
-		private string $advertisedIp,
-		private int $privateIcePort
+		private int $publicPort
 	){
 		$this->motd = $server->getMotd();
 	}
@@ -55,13 +53,13 @@ final class NetherNetInterface implements NetworkInterface{
 		}
 		ExtRtcPeer::assertAvailable(); // fail closed if ext-rtc is missing
 		if(filter_var($this->bindIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false ||
-			filter_var($this->advertisedIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false ||
-			$this->advertisedIp === "0.0.0.0" || $this->publicPort < 1 || $this->publicPort > 65535 ||
-			$this->privateIcePort < 1 || $this->privateIcePort > 65535 ||
-			$this->privateIcePort === $this->publicPort){
-			throw new \InvalidArgumentException("NetherNet requires IPv4 bind, concrete advertised IP and private ICE port distinct from public game port");
+			$this->publicPort < 1 || $this->publicPort > 65535){
+			throw new \InvalidArgumentException("NetherNet must use a valid IPv4 server-ip and server-port");
 		}
-		$this->raklib->configureNetherNetSharedPort($this->privateIcePort);
+		if($this->privateIcePort === 0){
+			$this->privateIcePort = self::selectPrivateIcePort($this->publicPort);
+			$this->raklib->configureNetherNetSharedPort($this->privateIcePort);
+		}
 	}
 
 	public function start() : void{
@@ -86,7 +84,11 @@ final class NetherNetInterface implements NetworkInterface{
 			$this->raklib->authorizeNetherNetUfrag(...),
 			$this->raklib->revokeNetherNetUfrag(...)
 		);
-		$answer = new NetherNetHttpAnswerAdapter($bridge, $this->advertisedIp, $this->publicPort);
+		$answer = new NetherNetHttpAnswerAdapter(
+			$bridge,
+			fn(int $transportId) => $this->http?->advertisedIp($transportId),
+			$this->publicPort
+		);
 		$signaling = new HttpSignaling(
 			$config,
 			fn() => new ServerMetadata(
@@ -105,7 +107,7 @@ final class NetherNetInterface implements NetworkInterface{
 		);
 		$signaling->bind($transport);
 		try{
-			$http = new HttpServer($config, $signaling, "tcp://" . $this->bindIp . ":" . $this->publicPort);
+			$http = new NetherNetHttpServer($config, $signaling, $this->bindIp, $this->publicPort);
 		}catch(\Throwable $e){
 			$bridge->shutdown();
 			$transport->stop();
@@ -117,6 +119,31 @@ final class NetherNetInterface implements NetworkInterface{
 		$this->bridge = $bridge;
 		$this->answer = $answer;
 		$this->server->getLogger()->notice("EXPERIMENTAL NetherNet: TCP {$this->bindIp}:{$this->publicPort}, shared RakLib UDP {$this->publicPort}, private ICE UDP 127.0.0.1:{$this->privateIcePort}");
+	}
+
+	/**
+	 * Private UDP port is an implementation detail, not an operator property.
+	 * The kernel selects a free loopback port for the single native ICE mux.
+	 */
+	private static function selectPrivateIcePort(int $publicPort) : int{
+		for($try = 0; $try < 8; ++$try){
+			$probe = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+			if($probe === false){
+				throw new \RuntimeException("Unable to allocate internal NetherNet ICE UDP socket");
+			}
+			try{
+				if(!@socket_bind($probe, "127.0.0.1", 0) ||
+					!socket_getsockname($probe, $ip, $port)){
+					throw new \RuntimeException("Unable to select internal NetherNet ICE UDP port");
+				}
+			}finally{
+				socket_close($probe);
+			}
+			if($port > 0 && $port !== $publicPort){
+				return $port;
+			}
+		}
+		throw new \RuntimeException("Cannot reserve a distinct private ICE port");
 	}
 
 	private function loadServerIdentity() : ServerIdentity{
