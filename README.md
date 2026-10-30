@@ -1,6 +1,6 @@
 # RyzeMP
 
-**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeMCBE and based on PocketMine-MP 5.
+**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeCompany and based on PocketMine-MP 5.
 
 > Development status: **1.0.0-beta.3**. This version is in development; no stable RyzeMP release has been published yet.
 
