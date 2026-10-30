@@ -27,6 +27,9 @@ final class NetherNetHostAddress{
 		}
 		$address = $joinHost;
 		if(preg_match('/^([0-9.]+):([0-9]{1,5})$/D', $joinHost, $m) === 1){
+			if((int) $m[2] < 1 || (int) $m[2] > 65535){
+				return null;
+			}
 			$address = $m[1];
 		}
 		return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false &&
