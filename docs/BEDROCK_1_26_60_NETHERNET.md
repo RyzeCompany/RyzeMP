@@ -1,186 +1,53 @@
-# Bedrock 1.26.60 / 1.26.61 (protocol 2225) upgrade
+# RyzeMP · Bedrock 1.26.60/1.26.61 (protocol 2225) and first-party RyzeRTC
 
-Status: **in progress; NOT supported by a release build yet**.
+> **Development branch, NOT production-ready.** The codec/data staging PHAR does **not** yet accept actual Minecraft Bedrock 1.26.60 players. Keep protocol 2225 out of the production `ACCEPTED_PROTOCOL` list and do not merge this branch while the native transport remains incomplete.
 
-Do not switch `ProtocolInfo::CURRENT_PROTOCOL` or announce 2225 in
-`ProtocolInfo::ACCEPTED_PROTOCOL` until the packet codecs, data files,
-transport, and real-client tests have passed.
+## Repository ownership and compatibility
 
-## Reuse
+- **RyzeMP:** `RyzeCompany/RyzeMP`, branch `feature/bedrock-1.26.60-nethernet`, draft PR #48.
+- **First-party native extension:** `RyzeCompany/RyzeRTC`, branch `feature/native-bootstrap-php84-linux`, draft PR #1.
+- **Protocol and data:** `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` feature branches for protocol 2225.
+- Preserve the older Bedrock protocol translators, PM5 plugin APIs, existing worlds, RakNet and committed production `composer.lock`. Do **not** modify HardCoreFactions or pinned git submodules.
+- No external PHP WebRTC extension or third-party signaling package is installed by the *current staging workflow*. Previous experiments are not a supported RyzeRTC distribution.
 
-- Preserve `tests/plugins/DevTools`, `build/php` and
-  `examples/plugins/ExamplePlugin` submodules and their pinned commits.
-- Use the already-verified official BDS 1.26.60.6 Endstone Actions export:
-  https://github.com/RyzeMCBE/endstone/actions/runs/40758269886
-- Its manifest reports 23,960 block states, 2,080 items and 89 biomes.
-- Reuse the published Composer dependency names `ryzemcbe/bedrock-protocol`
-  and `ryzemcbe/bedrock-data`; update the lockfile only after both libraries
-  have tested compatible tags.
-- Preserve all previous protocol-specific block and item dictionaries.
-- Preserve PM5 plugin API/namespaces, saved world data and the existing RakNet
-  transport for legacy clients.
+## Network contract (must not change)
 
-## Required network transport: NetherNet **and** RakNet, same IP and port
+- TCP signaling uses **the same** `server-ip` and `server-port` values already in `server.properties`.
+- UDP media and legacy RakNet both appear on the existing `server-ip:server-port`; the server needs **one** UDP socket owner with datagram demultiplexing before RakLib.
+- Internal ICE sockets may use temporary **loopback-only** ports. Never advertise a loopback port to players or require a new operator port setting.
+- **No** `nethernet-enabled`, `nethernet-ice-port` or other additional NetherNet properties.
+- The host/egg must expose **TCP and UDP on the same game port**. `0.0.0.0` is a bind address, not a player-facing endpoint; discovering/validating the advertised IP must not trust unverified user input.
 
-Players must continue using the current `server-ip` and `server-port`
-from `server.properties`. No independent public NetherNet bind address or
-random WebRTC UDP port should be introduced.
+The existing pure-PHP staging pieces include `NetherNetEndpoint`, `NetherNetFrameCodec`, `NetherNetDatagramClassifier`, `NetherNetSharedPortSocket`, `NetherNetSharedPortSdp`, `NetherNetSharedPortSignalingBridge` and `NetherNetSessionGateway`. They are **not** a complete native WebRTC service. In particular, shared UDP relay authorization must be bound to an authenticated signaling exchange, then revoked on close or expiry. Do not route unauthenticated DTLS packets as trusted clients.
 
-The intended network layout is:
+## What is verified
 
-| Listener | External bind | Responsibility |
-| --- | --- | --- |
-| NetherNet signaling | TCP `server-ip:server-port` | HTTP(S) signaling, identity and SDP/ICE negotiation |
-| Shared game ingress | UDP `server-ip:server-port` | A **single owner** multiplexes ICE/STUN/DTLS and legacy RakNet/Query packets |
-| Bedrock game sessions | existing `NetworkSession` | Login, encryption/auth, version-specific packets and plugins |
+1. Official Endstone BDS export from [RyzeMCBE/endstone Actions](https://github.com/RyzeMCBE/endstone/actions/runs/40758269886): 23,960 ordered block states and 2,080 items (plus 89 biomes) imported for 2225. Earlier dictionaries remain intact.
+2. Staged data and protocol Composer path dependencies pass the cross-repository integration workflow. The production lockfile intentionally still uses the released, previously supported libraries.
+3. RyzeMP regression tests and native dimensions pass independent PHP tests. The normal PHAR startup previously failed because its locked protocol library lacked a `PROTOCOL_1_26_60` constant; this was corrected by comparing numeric protocol 2225 without dereferencing a non-existent symbol.
+4. A **staging-only** PHAR can build from the 2225 feature branches and emit a clear warning when a first-party WebRTC transport is unavailable. It is **not** a real-client test build.
+5. RyzeRTC's first native bootstrap compiled and loaded under PHP 8.4 ZTS, including the exact PocketMine PHP binary used by the existing egg ([passing native CI](https://github.com/RyzeCompany/RyzeRTC/actions/runs/41145632552)). Its current API supports peer creation, bounded offer/SDP operations, remote ICE candidate validation and teardown; new tests are tracked in the RyzeRTC PR.
 
-**Do not** create two independent UDP listeners with the same bind endpoint.
-The existing `RakLibInterface` owns UDP today. A real demultiplexer must
-be inserted *before* RakLib so both transports are delivered reliably.
-The new optional shared-port socket adapter already dispatches UDP before
-RakLib's packet decoder and accepts ICE ufrags only from trusted main-thread
-commands. It limits active peers, expires inactive relays, and never logs ICE
-credentials. This adapter remains inactive until the native ICE backend is
-configured and fully authenticated signaling is connected.
+## Native runtime and Egg
 
-`src/network/mcpe/nethernet/NetherNetEndpoint.php` provides the shared
-endpoint contract. `NetherNetFrameCodec.php` implements the official one-byte
-fragment countdown; `NetherNetDatagramClassifier.php` recognizes STUN/DTLS
-headers without confusing basic RakNet pings. `NetherNetPacketSender.php` and
-`NetherNetSessionGateway.php` bridge previously authenticated clients to the
-existing multiversion `NetworkSession` and enforce honest acknowledgment
-semantics. `NetherNetSharedPortSocket.php` extends the owning RakLib socket
-with **optional IPv4 ICE/DTLS relaying** to a local native ICE backend;
-`NetherNetSharedPortSdp.php` rewrites signed backend ICE answer candidates
-to the original public IP:port. Neither component initializes WebRTC or signs
-client identities. The relay's loopback source IP must never substitute for
-a player's verified signaling identity.
+- RyzeRTC builds `ryzertc.so` independently of `RyzeMP.phar`; it is never included in the PHAR.
+- The development workflow currently publishes only **temporary experimental Actions artifacts**, not a permanent production release.
+- Once the backend is feature-complete and ABI/runtime tests pass, publish a **versioned, checksummed release in RyzeCompany/RyzeRTC**. Only then update the Pterodactyl Egg to download that official release and its shared library dependencies to a private persistent directory. Pin integrity hashes; fail closed if the binary is incompatible or absent.
+- Do not deploy the earlier external RTC release or confuse that binary with `ryzertc.so`. The two are not interchangeable.
 
-### Verified native dependency limitation (blocking)
+## Blocking implementation and verification work
 
-The available `amber-pm/nethernet` library depends on native `ext-rtc`.
-Its `udpMux` mode shares one UDP ICE socket among **multiple WebRTC peers**,
-but does **not** share the socket with a foreign RakLib worker. RyzeMP
-currently makes RakLib the exclusive owner of `server-ip:server-port/udp`.
-Starting native `ext-rtc` on that very same address/port causes a bind
-conflict, while using a different advertised UDP port violates this
-migration's explicit same-address guarantee.
+1. **Native RyzeRTC:** bounded async event queue, reliable and unreliable SCTP DataChannels, incoming channel notifications, backpressure and safe multithreaded cleanup. Validate native ICE/DTLS and fingerprint binding, especially multiple peers sharing a private ICE mux.
+2. **Own signaling:** trusted Minecraft identity token verification, server signing key persisted across restarts, fingerprint verification, SDP/ICE candidate exchange and HTTP protocol on TCP `server-port`. Associate the transport identity with the later Bedrock login public key.
+3. **Shared UDP integration:** put the native backend behind the existing RakLib owning socket without a second public bind. Confirm STUN/DTLS/RakNet demultiplexing, per-peer authorization, relay retirement, response source IP/port and NAT address handling.
+4. **Protocol 2225:** validate packet schemas/serialization beyond IDs, item component NBT, recipes, creative inventory, biomes, commands, entities, interactions and Jigsaw packet 313 against real-client captures. The headless Endstone fixture could not capture packet 313.
+5. **Gameplay integration:** test real Minecraft 1.26.60/1.26.61 join, login, chunks, inventories, movement, skins, PvP, Nether/End and reconnects concurrently with a prior RakNet version.
+6. **Distribution:** pass Composer, reproducible PHAR, Linux/PHP ABI, first-party RTC binary load, full network integration, authentication-negative tests and host TCP+UDP smoke tests. Only then tag and publish a beta.
 
-**Engine-style ingress is now implemented as a gated PHP relay, not as a
-second public UDP bind:**
+The HCF command API CI job currently fails at an external Git checkout with HTTP **403**. It is an authorization issue in the existing CI credentials, not evidence of a protocol regression. **Do not modify HardCoreFactions to hide this failure.**
 
-- `RakLibInterface::configureNetherNetSharedPort($privateIcePort)` must be
-  invoked **before** the RakLib thread starts, only after a native WebRTC ICE
-  mux binds `127.0.0.1:$privateIcePort`. The default path still instantiates
-  the untouched `raklib\\server\\ServerSocket`.
-- Once an **authenticated and signed** SDP answer is generated, a signaling
-  adapter must call `NetherNetSharedPortSdp::rewriteAnswer()` using an
-  externally reachable concrete IPv4 address and the existing server UDP
-  port, then call `RakLibInterface::authorizeNetherNetUfrag()` before sending
-  the HTTP response. It must call `revokeNetherNetUfrag()` on disconnect.
-- RakLib's single bound socket accepts STUN/DTLS and forwards it through
-  **one local connected UDP socket per peer** to the ICE mux. A native
-  response travels back over the same RakLib public UDP socket. These relays
-  do **not** send PROXY v2, because the present `ext-rtc` backend cannot
-  consume that protocol. The authenticated external IP/port must instead
-  remain associated with the transport session by the signaling adapter.
-- Remaining blocker: `amber-pm/nethernet` `HttpSignaling` currently prepares
-  HTTP answers internally before notifying its external listener, so SDP
-  rewriting cannot be retrofitted in that callback. Extend or adapt this
-  integration **before** enabling any live client and perform actual
-  native-ICE + signaling + RakNet concurrent tests. Also verify
-  `ext-rtc` handles loopback per-peer ICE tuples and DTLS correctly.
+## Staging CI
 
-This relay and SDP rewrite are **staging components**, not a production
-NetherNet listener or proof of official Minecraft-client connectivity.
-A naive `SO_REUSEPORT` solution remains forbidden.
+`.github/workflows/ci-2225-phar-preview.yml` creates a PHAR with staged 2225 protocol/data libraries and **no external RTC transport**, expressly for data and headless startup testing. It must not be described as full Minecraft 1.26.60 access.
 
-Deployment requires inbound **TCP and UDP on the same port**. Verify the
-hosting panel and firewall expose both. iOS may require HTTPS signaling and
-a trusted certificate. Persist the server identity across restarts.
-
-## Outstanding runtime integrations
-
-1. Complete 2225 codec changes in BedrockProtocol; packet IDs alone do not
-   enable the protocol. Validate new and modified packets against official
-   2225 schema and known wire fixtures.
-2. **Implemented:** import Endstone's 23,960 ordered block hashes, canonical network NBT and matching metadata map; CI cross-repository data loading succeeds. Real client rendering remains unverified.
-3. **Partially implemented:** 2,080 item runtime IDs and the 2225 required-item registry are imported, retaining previously validated component NBT; new item component serialization, recipes, creative inventory and biomes still need full validation.
-4. **Implemented staging only:** 2225 selects paired block palette, FNV hashes, item dictionary and last known item-upgrade schema. The existing production Composer lock retains 2193; separate CI installs both 2225 feature dependencies. Do not enable 2225 in ACCEPTED_PROTOCOL yet.
-5. Capture/validate Jigsaw 313 for 2225 if the login sequence requires it.
-   The headless Endstone export had no player and no Jigsaw packet.
-6. Implement and package tested WebRTC/NetherNet transport (signal endpoint,
-   persistent identity, STUN/ICE/DTLS, same-port UDP demux, RakLib bridging,
-   session lifecycle and backpressure). A config flag without a working
-   transport is insufficient.
-7. Validate actual joins on 26.60/26.61, mixed versions, player/NPC skins,
-   movement, inventory, death/respawn, creative, PvP, and Nether/End.
-8. Run Composer/CI/PHAR smoke tests before producing a beta release.
-
-Separate pending PRs: legacy 419, 844 player/NPC visibility and native
-redstone. Do not merge these automatically into the protocol upgrade.
-
-## Experimental PHAR for real-client tests (NOT production)
-
-GitHub Actions workflow `.github/workflows/ci-2225-phar-preview.yml`
-builds an independent candidate containing the BedrockProtocol and BedrockData
-2225 feature branches and `amber-pm/nethernet`. It enables protocol 2225
-**only in its temporary build checkout**, preserving previously accepted 2193
-in that preview. The normal Composer lockfile and released PHAR remain stable.
-
-The PHAR cannot embed the native PHP `ext-rtc` shared library. On a Linux
-host, use a compatible PHP 8.4 build with native `ext-rtc` installed and loaded.
-If the extension is absent, experimental NetherNet will fail closed and the
-server should not advertise a working 2225 transport.
-
-No new NetherNet configuration is needed. With `amber-pm/nethernet` bundled and
-native `ext-rtc` available, the experimental server automatically starts
-NetherNet on the **same** `server-ip` and `server-port` already used by RakNet.
-
-Example of the existing properties (do not add NetherNet-specific ones):
-
-```properties
-server-ip=0.0.0.0
-server-port=19132
-```
-
-The server picks a temporary ICE UDP port automatically on `127.0.0.1`.
-That internal port is never advertised, forwarded, or configured manually.
-Clients continue connecting via the original public server port: UDP for game
-traffic, TCP for the NetherNet HTTP signaling endpoint.
-
-**Wildcard bind:** `0.0.0.0` means "listen on all local interfaces", not a
-usable client destination. RyzeMP uses the numeric IPv4 from the individual
-HTTP join's `Host` header when `server-ip=0.0.0.0`. With a concrete
-`server-ip`, that exact configured address is reused. To avoid blocking the
-main thread and untrusted DNS lookups, the current experimental build cannot
-automatically resolve an HTTP join Host that is a **DNS name** when the
-server bind is wildcard; numeric IPv4 joins are supported. This is a
-test-build limitation, not a new setting.
-
-When native `ext-rtc` is missing, automatic NetherNet activation is skipped
-and legacy RakNet remains available; official 1.26.60 clients still require
-NetherNet and will not connect until the native extension is installed.
-
-The first successful NetherNet startup creates `nethernet-identity.pem` in the
-data directory. Back up and retain that P-384 private key across releases:
-replacing it changes the pinned server identity and prompts clients again.
-
-The preview implements:
-- UDP multiplexing inside the original RakLib socket, with per-peer private
-  loopback relays; normal RakNet remains unchanged.
-- HTTP signaling with Amber Transport, with SDP rewriting **before** the HTTP
-  response and per-connection ICE credential authorization and revocation.
-- First-party Minecraft auth-token verification using the existing asynchronous
-  `AuthKeyProvider` and a persistent operator signing identity.
-- Reliable WebRTC data-channel delivery into the normal `NetworkSession`.
-  The signed NetherNet client key is checked against the Bedrock login key.
-  DTLS clients skip the redundant RakNet-only Bedrock AES handshake.
-
-**The preview does not claim real-client success yet.** Test the server on
-Linux with an actual Minecraft 1.26.60 client, inspect the login and world
-transition logs, and verify simultaneous older RakNet client admission,
-inventories, chunks, permissions and plugin compatibility. Test and audit
-the native 0.1.x ICE mux on the loopback backend with concurrent players.
-If the PHAR build or startup reports errors, do not promote the preview.
-
+The **normal released RyzeMP PHAR remains on the previously supported protocol and RakNet** until the preceding blockers are resolved.
