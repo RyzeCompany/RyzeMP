@@ -56,6 +56,7 @@ final class NetherNetSessionGateway{
 		int $id,
 		string $verifiedIp,
 		int $verifiedPort,
+		string $verifiedIdentityPublicKeyDer,
 		\Closure $send,
 		\Closure $close,
 		bool $supportsReceipts = false
@@ -76,6 +77,7 @@ final class NetherNetSessionGateway{
 			$verifiedIp,
 			$verifiedPort
 		);
+		$session->useNetherNetTransport($verifiedIdentityPublicKeyDer);
 		$this->sessions[$id] = $session;
 		return $session;
 	}
