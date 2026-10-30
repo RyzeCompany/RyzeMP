@@ -45,6 +45,6 @@ final class NetherNetEndpoint{
 
 	/** The signaling listener will use this TCP endpoint. */
 	public function signalingAddress() : string{
-		return $this->address . ":" . $this->port;
+		return (str_contains($this->address, ":") ? "[" . $this->address . "]" : $this->address) . ":" . $this->port;
 	}
 }
