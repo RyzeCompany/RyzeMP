@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1cbb0ae9c51c925f510c11229831d766",
+    "content-hash": "02e1881a6eed4162a32434253b9c81d6",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -182,12 +182,12 @@
             "version": "5.2.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/pmmp/BedrockBlockUpgradeSchema.git",
+                "url": "https://github.com/opencollab-incubator/BedrockBlockUpgradeSchema.git",
                 "reference": "5d7889c9a1cdf9e3cd814d2a104ad69b75116ec7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pmmp/BedrockBlockUpgradeSchema/zipball/5d7889c9a1cdf9e3cd814d2a104ad69b75116ec7",
+                "url": "https://api.github.com/repos/opencollab-incubator/BedrockBlockUpgradeSchema/zipball/5d7889c9a1cdf9e3cd814d2a104ad69b75116ec7",
                 "reference": "5d7889c9a1cdf9e3cd814d2a104ad69b75116ec7",
                 "shasum": ""
             },
@@ -208,12 +208,12 @@
             "version": "1.17.0",
             "source": {
                 "type": "git",
-                "url": "https://github.com/pmmp/BedrockItemUpgradeSchema.git",
+                "url": "https://github.com/opencollab-incubator/BedrockItemUpgradeSchema.git",
                 "reference": "e19685d2e7e76eb7446115c556df34e5d627d072"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pmmp/BedrockItemUpgradeSchema/zipball/e19685d2e7e76eb7446115c556df34e5d627d072",
+                "url": "https://api.github.com/repos/opencollab-incubator/BedrockItemUpgradeSchema/zipball/e19685d2e7e76eb7446115c556df34e5d627d072",
                 "reference": "e19685d2e7e76eb7446115c556df34e5d627d072",
                 "shasum": ""
             },
@@ -1253,7 +1253,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-04-01T09:25:14+00:00"
+            "time": "2026-04-01T09:25:14+00:00",
+            "published-time": "2026-04-01T09:25:26+00:00"
         },
         {
             "name": "phpstan/phpstan-phpunit",
