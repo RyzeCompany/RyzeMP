@@ -107,7 +107,7 @@ final class NetherNetSessionGateway{
 	 * received. Local WebRTC enqueue success is not an acknowledgement.
 	 */
 	public function acknowledge(int $id, int $receiptId) : void{
-		$this->sessions[$id]?->handleAckReceipt($receiptId);
+		($this->sessions[$id] ?? null)?->handleAckReceipt($receiptId);
 	}
 
 	public function close(int $id, string $reason = "NetherNet disconnected") : void{
