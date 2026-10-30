@@ -103,16 +103,6 @@
             "@php build/codegen/registry-interface.php src generated"
         ]
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/RyzeCompany/BedrockProtocol.git"
-        },
-        {
-            "type": "vcs",
-            "url": "https://github.com/RyzeCompany/BedrockData.git"
-        }
-    ],
     "support": {
         "source": "https://github.com/RyzeCompany/RyzeMP",
         "issues": "https://github.com/RyzeCompany/RyzeMP/issues"
