@@ -6,7 +6,7 @@
 
 ## Features and purpose
 
-- Multiversion Bedrock network support through customized `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData` dependencies.
+- Multiversion Bedrock network support through customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies.
 - PocketMine-MP 5 plugin API compatibility. The PHP namespace remains `pocketmine\` intentionally.
 - Multiple worlds, game entities, inventory mechanics, native hopper and dimension-related work.
 - PHAR packaging and CI checks for code syntax, unit tests, and startup verification.
@@ -18,7 +18,7 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 - **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once RyzeMP is public, its dependencies have tested releases, and the package is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
 - **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.3.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
 
-**Public Composer distribution is not available yet.** The two forked libraries are public and their Composer package names are prepared, but RyzeMP is still private. Publishing requires dependency release validation, public source access, Packagist registration, and live game tests.
+**Public Composer distribution is not available yet.** The matching multiversion libraries and RyzeMP are currently private within RyzeCompany; all three Composer package names are prepared. Publishing requires dependency release validation, public source access, Packagist registration, and live game tests.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
