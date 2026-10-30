@@ -43,8 +43,34 @@ session keys in logs.
 
 `src/network/mcpe/nethernet/NetherNetEndpoint.php` provides the shared
 endpoint contract. `NetherNetFrameCodec.php` implements the official one-byte
-fragment countdown for reliable and unreliable WebRTC data channels, with
-bounded reassembly and ordering checks. **Neither class is a WebRTC listener.**
+fragment countdown; `NetherNetDatagramClassifier.php` recognizes STUN/DTLS
+headers without confusing basic RakNet pings. `NetherNetPacketSender.php` and
+`NetherNetSessionGateway.php` bridge previously authenticated clients to the
+existing multiversion `NetworkSession` and enforce honest acknowledgment
+semantics. **None of these components owns a UDP socket or implements WebRTC.**
+
+### Verified native dependency limitation (blocking)
+
+The available `amber-pm/nethernet` library depends on native `ext-rtc`.
+Its `udpMux` mode shares one UDP ICE socket among **multiple WebRTC peers**,
+but does **not** share the socket with a foreign RakLib worker. RyzeMP
+currently makes RakLib the exclusive owner of `server-ip:server-port/udp`.
+Starting native `ext-rtc` on that very same address/port causes a bind
+conflict, while using a different advertised UDP port violates this
+migration's explicit same-address guarantee.
+
+Do not enable `nethernet` or expose 2225 until one of the following is
+implemented with tests:
+- a native external-datagram injection/egress API in `ext-rtc` wired to
+  RakLib's **single** socket owner, with separate authenticated session
+  routing, or
+- a verified in-front multiplexor that owns the *only* public UDP bind,
+  translates ICE/DTLS and RakNet end-to-end, and preserves correct real
+  client endpoint identity, query and ICE SDP candidates. A naive shared
+  `SO_REUSEPORT` or localhost UDP redirect is not sufficient.
+
+This blocker is architectural; unit tests for packet framing or the PHP
+session gateway **cannot substitute for real-client connection tests**.
 
 Deployment requires inbound **TCP and UDP on the same port**. Verify the
 hosting panel and firewall expose both. iOS may require HTTPS signaling and
@@ -55,15 +81,9 @@ a trusted certificate. Persist the server identity across restarts.
 1. Complete 2225 codec changes in BedrockProtocol; packet IDs alone do not
    enable the protocol. Validate new and modified packets against official
    2225 schema and known wire fixtures.
-2. Convert the Endstone block palette to RyzeMP canonical-state format;
-   rebuild the parallel metadata map and verify **ordering** against the
-   23,960 signed network hashes. The Endstone gzip Big Endian NBT root is
-   not a drop-in replacement for the current canonical NBT file.
-3. Generate or obtain authoritative 2225 item registry and component data;
-   verify recipe mappings, creative content and biome definitions.
-4. Replace 2193-specific data routing in `BlockTranslator`,
-   `ItemTypeDictionaryFromDataHelper` and `ItemTranslator` with 2225
-   selections without changing the older versions.
+2. **Implemented:** import Endstone's 23,960 ordered block hashes, canonical network NBT and matching metadata map; CI cross-repository data loading succeeds. Real client rendering remains unverified.
+3. **Partially implemented:** 2,080 item runtime IDs and the 2225 required-item registry are imported, retaining previously validated component NBT; new item component serialization, recipes, creative inventory and biomes still need full validation.
+4. **Implemented staging only:** 2225 selects paired block palette, FNV hashes, item dictionary and last known item-upgrade schema. The existing production Composer lock retains 2193; separate CI installs both 2225 feature dependencies. Do not enable 2225 in ACCEPTED_PROTOCOL yet.
 5. Capture/validate Jigsaw 313 for 2225 if the login sequence requires it.
    The headless Endstone export had no player and no Jigsaw packet.
 6. Implement and package tested WebRTC/NetherNet transport (signal endpoint,
