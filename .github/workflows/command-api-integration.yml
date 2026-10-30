@@ -33,7 +33,7 @@ jobs:
       - name: Checkout paired HCF beta.16
         uses: actions/checkout@v4
         with:
-          repository: RyzeCompany/HardCoreFactions
+          repository: RyzeMCBE/HardCoreFactions
           ref: d7b3df22ca3fcbe8827ba14e9e08dc65304562b5
           path: .test-plugins/hcf
           token: ${{ secrets.SUBMODULE_TOKEN }}
