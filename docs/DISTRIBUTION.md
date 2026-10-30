@@ -11,8 +11,8 @@ The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 Public distribution checklist:
 
 1. Confirm the three RyzeCompany repositories remain public, their Composer package names are unique, and their licenses/third-party attribution are suitable for publication. Keep the protocol and data package versions consistent with the RyzeMP core.
-2. Keep the root `composer.json` and `composer.lock` consistent. The updated lockfile references concrete commits of `ryzemcbe/bedrock-data` and `ryzemcbe/bedrock-protocol` on `dev-main`; verify those commits remain accessible before every release; do **not** regenerate the lockfile without reviewing the actual resolved dependency versions.
-3. For a versioned public distribution, tag and register the **two libraries first**, then replace the temporary `dev-main` requirements in RyzeMP with reviewed release constraints and regenerate/test its lockfile using Composer. Do not choose/tag dependency versions solely to make Composer resolve: their API compatibility must be verified.
+2. Keep the root `composer.json` and `composer.lock` consistent. The lockfile is prepared for `ryzemcbe/bedrock-data:v1.0.0-beta.1` and `ryzemcbe/bedrock-protocol:v1.0.0-beta.1`, with exact tagged Git revisions. Confirm `composer validate --strict` and an end-to-end `composer install` against the final release metadata.
+3. The **two dependency libraries are tagged** as `v1.0.0-beta.1`. Register them with Packagist first, then verify their tagged package names and revisions before publishing RyzeMP. Run Composer validation and dependency installation against this lockfile.
 4. Submit the source URLs to [Packagist.org](https://packagist.org/packages/submit): `RyzeCompany/BedrockData`, `RyzeCompany/BedrockProtocol`, then `RyzeCompany/RyzeMP`. Enable the update webhook so new version tags are detected.
 5. Confirm the exact versions are visible in Packagist **before** announcing the commands below.
 
@@ -70,7 +70,7 @@ The `php7` directory name is not proof of the runtime's PHP version. Use `./bin/
 
 1. Confirm automated CI on `main` for all three repositories.
 2. Test **actual Bedrock clients** against a staging server: mixed-version login, classic/Persona skins, respawn, portals/dimensions, chat and inventory. Automated startup tests do not establish live gameplay compatibility.
-3. Review licenses, third-party attribution, and distribution rights before changing visibility or publishing package metadata.
+3. Review licenses, third-party attribution, and distribution rights before publishing package metadata.
 4. Publish/register versioned libraries, update RyzeMP to validated version constraints with a consistent lockfile, and test the resulting Composer installation.
 5. Tag RyzeMP only after its `BASE_VERSION`, tested lockfile, dependencies, and release notes correspond to the chosen version.
 6. Verify both the Composer installation and the downloadable GitHub Release archive, including its SHA-256 hash.
