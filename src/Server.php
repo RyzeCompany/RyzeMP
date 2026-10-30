@@ -63,6 +63,7 @@ use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\raklib\RakLibInterface;
+use pocketmine\network\mcpe\nethernet\NetherNetInterface;
 use pocketmine\network\mcpe\StandardEntityEventBroadcaster;
 use pocketmine\network\mcpe\StandardPacketBroadcaster;
 use pocketmine\network\Network;
@@ -1305,8 +1306,24 @@ class Server{
 	) : bool{
 		$prettyIp = $ipV6 ? "[$ip]" : $ip;
 		try{
-			$rakLibRegistered = $this->network->registerInterface(new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter));
-		}catch(NetworkInterfaceStartException $e){
+			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
+			$nethernet = null;
+			if(!$ipV6 && $this->configGroup->getConfigBool("nethernet-enabled", false)){
+				$nethernet = new NetherNetInterface(
+					$this, $raklib, $packetBroadcaster, $entityEventBroadcaster, $typeConverter,
+					$ip, $port,
+					$this->configGroup->getConfigString("nethernet-advertise-ip", ""),
+					$this->configGroup->getConfigInt("nethernet-ice-port", 19134)
+				);
+				// RakLib's socket is installed in the worker at start(). Configure
+				// the optional ICE relay before that socket starts accepting UDP.
+				$nethernet->prepare();
+			}
+			$rakLibRegistered = $this->network->registerInterface($raklib);
+			if($rakLibRegistered && $nethernet !== null){
+				$this->network->registerInterface($nethernet);
+			}
+		}catch(\Throwable $e){
 			$this->logger->emergency($this->language->translate(KnownTranslationFactory::pocketmine_server_networkStartFailed(
 				$ip,
 				(string) $port,
