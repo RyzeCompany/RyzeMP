@@ -1,0 +1,51 @@
+name: Verify public RyzeMP Composer create-project
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/verify-packagist-create-project.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-project:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Setup PocketMine PHP and Composer
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+
+      - name: Install RyzeMP from public Packagist
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist --no-interaction --no-progress
+          cd ryzemp
+          composer validate --no-check-publish --no-interaction
+          php -r '
+          $root = json_decode(file_get_contents("composer.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($root["name"] ?? "") !== "ryzemcbe/ryzemp") {
+            fwrite(STDERR, "Wrong package from Packagist" . PHP_EOL);
+            exit(1);
+          }
+          $lock = json_decode(file_get_contents("composer.lock"), true, 512, JSON_THROW_ON_ERROR);
+          $expected = ["ryzemcbe/bedrock-data", "ryzemcbe/bedrock-protocol"];
+          foreach ($expected as $name) {
+            $matches = array_values(array_filter($lock["packages"], static fn($p) => $p["name"] === $name));
+            if (count($matches) !== 1 || ltrim($matches[0]["version"], "v") !== "1.0.0-beta.1") {
+              fwrite(STDERR, "Wrong dependency: " . $name . PHP_EOL);
+              exit(1);
+            }
+            echo $name . " " . $matches[0]["version"] . PHP_EOL;
+          }
+          '
+          test -f vendor/autoload.php
+          php -r 'require "vendor/autoload.php"; echo "RyzeMP Composer autoload: OK" . PHP_EOL;'
+          echo "Public RyzeMP create-project smoke test: OK"
