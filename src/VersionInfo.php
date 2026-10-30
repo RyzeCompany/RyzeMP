@@ -36,7 +36,7 @@ final class VersionInfo{
 	public const PLUGIN_API_VERSION = "5.44.2";
 	public const IS_DEVELOPMENT_BUILD = true;
 	public const BUILD_CHANNEL = "beta";
-	public const GITHUB_URL = "https://github.com/RyzeMCBE/RyzeMP";
+	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";
 
 	/**
 	 * PocketMine-MP-specific version ID for world data. Used to determine what fixes need to be applied to old world
