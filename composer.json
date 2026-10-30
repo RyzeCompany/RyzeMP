@@ -35,9 +35,9 @@
         "adhocore/json-comment": "~1.2.0",
         "netresearch/jsonmapper": "~v5.0.0",
         "pocketmine/bedrock-block-upgrade-schema": "~5.2.0+bedrock-1.21.110",
-        "ryzemcbe/bedrock-data": "dev-master",
+        "ryzemcbe/bedrock-data": "dev-main",
         "pocketmine/bedrock-item-upgrade-schema": "~1.17.0+bedrock-1.26.20",
-        "ryzemcbe/bedrock-protocol": "dev-master",
+        "ryzemcbe/bedrock-protocol": "dev-main",
         "pocketmine/binaryutils": "^0.2.1",
         "pocketmine/callback-validator": "~1.0.4",
         "pocketmine/color": "^0.3.0",
@@ -106,11 +106,11 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/RyzeMCBE/BedrockProtocol.git"
+            "url": "https://github.com/RyzeCompany/BedrockProtocol.git"
         },
         {
             "type": "vcs",
-            "url": "https://github.com/RyzeMCBE/BedrockData.git"
+            "url": "https://github.com/RyzeCompany/BedrockData.git"
         }
     ],
     "support": {
