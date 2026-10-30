@@ -47,6 +47,11 @@ jobs:
         run: |
           set -euo pipefail
           cd /tmp/ryze-egg
-          LD_LIBRARY_PATH=/tmp/ryze-egg/native \
-            ./bin/php7/bin/php -n -d extension=/tmp/ryze-egg/native/rtc.so \
-              -r 'if(!extension_loaded("rtc") || !class_exists("amber\rtc\RtcRuntime",false) || \amber\rtc\RtcRuntime::getApiVersion() !== 1){exit(1);} echo "RTC loaded successfully on exact Egg PHP\n";'
+          export LD_LIBRARY_PATH=/tmp/ryze-egg/native
+          echo 'RTC module inspection:'
+          ./bin/php7/bin/php -n -d display_startup_errors=1 -d extension=/tmp/ryze-egg/native/rtc.so --ri rtc
+          echo 'RTC runtime facts:'
+          ./bin/php7/bin/php -n -d display_startup_errors=1 -d extension=/tmp/ryze-egg/native/rtc.so \
+            -r 'var_dump(["rtc"=>extension_loaded("rtc"),"class"=>class_exists("amber\\rtc\\RtcRuntime",false),"api"=>class_exists("amber\\rtc\\RtcRuntime",false) ? \amber\rtc\RtcRuntime::getApiVersion() : null]);'
+          ./bin/php7/bin/php -n -d display_startup_errors=1 -d extension=/tmp/ryze-egg/native/rtc.so \
+            -r 'if(!extension_loaded("rtc") || !class_exists("amber\\rtc\\RtcRuntime",false) || \amber\rtc\RtcRuntime::getApiVersion() !== 1){exit(1);} echo "RTC loaded successfully on exact Egg PHP\n";'
