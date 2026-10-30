@@ -123,88 +123,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-03-29T13:50:30+00:00"
-        },
-        {
-            "name": "ryzemcbe/bedrock-data",
-            "version": "v1.0.0-beta.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/RyzeCompany/BedrockData.git",
-                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/RyzeCompany/BedrockData/zipball/af54c99dadac7e4016c375923b32eb6dc6cad557",
-                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557",
-                "shasum": ""
-            },
-            "type": "library",
-            "license": [
-                "CC0-1.0"
-            ],
-            "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
-            "support": {
-                "source": "https://github.com/RyzeCompany/BedrockData",
-                "issues": "https://github.com/RyzeCompany/BedrockData/issues"
-            },
-            "homepage": "https://github.com/RyzeCompany/BedrockData"
-        },
-        {
-            "name": "ryzemcbe/bedrock-protocol",
-            "version": "v1.0.0-beta.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/RyzeCompany/BedrockProtocol.git",
-                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/RyzeCompany/BedrockProtocol/zipball/aa88b5a9210ce72d47061119850f6e65a20d0222",
-                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222",
-                "shasum": ""
-            },
-            "require": {
-                "ext-encoding": "~1.0.0",
-                "ext-json": "*",
-                "php": "^8.1",
-                "pocketmine/binaryutils": "^0.2.0",
-                "pocketmine/color": "^0.2.0 || ^0.3.0",
-                "pocketmine/math": "^0.3.0 || ^0.4.0 || ^1.0.0",
-                "pocketmine/nbt": "^1.0.0",
-                "ramsey/uuid": "^4.1"
-            },
-            "require-dev": {
-                "phpstan/phpstan": "2.1.0",
-                "phpstan/phpstan-phpunit": "^2.0.0",
-                "phpstan/phpstan-strict-rules": "^2.0.0",
-                "phpunit/phpunit": "^9.5 || ^10.0 || ^11.0"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "pocketmine\\network\\mcpe\\protocol\\": "src/"
-                }
-            },
-            "autoload-dev": {
-                "psr-4": {
-                    "pocketmine\\network\\mcpe\\protocol\\": "tests/phpunit/"
-                }
-            },
-            "scripts": {
-                "update-create-methods": [
-                    "@php tools/generate-create-static-methods.php"
-                ]
-            },
-            "license": [
-                "LGPL-3.0-or-later"
-            ],
-            "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
-            "support": {
-                "source": "https://github.com/RyzeCompany/BedrockProtocol",
-                "issues": "https://github.com/RyzeCompany/BedrockProtocol/issues"
-            },
-            "homepage": "https://github.com/RyzeCompany/BedrockProtocol"
+            "time": "2025-03-29T13:50:30+00:00",
+            "published-time": "2025-03-29T13:51:27+00:00"
         },
         {
             "name": "netresearch/jsonmapper",
@@ -349,7 +269,9 @@
                 "issues": "https://github.com/pmmp/BinaryUtils/issues",
                 "source": "https://github.com/pmmp/BinaryUtils/tree/0.2.7"
             },
-            "time": "2025-12-24T04:20:35+00:00"
+            "abandoned": true,
+            "time": "2025-12-24T04:20:35+00:00",
+            "published-time": "2025-12-24T04:21:03+00:00"
         },
         {
             "name": "pocketmine/callback-validator",
@@ -437,7 +359,9 @@
                 "issues": "https://github.com/pmmp/Color/issues",
                 "source": "https://github.com/pmmp/Color/tree/0.3.1"
             },
-            "time": "2023-04-10T11:38:05+00:00"
+            "abandoned": true,
+            "time": "2023-04-10T11:38:05+00:00",
+            "published-time": "2023-04-10T11:39:24+00:00"
         },
         {
             "name": "pocketmine/errorhandler",
@@ -558,7 +482,9 @@
                 "issues": "https://github.com/pmmp/Math/issues",
                 "source": "https://github.com/pmmp/Math/tree/1.0.0"
             },
-            "time": "2023-08-03T12:56:33+00:00"
+            "abandoned": true,
+            "time": "2023-08-03T12:56:33+00:00",
+            "published-time": "2023-08-03T13:21:34+00:00"
         },
         {
             "name": "pocketmine/nbt",
@@ -601,7 +527,9 @@
                 "issues": "https://github.com/pmmp/NBT/issues",
                 "source": "https://github.com/pmmp/NBT/tree/1.2.0"
             },
-            "time": "2025-09-19T18:09:30+00:00"
+            "abandoned": true,
+            "time": "2025-09-19T18:09:30+00:00",
+            "published-time": "2025-09-19T22:25:56+00:00"
         },
         {
             "name": "pocketmine/raklib",
@@ -801,24 +729,25 @@
                 "issues": "https://github.com/ramsey/collection/issues",
                 "source": "https://github.com/ramsey/collection/tree/2.1.1"
             },
-            "time": "2025-03-22T05:38:12+00:00"
+            "time": "2025-03-22T05:38:12+00:00",
+            "published-time": "2025-03-22T05:39:22+00:00"
         },
         {
             "name": "ramsey/uuid",
-            "version": "4.9.2",
+            "version": "4.9.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ramsey/uuid.git",
-                "reference": "8429c78ca35a09f27565311b98101e2826affde0"
+                "reference": "75d73f48d02797c2c285a7e9f348fadc0102ffe2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ramsey/uuid/zipball/8429c78ca35a09f27565311b98101e2826affde0",
-                "reference": "8429c78ca35a09f27565311b98101e2826affde0",
+                "url": "https://api.github.com/repos/ramsey/uuid/zipball/75d73f48d02797c2c285a7e9f348fadc0102ffe2",
+                "reference": "75d73f48d02797c2c285a7e9f348fadc0102ffe2",
                 "shasum": ""
             },
             "require": {
-                "brick/math": "^0.8.16 || ^0.9 || ^0.10 || ^0.11 || ^0.12 || ^0.13 || ^0.14",
+                "brick/math": "^0.8.16 || ^0.9 || ^0.10 || ^0.11 || ^0.12 || ^0.13 || ^0.14 || ^0.15 || ^0.16 || ^0.17 || ^0.18 || ^0.19 || ^0.20 || ^1.0",
                 "php": "^8.0",
                 "ramsey/collection": "^1.2 || ^2.0"
             },
@@ -877,9 +806,93 @@
             ],
             "support": {
                 "issues": "https://github.com/ramsey/uuid/issues",
-                "source": "https://github.com/ramsey/uuid/tree/4.9.2"
+                "source": "https://github.com/ramsey/uuid/tree/4.9.4"
             },
-            "time": "2025-12-14T04:43:48+00:00"
+            "time": "2026-09-16T11:39:30+00:00",
+            "published-time": "2026-09-16T11:41:15+00:00"
+        },
+        {
+            "name": "ryzemcbe/bedrock-data",
+            "version": "v1.0.0-beta.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/RyzeCompany/BedrockData.git",
+                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockData/zipball/af54c99dadac7e4016c375923b32eb6dc6cad557",
+                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557",
+                "shasum": ""
+            },
+            "type": "library",
+            "license": [
+                "CC0-1.0"
+            ],
+            "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
+            "homepage": "https://github.com/RyzeCompany/BedrockData",
+            "support": {
+                "source": "https://github.com/RyzeCompany/BedrockData",
+                "issues": "https://github.com/RyzeCompany/BedrockData/issues"
+            },
+            "time": "2026-10-30T11:53:37+00:00"
+        },
+        {
+            "name": "ryzemcbe/bedrock-protocol",
+            "version": "v1.0.0-beta.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/RyzeCompany/BedrockProtocol.git",
+                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockProtocol/zipball/aa88b5a9210ce72d47061119850f6e65a20d0222",
+                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222",
+                "shasum": ""
+            },
+            "require": {
+                "ext-encoding": "~1.0.0",
+                "ext-json": "*",
+                "php": "^8.1",
+                "pocketmine/binaryutils": "^0.2.0",
+                "pocketmine/color": "^0.2.0 || ^0.3.0",
+                "pocketmine/math": "^0.3.0 || ^0.4.0 || ^1.0.0",
+                "pocketmine/nbt": "^1.0.0",
+                "ramsey/uuid": "^4.1"
+            },
+            "require-dev": {
+                "phpstan/phpstan": "2.1.0",
+                "phpstan/phpstan-phpunit": "^2.0.0",
+                "phpstan/phpstan-strict-rules": "^2.0.0",
+                "phpunit/phpunit": "^9.5 || ^10.0 || ^11.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "pocketmine\\network\\mcpe\\protocol\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "pocketmine\\network\\mcpe\\protocol\\": "tests/phpunit/"
+                }
+            },
+            "scripts": {
+                "update-create-methods": [
+                    "@php tools/generate-create-static-methods.php"
+                ]
+            },
+            "license": [
+                "LGPL-3.0-or-later"
+            ],
+            "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
+            "homepage": "https://github.com/RyzeCompany/BedrockProtocol",
+            "support": {
+                "source": "https://github.com/RyzeCompany/BedrockProtocol",
+                "issues": "https://github.com/RyzeCompany/BedrockProtocol/issues"
+            },
+            "time": "2026-10-30T11:53:30+00:00"
         },
         {
             "name": "symfony/filesystem",
@@ -2785,7 +2798,10 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "ryzemcbe/bedrock-data": 10,
+        "ryzemcbe/bedrock-protocol": 10
+    },
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -2821,5 +2837,5 @@
     "platform-overrides": {
         "php": "8.1.0"
     },
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }
