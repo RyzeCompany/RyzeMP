@@ -87,6 +87,31 @@ jobs:
           php -r '$p=new Phar("RyzeMP-2225-NetherNet-EXPERIMENTAL.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
           php RyzeMP-2225-NetherNet-EXPERIMENTAL.phar --version
           sha256sum RyzeMP-2225-NetherNet-EXPERIMENTAL.phar > SHA256SUMS.txt
+      - name: Smoke test headless startup and explicit missing-native diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ryzemp-2225-smoke/plugins
+          cp resources/pocketmine.yml /tmp/ryzemp-2225-smoke/pocketmine.yml
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/ryzemp-2225-smoke/pocketmine.yml
+          set +e
+          timeout 35s php RyzeMP-2225-NetherNet-EXPERIMENTAL.phar \
+            --no-wizard --disable-ansi \
+            --data=/tmp/ryzemp-2225-smoke \
+            --plugins=/tmp/ryzemp-2225-smoke/plugins \
+            > /tmp/ryzemp-2225-smoke.log 2>&1
+          exit_code=$?
+          set -e
+          tail -n 80 /tmp/ryzemp-2225-smoke.log
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/ryzemp-2225-smoke.log; then
+            echo 'Server failed to start cleanly with 2225 staging'
+            exit 1
+          fi
+          grep -q 'NetherNet UNAVAILABLE: PHP native extension' /tmp/ryzemp-2225-smoke.log
+          if [[ "$exit_code" -ne 0 && "$exit_code" -ne 124 ]]; then
+            echo "Unexpected exit code: $exit_code"
+            exit "$exit_code"
+          fi
       - name: Upload downloadable PHAR candidate
         uses: actions/upload-artifact@v4
         with:
