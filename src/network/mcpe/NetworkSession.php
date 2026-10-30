@@ -194,6 +194,8 @@ class NetworkSession{
 	private ?CompoundTag $cachedOfflinePlayerData = null;
 
 	private ?EncryptionContext $cipher = null;
+	/** Verified identity public key from NetherNet signaling. Null on RakNet. */
+	private ?string $netherNetIdentityPublicKey = null;
 
 	/**
 	 * @var string[]
@@ -264,6 +266,18 @@ class NetworkSession{
 
 	private function getLogPrefix() : string{
 		return "NetworkSession: " . $this->getDisplayName();
+	}
+
+	/**
+	 * Only the authenticated WebRTC adapter may call this, before Bedrock login.
+	 * NetherNet is already DTLS encrypted: the extra RakNet AES handshake is
+	 * not performed, but the Bedrock login public key MUST match signaling.
+	 */
+	public function useNetherNetTransport(string $identityPublicKeyDer) : void{
+		if($this->netherNetIdentityPublicKey !== null || strlen($identityPublicKeyDer) < 64 || strlen($identityPublicKeyDer) > 4096 || $this->protocolId !== null){
+			throw new \InvalidArgumentException("Invalid NetherNet transport identity initialization");
+		}
+		$this->netherNetIdentityPublicKey = $identityPublicKeyDer;
 	}
 
 	public function getLogger() : \Logger{
@@ -1008,6 +1022,8 @@ class NetworkSession{
 				$error = "Expected XUID but none found";
 			}elseif($clientPubKey === null){
 				$error = "Missing client public key"; //failsafe
+			}elseif($this->netherNetIdentityPublicKey !== null && !hash_equals($this->netherNetIdentityPublicKey, $clientPubKey)){
+				$error = "NetherNet identity does not match Bedrock login public key";
 			}
 		}
 
@@ -1081,7 +1097,7 @@ class NetworkSession{
 			}
 		}
 
-		if(EncryptionContext::$ENABLED){
+		if(EncryptionContext::$ENABLED && $this->netherNetIdentityPublicKey === null){
 			$this->server->getAsyncPool()->submitTask(new PrepareEncryptionTask($clientPubKey, function(string $encryptionKey, string $handshakeJwt) : void{
 				if(!$this->connected){
 					return;
