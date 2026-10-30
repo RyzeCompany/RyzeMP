@@ -21,16 +21,6 @@ jobs:
           pm-version-major: 5
       - name: Validate Composer files
         run: composer validate --no-check-publish --no-interaction
-      - name: Regenerate pinned Bedrock lockfile for review (temporary)
-        shell: bash
-        run: |
-          set -euo pipefail
-          composer update ryzemcbe/bedrock-data ryzemcbe/bedrock-protocol --with-all-dependencies --no-install --no-interaction --no-progress
-          echo '__RYZE_LOCK_B64_BEGIN__'
-          base64 -w 120 composer.lock | sed 's/^/__RYZE_LOCK_B64__/'
-          echo '__RYZE_LOCK_B64_END__'
-        env:
-          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.SUBMODULE_TOKEN }}"}}'
       - name: Install locked dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
         env:
