@@ -1,12 +1,12 @@
 # RyzeMP
 
-**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeMCBE and based on PocketMine-MP 5.
+**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeCompany and based on PocketMine-MP 5.
 
-> Development status: **1.0.0-beta.3**. This is a development branch; no stable RyzeMP release has been published yet.
+> Development status: **1.0.0-beta.3**. This version is in development; no stable RyzeMP release has been published yet.
 
 ## Features and purpose
 
-- Multiversion Bedrock network support through customized `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData` dependencies.
+- Multiversion Bedrock network support through customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies.
 - PocketMine-MP 5 plugin API compatibility. The PHP namespace remains `pocketmine\` intentionally.
 - Multiple worlds, game entities, inventory mechanics, native hopper and dimension-related work.
 - PHAR packaging and CI checks for code syntax, unit tests, and startup verification.
@@ -15,10 +15,10 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 
 ## Get RyzeMP — two distribution channels
 
-- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the repositories are accessible and the release is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
+- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the dependencies and RyzeMP have tested release tags registered on Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
 - **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.3.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
 
-**These public channels are prepared, not published yet.** RyzeMP and both libraries currently require authorized access; the first public release is subject to dependency publication and live game tests.
+**Public Composer distribution is not available yet.** RyzeMP and its matching multiversion libraries are now public on GitHub. Their Composer package names are prepared, but publication still requires versioned dependency releases, Packagist registration, a final Composer install test, and live game tests.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
@@ -44,11 +44,11 @@ Read [RyzeMP compatibility and rebranding contract](docs/RYZEMP_COMPATIBILITY.md
 
 ## Development and releases
 
-- [Source repository](https://github.com/RyzeMCBE/RyzeMP)
-- [GitHub Actions](https://github.com/RyzeMCBE/RyzeMP/actions)
-- [Releases](https://github.com/RyzeMCBE/RyzeMP/releases)
+- [Source repository](https://github.com/RyzeCompany/RyzeMP)
+- [GitHub Actions](https://github.com/RyzeCompany/RyzeMP/actions)
+- [Releases](https://github.com/RyzeCompany/RyzeMP/releases)
 
-The source repository currently retains its historical GitHub path. Branding the software does not itself rename the repository.
+The source repository is now under the `RyzeCompany` GitHub organization; the public Composer vendor remains `ryzemcbe` to avoid changing dependency names between releases.
 
 ## License and credits
 
