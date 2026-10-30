@@ -29,7 +29,7 @@ Use a compatible 64-bit PHP environment with the PocketMine-specific extensions 
 php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
 ```
 
-`composer create-project` installs the source project **and dependencies**; it does **not** produce a PHAR by itself. For source development, developers may alternatively clone the public GitHub repository and run `composer install` with its committed VCS repository declarations.
+`composer create-project` installs the source project **and dependencies**; it does **not** produce a PHAR by itself. For source development, developers may alternatively clone the public GitHub repository and run `composer install` directly from Packagist with the committed Composer lockfile.
 
 ### Private distribution
 
@@ -37,7 +37,7 @@ Private enterprise deployments can instead use a [private Composer repository](h
 
 ## Channel B: GitHub Releases PHAR (server operators)
 
-The existing GitHub Actions workflow builds `RyzeMP.phar` for `main` and pull requests after syntax checks, PHPUnit, Composer installation, and an automated server startup smoke test. These development artifacts are separate from the public `v1.0.0-beta.3` release.
+GitHub Actions now installs the versioned public Composer dependencies without private GitHub credentials and builds `RyzeMP.phar` for `main` and pull requests after syntax checks, PHPUnit, Composer installation, and an automated server startup smoke test. These development artifacts are separate from the public `v1.0.0-beta.3` release.
 
 The published `v1.0.0-beta.3` tag triggered the release workflow successfully. Future maintainer-created tags beginning with `v` also trigger that workflow. It checks that the tag matches `VersionInfo::BASE_VERSION`, then publishes:
 
@@ -65,6 +65,12 @@ TMPDIR=/home/container/tmp ./bin/php7/bin/php ./RyzeMP.phar --no-wizard
 ```
 
 The `php7` directory name is not proof of the runtime's PHP version. Use `./bin/php7/bin/php -v` and confirm the required extensions with `./bin/php7/bin/php -m`. `TMPDIR` should point to an existing writable directory if your host requires it.
+
+## Packagist update automation
+
+Enable the [official Packagist GitHub service hook](https://packagist.org/about#how-to-update-packages) for each of the three repositories. Once connected, each new version tag is indexed automatically; an existing published Git tag must not be rewritten. The GitHub/Packagist account owner must authorize this connection or configure the webhook using their Packagist token (do not commit tokens to this repository).
+
+RyzeMP resolves `ryzemcbe/bedrock-protocol` and `ryzemcbe/bedrock-data` from Packagist by their published versions. Update the Composer constraints and regenerate `composer.lock` with Composer for each future Bedrock compatibility upgrade, then verify CI and the PHAR before tagging a new RyzeMP release.
 
 ## Publication gate and release order
 
