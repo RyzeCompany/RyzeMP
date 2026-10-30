@@ -1,4 +1,4 @@
-name: Experimental 2225 NetherNet PHAR
+name: Experimental 2225 RyzeRTC-ready PHAR
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,7 +41,6 @@ jobs:
             https://github.com/RyzeCompany/BedrockProtocol.git deps/BedrockProtocol
           git clone --depth 1 --branch feature/bedrock-1.26.60-nethernet \
             https://github.com/RyzeCompany/BedrockData.git deps/BedrockData
-          git clone --depth 1 https://github.com/Amber-PM/NetherNet.git deps/NetherNet
           python3 - <<'PY'
           from pathlib import Path
           p=Path("deps/BedrockProtocol/src/ProtocolInfo.php")
@@ -53,7 +52,7 @@ jobs:
           s=s.replace("public const MINECRAFT_VERSION_NETWORK = '1.26.52';", "public const MINECRAFT_VERSION_NETWORK = '1.26.60';")
           p.write_text(s)
           PY
-      - name: Install staged protocol data and NetherNet without native rtc at build time
+      - name: Install staged 2225 protocol and data only
         shell: bash
         run: |
           set -euo pipefail
@@ -61,32 +60,28 @@ jobs:
             '{"type":"path","url":"deps/BedrockProtocol","options":{"symlink":false,"versions":{"ryzemcbe/bedrock-protocol":"dev-feature/bedrock-1.26.60-nethernet"}}}'
           composer config --json repositories.stage-data \
             '{"type":"path","url":"deps/BedrockData","options":{"symlink":false,"versions":{"ryzemcbe/bedrock-data":"dev-feature/bedrock-1.26.60-nethernet"}}}'
-          composer config --json repositories.stage-nethernet \
-            '{"type":"path","url":"deps/NetherNet","options":{"symlink":false,"versions":{"amber-pm/nethernet":"dev-main"}}}'
           composer require --no-interaction --no-progress --with-all-dependencies \
-            --ignore-platform-req=ext-rtc \
             "ryzemcbe/bedrock-protocol:dev-feature/bedrock-1.26.60-nethernet" \
-            "ryzemcbe/bedrock-data:dev-feature/bedrock-1.26.60-nethernet" \
-            "amber-pm/nethernet:dev-main"
-          composer install --no-interaction --no-progress --no-dev --classmap-authoritative --ignore-platform-req=ext-rtc
+            "ryzemcbe/bedrock-data:dev-feature/bedrock-1.26.60-nethernet"
+          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
       - name: Verify staged protocol and PHP source
         shell: bash
         run: |
           set -euo pipefail
-          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 || !class_exists(\amber\nethernet\Transport::class)){exit(1);} echo "2225 and NetherNet staged\n";'
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; RyzeRTC transport not active\n";'
           find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
-          composer install --no-interaction --no-progress --ignore-platform-req=ext-rtc
+          composer install --no-interaction --no-progress
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
       - name: Build and validate candidate PHAR
         shell: bash
         run: |
           set -euo pipefail
-          composer install --no-interaction --no-progress --no-dev --classmap-authoritative --ignore-platform-req=ext-rtc
-          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP-2225-NetherNet-EXPERIMENTAL.phar
-          test -s RyzeMP-2225-NetherNet-EXPERIMENTAL.phar
-          php -r '$p=new Phar("RyzeMP-2225-NetherNet-EXPERIMENTAL.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
-          php RyzeMP-2225-NetherNet-EXPERIMENTAL.phar --version
-          sha256sum RyzeMP-2225-NetherNet-EXPERIMENTAL.phar > SHA256SUMS.txt
+          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP-2225-RyzeRTC-STAGING.phar
+          test -s RyzeMP-2225-RyzeRTC-STAGING.phar
+          php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
+          php RyzeMP-2225-RyzeRTC-STAGING.phar --version
+          sha256sum RyzeMP-2225-RyzeRTC-STAGING.phar > SHA256SUMS.txt
       - name: Smoke test headless startup and explicit missing-native diagnostics
         shell: bash
         run: |
@@ -95,7 +90,7 @@ jobs:
           cp resources/pocketmine.yml /tmp/ryzemp-2225-smoke/pocketmine.yml
           sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/ryzemp-2225-smoke/pocketmine.yml
           set +e
-          timeout 35s php RyzeMP-2225-NetherNet-EXPERIMENTAL.phar \
+          timeout 35s php RyzeMP-2225-RyzeRTC-STAGING.phar \
             --no-wizard --disable-ansi \
             --data=/tmp/ryzemp-2225-smoke \
             --plugins=/tmp/ryzemp-2225-smoke/plugins \
@@ -115,9 +110,9 @@ jobs:
       - name: Upload downloadable PHAR candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RyzeMP-2225-NetherNet-EXPERIMENTAL
+          name: RyzeMP-2225-RyzeRTC-STAGING
           path: |
-            RyzeMP-2225-NetherNet-EXPERIMENTAL.phar
+            RyzeMP-2225-RyzeRTC-STAGING.phar
             SHA256SUMS.txt
           retention-days: 30
           if-no-files-found: error
