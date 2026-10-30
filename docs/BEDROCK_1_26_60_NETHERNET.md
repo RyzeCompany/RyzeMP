@@ -37,9 +37,11 @@ The intended network layout is:
 **Do not** create two independent UDP listeners with the same bind endpoint.
 The existing `RakLibInterface` owns UDP today. A real demultiplexer must
 be inserted *before* RakLib so both transports are delivered reliably.
-The future helper must authenticate the local IPC channel, bound request
-sizes and rates, clean up DTLS connections, and avoid storing temporary
-session keys in logs.
+The new optional shared-port socket adapter already dispatches UDP before
+RakLib's packet decoder and accepts ICE ufrags only from trusted main-thread
+commands. It limits active peers, expires inactive relays, and never logs ICE
+credentials. This adapter remains inactive until the native ICE backend is
+configured and fully authenticated signaling is connected.
 
 `src/network/mcpe/nethernet/NetherNetEndpoint.php` provides the shared
 endpoint contract. `NetherNetFrameCodec.php` implements the official one-byte
@@ -47,7 +49,12 @@ fragment countdown; `NetherNetDatagramClassifier.php` recognizes STUN/DTLS
 headers without confusing basic RakNet pings. `NetherNetPacketSender.php` and
 `NetherNetSessionGateway.php` bridge previously authenticated clients to the
 existing multiversion `NetworkSession` and enforce honest acknowledgment
-semantics. **None of these components owns a UDP socket or implements WebRTC.**
+semantics. `NetherNetSharedPortSocket.php` extends the owning RakLib socket
+with **optional IPv4 ICE/DTLS relaying** to a local native ICE backend;
+`NetherNetSharedPortSdp.php` rewrites signed backend ICE answer candidates
+to the original public IP:port. Neither component initializes WebRTC or signs
+client identities. The relay's loopback source IP must never substitute for
+a player's verified signaling identity.
 
 ### Verified native dependency limitation (blocking)
 
@@ -59,18 +66,34 @@ Starting native `ext-rtc` on that very same address/port causes a bind
 conflict, while using a different advertised UDP port violates this
 migration's explicit same-address guarantee.
 
-Do not enable `nethernet` or expose 2225 until one of the following is
-implemented with tests:
-- a native external-datagram injection/egress API in `ext-rtc` wired to
-  RakLib's **single** socket owner, with separate authenticated session
-  routing, or
-- a verified in-front multiplexor that owns the *only* public UDP bind,
-  translates ICE/DTLS and RakNet end-to-end, and preserves correct real
-  client endpoint identity, query and ICE SDP candidates. A naive shared
-  `SO_REUSEPORT` or localhost UDP redirect is not sufficient.
+**Engine-style ingress is now implemented as a gated PHP relay, not as a
+second public UDP bind:**
 
-This blocker is architectural; unit tests for packet framing or the PHP
-session gateway **cannot substitute for real-client connection tests**.
+- `RakLibInterface::configureNetherNetSharedPort($privateIcePort)` must be
+  invoked **before** the RakLib thread starts, only after a native WebRTC ICE
+  mux binds `127.0.0.1:$privateIcePort`. The default path still instantiates
+  the untouched `raklib\\server\\ServerSocket`.
+- Once an **authenticated and signed** SDP answer is generated, a signaling
+  adapter must call `NetherNetSharedPortSdp::rewriteAnswer()` using an
+  externally reachable concrete IPv4 address and the existing server UDP
+  port, then call `RakLibInterface::authorizeNetherNetUfrag()` before sending
+  the HTTP response. It must call `revokeNetherNetUfrag()` on disconnect.
+- RakLib's single bound socket accepts STUN/DTLS and forwards it through
+  **one local connected UDP socket per peer** to the ICE mux. A native
+  response travels back over the same RakLib public UDP socket. These relays
+  do **not** send PROXY v2, because the present `ext-rtc` backend cannot
+  consume that protocol. The authenticated external IP/port must instead
+  remain associated with the transport session by the signaling adapter.
+- Remaining blocker: `amber-pm/nethernet` `HttpSignaling` currently prepares
+  HTTP answers internally before notifying its external listener, so SDP
+  rewriting cannot be retrofitted in that callback. Extend or adapt this
+  integration **before** enabling any live client and perform actual
+  native-ICE + signaling + RakNet concurrent tests. Also verify
+  `ext-rtc` handles loopback per-peer ICE tuples and DTLS correctly.
+
+This relay and SDP rewrite are **staging components**, not a production
+NetherNet listener or proof of official Minecraft-client connectivity.
+A naive `SO_REUSEPORT` solution remains forbidden.
 
 Deployment requires inbound **TCP and UDP on the same port**. Verify the
 hosting panel and firewall expose both. iOS may require HTTPS signaling and
