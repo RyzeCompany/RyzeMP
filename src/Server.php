@@ -63,7 +63,6 @@ use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\raklib\RakLibInterface;
-use pocketmine\network\mcpe\nethernet\NetherNetInterface;
 use pocketmine\network\mcpe\StandardEntityEventBroadcaster;
 use pocketmine\network\mcpe\StandardPacketBroadcaster;
 use pocketmine\network\Network;
@@ -1307,32 +1306,16 @@ class Server{
 		$prettyIp = $ipV6 ? "[$ip]" : $ip;
 		try{
 			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
-			$nethernet = null;
-			// Minecraft 1.26.60 requires NetherNet. Keep RakNet functional
-			// for older clients, but do not silently omit the native listener.
-			// This diagnostic is especially useful when the experimental PHAR
-			// is installed on a host without the separate ext-rtc binary.
+			// Protocol 2225 needs an authenticated WebRTC transport. The first-party
+			// RyzeRTC native extension has not completed DataChannels / signaling yet.
+			// Do not activate the retired external transport or advertise a live
+			// NetherNet listener. Preserve RakNet on the original server IP/port.
 			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= 2225){
-				if(!extension_loaded("rtc")){
-					$this->logger->warning("NetherNet UNAVAILABLE: PHP native extension 'rtc' is not loaded. 1.26.60 cannot establish WebRTC; install ext-rtc for the same PHP runtime. Legacy RakNet stays available.");
-				}elseif(!class_exists(\amber\nethernet\Transport::class)){
-					$this->logger->warning("NetherNet UNAVAILABLE: amber-pm/nethernet is not installed in this build. 1.26.60 clients cannot connect via WebRTC.");
-				}
-			}
-			// Automatic activation: no nethernet-* server.properties entries.
-			if(!$ipV6 && extension_loaded("rtc") && class_exists(\amber\nethernet\Transport::class)){
-				$nethernet = new NetherNetInterface(
-					$this, $raklib, $packetBroadcaster, $entityEventBroadcaster, $typeConverter,
-					$ip, $port
-				);
-				// RakLib's socket is installed in the worker at start(). Configure
-				// the optional ICE relay before that socket starts accepting UDP.
-				$nethernet->prepare();
+				$this->logger->warning(extension_loaded("ryzertc")
+					? "NetherNet UNAVAILABLE: RyzeRTC native transport is experimental; DataChannels, signaling and Minecraft identity binding are not integrated. Legacy RakNet stays available."
+					: "NetherNet UNAVAILABLE: PHP native extension 'ryzertc' is not loaded, and first-party WebRTC transport is not ready. Legacy RakNet stays available.");
 			}
 			$rakLibRegistered = $this->network->registerInterface($raklib);
-			if($rakLibRegistered && $nethernet !== null){
-				$this->network->registerInterface($nethernet);
-			}
 		}catch(\Throwable $e){
 			$this->logger->emergency($this->language->translate(KnownTranslationFactory::pocketmine_server_networkStartFailed(
 				$ip,
