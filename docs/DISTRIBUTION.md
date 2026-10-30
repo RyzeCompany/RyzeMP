@@ -10,7 +10,7 @@ The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 
 Public distribution checklist:
 
-1. Ensure **RyzeMP** is public (the two dependency repositories are already public), or use a [private Composer repository](https://packagist.com/) and suitable credentials for private distribution. Do not assume that publishing only RyzeMP gives users access to its private libraries.
+1. Ensure **RyzeMP** is public (the two dependency repositories are already public), or use a [private Composer repository](https://packagist.com/) and suitable credentials for private distribution. Keep the protocol and data package names consistent across published versions; the currently public forks must be registered with Packagist.
 2. Keep the root `composer.json` and `composer.lock` consistent. The updated lockfile references concrete commits of `ryzemcbe/bedrock-data` and `ryzemcbe/bedrock-protocol` on `dev-master`; verify those commits remain accessible before every release; do **not** regenerate the lockfile without reviewing the actual resolved dependency versions.
 3. For a versioned public distribution, tag and register the **two libraries first**, then replace the temporary `dev-master` requirements in RyzeMP with reviewed release constraints and regenerate/test its lockfile using Composer. Do not choose/tag dependency versions solely to make Composer resolve: their API compatibility must be verified.
 4. Submit the source URLs to [Packagist.org](https://packagist.org/packages/submit): `RyzeMCBE/BedrockData`, `RyzeMCBE/BedrockProtocol`, then `RyzeCompany/RyzeMP`. Enable the update webhook so new version tags are detected.
