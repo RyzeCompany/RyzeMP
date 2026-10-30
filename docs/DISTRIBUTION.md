@@ -2,7 +2,7 @@
 
 RyzeMP ships through two complementary channels. Both distribute **the same server source**; neither automatically bundles a PHP interpreter or bypasses the PocketMine-specific extensions.
 
-> Publication status: preparation only. The BedrockProtocol and BedrockData forks are public, but the RyzeMP source repository is currently private. Public installation is **not** available until the main repository is public, packages are registered and tested releases exist. No tag or GitHub Release is created by this document.
+> Publication status: preparation only. The matching multiversion BedrockProtocol, BedrockData, and RyzeMP repositories are currently private in RyzeCompany. Public installation is **not** available until the main repository is public, packages are registered and tested releases exist. No tag or GitHub Release is created by this document.
 
 ## Channel A: Composer project (developers)
 
@@ -10,10 +10,10 @@ The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 
 Public distribution checklist:
 
-1. Ensure **RyzeMP** is public (the two dependency repositories are already public), or use a [private Composer repository](https://packagist.com/) and suitable credentials for private distribution. Keep the protocol and data package names consistent across published versions; the currently public forks must be registered with Packagist.
-2. Keep the root `composer.json` and `composer.lock` consistent. The updated lockfile references concrete commits of `ryzemcbe/bedrock-data` and `ryzemcbe/bedrock-protocol` on `dev-master`; verify those commits remain accessible before every release; do **not** regenerate the lockfile without reviewing the actual resolved dependency versions.
-3. For a versioned public distribution, tag and register the **two libraries first**, then replace the temporary `dev-master` requirements in RyzeMP with reviewed release constraints and regenerate/test its lockfile using Composer. Do not choose/tag dependency versions solely to make Composer resolve: their API compatibility must be verified.
-4. Submit the source URLs to [Packagist.org](https://packagist.org/packages/submit): `RyzeMCBE/BedrockData`, `RyzeMCBE/BedrockProtocol`, then `RyzeCompany/RyzeMP`. Enable the update webhook so new version tags are detected.
+1. Make **all three** RyzeCompany repositories public, or use a [private Composer repository](https://packagist.com/) and suitable credentials for private distribution. Keep the protocol and data packages consistent across published versions; all three RyzeCompany repositories must be publicly accessible before Packagist.org submission.
+2. Keep the root `composer.json` and `composer.lock` consistent. The updated lockfile references concrete commits of `ryzemcbe/bedrock-data` and `ryzemcbe/bedrock-protocol` on `dev-main`; verify those commits remain accessible before every release; do **not** regenerate the lockfile without reviewing the actual resolved dependency versions.
+3. For a versioned public distribution, tag and register the **two libraries first**, then replace the temporary `dev-main` requirements in RyzeMP with reviewed release constraints and regenerate/test its lockfile using Composer. Do not choose/tag dependency versions solely to make Composer resolve: their API compatibility must be verified.
+4. Submit the source URLs to [Packagist.org](https://packagist.org/packages/submit): `RyzeCompany/BedrockData`, `RyzeCompany/BedrockProtocol`, then `RyzeCompany/RyzeMP`. Enable the update webhook so new version tags are detected.
 5. Confirm the exact versions are visible in Packagist **before** announcing the commands below.
 
 After the tested `1.0.0-beta.3` RyzeMP release is registered and all required versions are available:
