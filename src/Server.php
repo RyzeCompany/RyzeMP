@@ -1308,9 +1308,18 @@ class Server{
 		try{
 			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
 			$nethernet = null;
-			// No NetherNet-specific network settings: enable automatically if
-			// both the trusted PHP transport and native rtc extension are present.
-			// Ordinary RakNet remains unchanged on installations without WebRTC.
+			// Minecraft 1.26.60 requires NetherNet. Keep RakNet functional
+			// for older clients, but do not silently omit the native listener.
+			// This diagnostic is especially useful when the experimental PHAR
+			// is installed on a host without the separate ext-rtc binary.
+			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= ProtocolInfo::PROTOCOL_1_26_60){
+				if(!extension_loaded("rtc")){
+					$this->logger->warning("NetherNet UNAVAILABLE: PHP native extension 'rtc' is not loaded. 1.26.60 cannot establish WebRTC; install ext-rtc for the same PHP runtime. Legacy RakNet stays available.");
+				}elseif(!class_exists(\amber\nethernet\Transport::class)){
+					$this->logger->warning("NetherNet UNAVAILABLE: amber-pm/nethernet is not installed in this build. 1.26.60 clients cannot connect via WebRTC.");
+				}
+			}
+			// Automatic activation: no nethernet-* server.properties entries.
 			if(!$ipV6 && extension_loaded("rtc") && class_exists(\amber\nethernet\Transport::class)){
 				$nethernet = new NetherNetInterface(
 					$this, $raklib, $packetBroadcaster, $entityEventBroadcaster, $typeConverter,
