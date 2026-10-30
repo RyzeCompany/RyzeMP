@@ -133,23 +133,36 @@ host, use a compatible PHP 8.4 build with native `ext-rtc` installed and loaded.
 If the extension is absent, experimental NetherNet will fail closed and the
 server should not advertise a working 2225 transport.
 
-Add these properties to `server.properties` for testing on a host with a
-public IPv4 address. Nothing is enabled by default:
+No new NetherNet configuration is needed. With `amber-pm/nethernet` bundled and
+native `ext-rtc` available, the experimental server automatically starts
+NetherNet on the **same** `server-ip` and `server-port` already used by RakNet.
+
+Example of the existing properties (do not add NetherNet-specific ones):
 
 ```properties
 server-ip=0.0.0.0
 server-port=19132
-nethernet-enabled=true
-nethernet-advertise-ip=YOUR_REAL_PUBLIC_IPV4
-nethernet-ice-port=19134
 ```
 
-Both **TCP and UDP on 19132** must be forwarded and open externally. The
-19134 socket is **only loopback UDP** for the native ICE mux, not a public
-port; never forward or advertise it. For loopback-only tests set
-`nethernet-advertise-ip=127.0.0.1` instead.
+The server picks a temporary ICE UDP port automatically on `127.0.0.1`.
+That internal port is never advertised, forwarded, or configured manually.
+Clients continue connecting via the original public server port: UDP for game
+traffic, TCP for the NetherNet HTTP signaling endpoint.
 
-The first successful enabled startup creates `nethernet-identity.pem` in the
+**Wildcard bind:** `0.0.0.0` means "listen on all local interfaces", not a
+usable client destination. RyzeMP uses the numeric IPv4 from the individual
+HTTP join's `Host` header when `server-ip=0.0.0.0`. With a concrete
+`server-ip`, that exact configured address is reused. To avoid blocking the
+main thread and untrusted DNS lookups, the current experimental build cannot
+automatically resolve an HTTP join Host that is a **DNS name** when the
+server bind is wildcard; numeric IPv4 joins are supported. This is a
+test-build limitation, not a new setting.
+
+When native `ext-rtc` is missing, automatic NetherNet activation is skipped
+and legacy RakNet remains available; official 1.26.60 clients still require
+NetherNet and will not connect until the native extension is installed.
+
+The first successful NetherNet startup creates `nethernet-identity.pem` in the
 data directory. Back up and retain that P-384 private key across releases:
 replacing it changes the pinned server identity and prompts clients again.
 
