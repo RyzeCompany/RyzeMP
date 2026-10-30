@@ -26,6 +26,7 @@ namespace pocketmine\network\mcpe\raklib;
 use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
 use pocketmine\snooze\SleeperHandlerEntry;
+use pocketmine\network\mcpe\nethernet\NetherNetSharedPortSocket;
 use pocketmine\thread\log\ThreadSafeLogger;
 use pocketmine\thread\NonThreadSafeValue;
 use pocketmine\thread\Thread;
@@ -46,6 +47,9 @@ class RakLibServer extends Thread{
 	protected string $mainPath;
 	/** @phpstan-var NonThreadSafeValue<InternetAddress> */
 	protected NonThreadSafeValue $address;
+	private ?int $netherNetIceBackendPort = null;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetIceCommands;
 
 	/**
 	 * @phpstan-param ThreadSafeArray<int, string> $mainToThreadBuffer
@@ -59,10 +63,23 @@ class RakLibServer extends Thread{
 		protected int $serverId,
 		protected int $maxMtuSize,
 		protected int $protocolVersion,
-		protected SleeperHandlerEntry $sleeperEntry
+		protected SleeperHandlerEntry $sleeperEntry,
+		ThreadSafeArray $netherNetIceCommands
 	){
+		$this->netherNetIceCommands = $netherNetIceCommands;
 		$this->mainPath = \pocketmine\PATH;
 		$this->address = new NonThreadSafeValue($address);
+	}
+
+	/** Enable only after a private native ICE UDP backend is ready. */
+	public function configureNetherNetSharedPort(int $backendPort) : void{
+		if($backendPort < 1 || $backendPort > 65535){
+			throw new \InvalidArgumentException("Invalid private ICE port");
+		}
+		if($this->isRunning()){
+			throw new \LogicException("Configure shared UDP before starting RakLib");
+		}
+		$this->netherNetIceBackendPort = $backendPort;
 	}
 
 	public function startAndWait(int $options = NativeThread::INHERIT_NONE) : void{
@@ -90,7 +107,9 @@ class RakLibServer extends Thread{
 		ini_set("display_startup_errors", '1');
 		\GlobalLogger::set($this->logger);
 
-		$socket = new ServerSocket($this->address->deserialize());
+		$socket = $this->netherNetIceBackendPort !== null
+			? new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands)
+			: new ServerSocket($this->address->deserialize());
 		$manager = new Server(
 			$this->serverId,
 			$this->logger,
