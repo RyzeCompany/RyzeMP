@@ -4,7 +4,7 @@
 
 - A shell, Git and Composer
 - A compatible 64-bit PHP runtime with the extensions required in [composer.json](composer.json)
-- Access to the customized private `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies, pinned to existing commits in `composer.lock`
+- The public customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies, pinned to existing commits in `composer.lock`
 
 For the current CI build, GitHub Actions uses PHP 8.4 plus PocketMine's required extensions for validation, and PHP 8.3 for the PHAR builder.
 
