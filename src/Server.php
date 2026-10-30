@@ -1308,12 +1308,13 @@ class Server{
 		try{
 			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
 			$nethernet = null;
-			if(!$ipV6 && $this->configGroup->getConfigBool("nethernet-enabled", false)){
+			// No NetherNet-specific network settings: enable automatically if
+			// both the trusted PHP transport and native rtc extension are present.
+			// Ordinary RakNet remains unchanged on installations without WebRTC.
+			if(!$ipV6 && extension_loaded("rtc") && class_exists(\amber\nethernet\Transport::class)){
 				$nethernet = new NetherNetInterface(
 					$this, $raklib, $packetBroadcaster, $entityEventBroadcaster, $typeConverter,
-					$ip, $port,
-					$this->configGroup->getConfigString("nethernet-advertise-ip", ""),
-					$this->configGroup->getConfigInt("nethernet-ice-port", 19134)
+					$ip, $port
 				);
 				// RakLib's socket is installed in the worker at start(). Configure
 				// the optional ICE relay before that socket starts accepting UDP.
