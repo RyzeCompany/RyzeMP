@@ -139,7 +139,7 @@ final class ItemTranslator{
 		return match($protocolId){
 			// Keep the last installed item-upgrade schema until a 2225-specific
 			// migration has been generated and validated against vanilla components.
-			ProtocolInfo::PROTOCOL_1_26_60,
+			2225, // staged next protocol; locked 2193 Composer package lacks this constant
 			ProtocolInfo::PROTOCOL_1_26_51,
 			ProtocolInfo::PROTOCOL_1_26_45,
 			ProtocolInfo::PROTOCOL_1_26_40 => 271,
