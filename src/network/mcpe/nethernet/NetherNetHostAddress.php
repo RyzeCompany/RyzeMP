@@ -43,7 +43,7 @@ final class NetherNetHostAddress{
 		}
 		$hosts = [];
 		foreach(explode("\r\n", substr($header, 0, -4)) as $line){
-			if(preg_match('/^Host: ([^\x00-\x20\x7f]+)$/iD', $line, $m) === 1){
+			if(preg_match('/^Host:[ \t]*([A-Za-z0-9._-]+(?::[0-9]{1,5})?)$/iD', $line, $m) === 1){
 				$hosts[] = $m[1];
 			}elseif(preg_match('/^Host\s*:/iD', $line) === 1){
 				return null;
