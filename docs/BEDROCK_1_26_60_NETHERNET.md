@@ -119,3 +119,55 @@ a trusted certificate. Persist the server identity across restarts.
 
 Separate pending PRs: legacy 419, 844 player/NPC visibility and native
 redstone. Do not merge these automatically into the protocol upgrade.
+
+## Experimental PHAR for real-client tests (NOT production)
+
+GitHub Actions workflow `.github/workflows/ci-2225-phar-preview.yml`
+builds an independent candidate containing the BedrockProtocol and BedrockData
+2225 feature branches and `amber-pm/nethernet`. It enables protocol 2225
+**only in its temporary build checkout**, preserving previously accepted 2193
+in that preview. The normal Composer lockfile and released PHAR remain stable.
+
+The PHAR cannot embed the native PHP `ext-rtc` shared library. On a Linux
+host, use a compatible PHP 8.4 build with native `ext-rtc` installed and loaded.
+If the extension is absent, experimental NetherNet will fail closed and the
+server should not advertise a working 2225 transport.
+
+Add these properties to `server.properties` for testing on a host with a
+public IPv4 address. Nothing is enabled by default:
+
+```properties
+server-ip=0.0.0.0
+server-port=19132
+nethernet-enabled=true
+nethernet-advertise-ip=YOUR_REAL_PUBLIC_IPV4
+nethernet-ice-port=19134
+```
+
+Both **TCP and UDP on 19132** must be forwarded and open externally. The
+19134 socket is **only loopback UDP** for the native ICE mux, not a public
+port; never forward or advertise it. For loopback-only tests set
+`nethernet-advertise-ip=127.0.0.1` instead.
+
+The first successful enabled startup creates `nethernet-identity.pem` in the
+data directory. Back up and retain that P-384 private key across releases:
+replacing it changes the pinned server identity and prompts clients again.
+
+The preview implements:
+- UDP multiplexing inside the original RakLib socket, with per-peer private
+  loopback relays; normal RakNet remains unchanged.
+- HTTP signaling with Amber Transport, with SDP rewriting **before** the HTTP
+  response and per-connection ICE credential authorization and revocation.
+- First-party Minecraft auth-token verification using the existing asynchronous
+  `AuthKeyProvider` and a persistent operator signing identity.
+- Reliable WebRTC data-channel delivery into the normal `NetworkSession`.
+  The signed NetherNet client key is checked against the Bedrock login key.
+  DTLS clients skip the redundant RakNet-only Bedrock AES handshake.
+
+**The preview does not claim real-client success yet.** Test the server on
+Linux with an actual Minecraft 1.26.60 client, inspect the login and world
+transition logs, and verify simultaneous older RakNet client admission,
+inventories, chunks, permissions and plugin compatibility. Test and audit
+the native 0.1.x ICE mux on the loopback backend with concurrent players.
+If the PHAR build or startup reports errors, do not promote the preview.
+
