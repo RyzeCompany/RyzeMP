@@ -31,6 +31,7 @@ final class NetherNetSharedPortSocketTest extends TestCase{
 
 		$commands = new ThreadSafeArray();
 		$public = new NetherNetSharedPortSocket(new InternetAddress("127.0.0.1", 0, 4), $backendPort, $commands);
+		$public->setBlocking(false); // RakLib's Server constructor performs this in production
 		self::assertTrue(socket_getsockname($public->getSocket(), $publicIp, $publicPort));
 		$client = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
 		self::assertNotFalse($client);
