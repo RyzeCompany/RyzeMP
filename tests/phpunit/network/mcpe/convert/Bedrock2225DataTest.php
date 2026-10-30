@@ -42,4 +42,15 @@ final class Bedrock2225DataTest extends TestCase{
 		$translator = BlockTranslator::loadFromProtocolId(2193);
 		self::assertCount(22091, $translator->getBlockStateDictionary()->getStates());
 	}
+	public function testFull2225TypeConverterBootstraps() : void{
+		$this->requireStagedAssets();
+		// Builds ItemIdMetaDowngrader, the canonical hash translator,
+		// and per-version ID registries together; catching missing schema
+		// routing that a raw JSON/NBT load does not exercise.
+		$converter = TypeConverter::getInstance(2225);
+		self::assertSame(2225, $converter->getProtocolId());
+		self::assertCount(2080, $converter->getItemTypeDictionary()->getEntries());
+		self::assertCount(23960, $converter->getBlockTranslator()->getBlockStateDictionary()->getStates());
+	}
+
 }
