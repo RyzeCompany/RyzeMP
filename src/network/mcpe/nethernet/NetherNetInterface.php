@@ -101,7 +101,7 @@ final class NetherNetInterface implements NetworkInterface{
 			$config,
 			$identity,
 			$answer,
-			static fn() => new ExtRtcPeer($config, $this->privateIcePort, $this->privateIcePort, "127.0.0.1", true)
+			fn() => new ExtRtcPeer($config, $this->privateIcePort, $this->privateIcePort, "127.0.0.1", true)
 		);
 		$signaling->bind($transport);
 		try{
