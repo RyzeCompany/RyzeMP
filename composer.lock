@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6e1aa0c27075069a7c1680202dac01c7",
+    "content-hash": "329eb48c49fa02c0d70a28234198e815",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -127,44 +127,39 @@
         },
         {
             "name": "ryzemcbe/bedrock-data",
-            "version": "dev-master",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "https://github.com/RyzeMCBE/BedrockData.git",
-                "reference": "c3ae397ea97caef3bc4d8606c0af46b869189f8d"
+                "url": "https://github.com/RyzeCompany/BedrockData.git",
+                "reference": "101371f542627f7f74ee1a2a86927ecd5d8bd553"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockData/zipball/c3ae397ea97caef3bc4d8606c0af46b869189f8d",
-                "reference": "c3ae397ea97caef3bc4d8606c0af46b869189f8d",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockData/zipball/101371f542627f7f74ee1a2a86927ecd5d8bd553",
+                "reference": "101371f542627f7f74ee1a2a86927ecd5d8bd553",
                 "shasum": ""
             },
             "type": "library",
             "license": [
                 "CC0-1.0"
             ],
-            "description": "RyzeMCBE Bedrock Edition data assets for RyzeMP and PocketMine-MP compatible projects",
+            "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "support": {
-                "source": "https://github.com/RyzeMCBE/BedrockData",
-                "issues": "https://github.com/RyzeMCBE/BedrockData/issues"
-            },
-            "homepage": "https://github.com/RyzeMCBE/BedrockData",
-            "replace": {
-                "pocketmine/bedrock-data": "self.version"
+                "source": "https://github.com/RyzeCompany/BedrockData/tree/main"
             }
         },
         {
             "name": "ryzemcbe/bedrock-protocol",
-            "version": "dev-master",
+            "version": "dev-main",
             "source": {
                 "type": "git",
-                "url": "https://github.com/RyzeMCBE/BedrockProtocol.git",
-                "reference": "3ccb38f1e65efadcf7c8c921b231bd211d91275e"
+                "url": "https://github.com/RyzeCompany/BedrockProtocol.git",
+                "reference": "05143c5ae5cdaff546d9f937896da4b7ad72588a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeMCBE/BedrockProtocol/zipball/3ccb38f1e65efadcf7c8c921b231bd211d91275e",
-                "reference": "3ccb38f1e65efadcf7c8c921b231bd211d91275e",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockProtocol/zipball/05143c5ae5cdaff546d9f937896da4b7ad72588a",
+                "reference": "05143c5ae5cdaff546d9f937896da4b7ad72588a",
                 "shasum": ""
             },
             "require": {
@@ -200,16 +195,11 @@
                 ]
             },
             "license": [
-                "LGPL-3.0"
+                "LGPL-3.0-or-later"
             ],
-            "description": "RyzeMCBE Bedrock protocol library, compatible with the PocketMine-MP protocol namespace",
+            "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
             "support": {
-                "source": "https://github.com/RyzeMCBE/BedrockProtocol",
-                "issues": "https://github.com/RyzeMCBE/BedrockProtocol/issues"
-            },
-            "homepage": "https://github.com/RyzeMCBE/BedrockProtocol",
-            "replace": {
-                "pocketmine/bedrock-protocol": "self.version"
+                "source": "https://github.com/RyzeCompany/BedrockProtocol/tree/main"
             }
         },
         {
