@@ -1354,7 +1354,10 @@ class NetworkSession{
 				$lname, //TODO: commands containing uppercase letters in the name crash 1.9.0 client
 				$description instanceof Translatable ? $this->player->getLanguage()->translate($description) : $description,
 				0,
-				CommandPermissions::NORMAL,
+				// Bedrock 1.21.130+ encodes this as a string enum. The wire value
+				// is case-sensitive ("Any"), not the legacy PHP alias "any".
+				// Older clients still use an integer permission byte.
+				$this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_130 ? "Any" : CommandPermissions::NORMAL,
 				$aliasObj,
 				$overloads,
 				chainedSubCommandData: []
