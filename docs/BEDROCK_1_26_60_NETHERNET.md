@@ -39,7 +39,7 @@ These tests validate transport and startup. They do **not** authenticate a retai
 ## Pterodactyl host test
 
 1. Import the egg from the existing feature PR and install its pinned official RyzeRTC release outside the PHAR. Back up the current PHAR and server data, then replace `RyzeMP.phar` with the new candidate. Reinstall preserves an existing PHAR, so reinstall alone will not upgrade it.
-2. Keep the original allocation and existing server properties. Wings must publish the allocation for **both TCP and UDP**. On the Wings host, inspect the server container’s `NetworkSettings.Ports`: the existing port must have both `/tcp` and `/udp` mappings. Allow both protocols in the host firewall. An egg cannot change the host’s Docker mappings or firewall.
+2. Keep the original allocation and existing server properties. Official Wings creates **both TCP and UDP** bindings for each allocation ([reviewed source](https://github.com/pterodactyl/wings/blob/747bc4393daf5d95fdf61d76382f5e23749cffe9/environment/allocations.go#L53)). The Egg integration CI also verifies the same TCP/UDP number with real container port bindings. The real host must retain both mappings. On the Wings host, inspect the server container’s `NetworkSettings.Ports`: the existing port must have both `/tcp` and `/udp` mappings. Allow both protocols in the host firewall. An egg cannot change the host’s Docker mappings or firewall.
 3. Wait for `NetherNet READY`. From outside the host, request `http://YOUR_SERVER:YOUR_PORT/v1/join`; expect HTTP 200, `protocol: 2225` and `version: 1.26.60`. A valid externally reachable GET establishes TCP visibility; it does not establish UDP or login success.
 4. Join using Minecraft Bedrock 1.26.60. The server logs progress without SDP or JWTs: authenticated offer, signed answer, verified ICE/DTLS/SCTP and Minecraft session start. Capture the first missing stage, client error screen and the complete relevant startup/join log.
 5. Test world spawn, movement, blocks, inventory, optional resource-pack download, disconnect, immediate reconnect and one legacy RakNet client concurrently. Confirm only after all pass.
@@ -49,5 +49,7 @@ These tests validate transport and startup. They do **not** authenticate a retai
 - [Mojang NetherNet HTTP Signaling Guide](https://mojang.github.io/bedrock-protocol-docs/guides/nether-net-onboarding-guide/)
 - [Cloudburst Network NetherNet branch](https://github.com/CloudburstMC/Network/tree/nethernet), reviewed at `35cfff2` for identity, fragmentation and lifecycle behavior
 - [Engine shared-port implementation](https://github.com/RyzeMCBE/Engine/tree/main/server/src/main/java/org/allaymc/server/network/nethernet)
+
+The Egg installation, real PHAR startup, TCP/UDP mapping, unauthenticated-offer rejection, RakNet pong, clean shutdown and data-preserving reinstall passed in [Pterodactyl image CI 41157170619](https://github.com/RyzeCompany/egg-ryzemp/actions/runs/41157170619). This does not give access to the operator’s actual Wings node.
 
 No Amber code or dependency is used. HardCoreFactions and the main branch are not modified.
