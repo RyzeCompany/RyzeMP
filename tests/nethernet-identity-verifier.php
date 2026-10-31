@@ -37,9 +37,19 @@ function derToJose(string $der, int $width) : string{
     }
     return $result;
 }
-$authority = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => 2048]);
-$client = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp384r1']);
-check($authority instanceof OpenSSLAsymmetricKey && $client instanceof OpenSSLAsymmetricKey, 'Cannot create fixture keys');
+// PocketMine's PHP build does not necessarily expose key generation.
+// CI creates synthetic fixture keys via the system OpenSSL CLI. This does not
+// bypass verification: the tests still sign/verify with PHP's OpenSSL extension.
+$rsaFile = getenv('RYZE_TEST_RSA_PEM');
+$ecFile = getenv('RYZE_TEST_EC_PEM');
+$authority = $rsaFile !== false
+    ? openssl_pkey_get_private(file_get_contents($rsaFile))
+    : openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_RSA, 'private_key_bits' => 2048]);
+$client = $ecFile !== false
+    ? openssl_pkey_get_private(file_get_contents($ecFile))
+    : openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'secp384r1']);
+check($authority instanceof OpenSSLAsymmetricKey && $client instanceof OpenSSLAsymmetricKey,
+    'Cannot import synthetic fixture keys; OpenSSL error: ' . (openssl_error_string() ?: 'unknown'));
 $root = openssl_pkey_get_details($authority);
 $clientDetails = openssl_pkey_get_details($client);
 check(is_array($root) && is_array($clientDetails), 'No public keys');
