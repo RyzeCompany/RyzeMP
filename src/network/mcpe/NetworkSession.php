@@ -83,6 +83,7 @@ use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler;
+use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler;
 use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\network\mcpe\protocol\ServerboundPacket;
 use pocketmine\network\mcpe\protocol\ServerToClientHandshakePacket;
@@ -167,6 +168,8 @@ class NetworkSession{
 	private PacketRateLimiter $gamePacketLimiter;
 
 	private \PrefixedLogger $logger;
+	/** Temporary: trace the first command synchronization only, per session. */
+	private bool $crateCommandTraceCompleted = false;
 	private ?Player $player = null;
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
@@ -715,6 +718,23 @@ class NetworkSession{
 				}
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
+				// Read only the first outgoing AvailableCommandsPacket of this session.
+				// DataPacketSendEvent has already run, so these are the final bytes.
+				if($evPacket instanceof AvailableCommandsPacket && !$this->crateCommandTraceCompleted){
+					$this->crateCommandTraceCompleted = true; // Avoid duplicate logs on later refreshes.
+					try{
+						$decoded = new AvailableCommandsPacket();
+						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
+						$wireCommands = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+						$this->logger->info("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
+						foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads($wireCommands) as $line){
+							$this->logger->info("[CrateCommandTrace] stage=wire " . $line);
+						}
+					}catch(\Throwable $e){
+						// Diagnostics must never interrupt a valid connection.
+						$this->logger->warning("[CrateCommandTrace] stage=wire_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
+					}
+				}
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
@@ -1364,6 +1384,15 @@ class NetworkSession{
 			);
 
 			$commandData[$command->getLabel()] = $data;
+		}
+
+		// Temporary diagnostic, automatically logged once per session.
+		// Only crate edit/remove arguments are included; never raw packet bytes.
+		if(!$this->crateCommandTraceCompleted){
+			$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
+			foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
+				$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
+			}
 		}
 
 		// Resolve all enum definitions consistently across the entire command list,
