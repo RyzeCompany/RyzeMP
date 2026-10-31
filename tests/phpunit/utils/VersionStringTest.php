@@ -18,7 +18,9 @@ final class VersionStringTest extends TestCase{
         $version = new VersionString("1.0.0-beta.1", true);
         self::assertSame("1.0.0-beta.1+dev", $version->getFullVersion());
         self::assertSame("beta.1", $version->getSuffix());
-        self::assertSame("1.0.0-beta.3", VersionInfo::BASE_VERSION);
+        self::assertSame("1.0.0-beta.4", VersionInfo::BASE_VERSION);
+        self::assertFalse(VersionInfo::IS_DEVELOPMENT_BUILD);
+        self::assertSame("1.0.0-beta.4", VersionInfo::VERSION()->getFullVersion());
     }
 
     public function testSoftwareVersionDoesNotChangePluginApi() : void{

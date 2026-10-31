@@ -1,0 +1,112 @@
+name: Verify locked 2225 PHAR and authenticated NetherNet
+
+concurrency:
+  group: nethernet-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./pm-bin
+          pm-version-major: 5
+      - name: Install published dependencies from the committed lockfile
+        run: composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+      - name: Verify locked protocol and PHP source
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 published protocol and data locked; authenticated RyzeRTC integration follows\n";'
+          find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
+          RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
+          composer install --no-interaction --no-progress
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/cache
+      - name: Install pinned RyzeRTC API 2 and exercise real authenticated shared-port transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .rtc
+          curl -fsSL --retry 3 'https://github.com/RyzeCompany/RyzeRTC/releases/download/v0.1.0-dev.3/ryzertc-linux-x86_64-php84-zts.zip' -o .rtc/runtime.zip
+          echo '9ecea6cc9d239b8c583d042c91df0448432321ceaf128850fe5b27bcde234602  .rtc/runtime.zip' | sha256sum -c -
+          unzip -q .rtc/runtime.zip -d .rtc
+          (cd .rtc && sha256sum -c SHA256SUMS.txt)
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/.rtc/lib"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          php -n -d "extension=$GITHUB_WORKSPACE/.rtc/ryzertc.so" tests/nethernet-native-integration.php
+      - name: Build and validate release PHAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
+          test -s RyzeMP.phar
+          php -r '$p=new Phar("RyzeMP.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
+          php RyzeMP.phar --version
+          sha256sum RyzeMP.phar > SHA256SUMS.txt
+      - name: Boot real PHAR with live Minecraft keys, HTTP signaling, RakNet UDP and persistent identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+          php -r '$p=new Phar("RyzeMP.phar"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so"))throw new RuntimeException("Native library embedded in PHAR");}'
+      - name: Public plugin command API against the actual PHAR
+        run: python3 tests/command-api-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+      - name: Real PHAR pre-spawn, creative/recipes, terrain and world spawn regression
+        shell: bash
+        run: |
+          python3 tests/nethernet-prespawn-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+      - name: Smoke test headless startup and explicit missing-native diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ryzemp-2225-smoke/plugins
+          cp resources/pocketmine.yml /tmp/ryzemp-2225-smoke/pocketmine.yml
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/ryzemp-2225-smoke/pocketmine.yml
+          set +e
+          timeout 35s php RyzeMP.phar \
+            --no-wizard --disable-ansi \
+            --data=/tmp/ryzemp-2225-smoke \
+            --plugins=/tmp/ryzemp-2225-smoke/plugins \
+            > /tmp/ryzemp-2225-smoke.log 2>&1
+          exit_code=$?
+          set -e
+          tail -n 80 /tmp/ryzemp-2225-smoke.log
+          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/ryzemp-2225-smoke.log; then
+            echo 'Server failed to start cleanly with locked 2225 dependencies'
+            exit 1
+          fi
+          grep -q 'NetherNet UNAVAILABLE: PHP native extension' /tmp/ryzemp-2225-smoke.log
+          if [[ "$exit_code" -ne 0 && "$exit_code" -ne 124 ]]; then
+            echo "Unexpected exit code: $exit_code"
+            exit "$exit_code"
+          fi
+      - name: Upload downloadable PHAR candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-phar
+          path: |
+            RyzeMP.phar
+            SHA256SUMS.txt
+            native-phar-smoke.log
+            native-prespawn-smoke.log
+            public-command-smoke.log
+          retention-days: 2
+          if-no-files-found: error

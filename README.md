@@ -2,7 +2,7 @@
 
 **RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeCompany and based on PocketMine-MP 5.
 
-> Latest public prerelease: **v1.0.0-beta.3**. RyzeMP remains in beta; no stable release has been published.
+> Latest public prerelease: **v1.0.0-beta.4**. RyzeMP remains in beta; no stable release has been published.
 
 ## Features and purpose
 
@@ -18,20 +18,27 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 **Composer/Packagist:** all dependencies are resolved from public Packagist packages. For a new installation, use a compatible PocketMine PHP runtime and run:
 
 ```bash
-composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist
+composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist
 ```
 
 For development from source, run `composer install` in the checked-out repository. Dependencies are pinned in `composer.lock`; no GitHub VCS override or private token is required. For future Bedrock upgrades, publish compatible dependency tags to Packagist first and then update the Composer constraints/lockfile in RyzeMP.
 
 
-- **Composer (source project for developers):** [ryzemcbe/ryzemp](https://packagist.org/packages/ryzemcbe/ryzemp) is publicly available. Install beta.3 with `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist` using a compatible PocketMine PHP runtime.
-- **GitHub Releases (ready-built server PHAR):** download [RyzeMP v1.0.0-beta.3](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.3) and its SHA-256 checksum, then run the PHAR with a compatible PocketMine PHP environment.
+- **Composer (source project for developers):** [ryzemcbe/ryzemp](https://packagist.org/packages/ryzemcbe/ryzemp) is publicly available. Install beta.4 with `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist` using a compatible PocketMine PHP runtime.
+- **GitHub Releases (ready-built server PHAR):** download [RyzeMP v1.0.0-beta.4](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.4) and its SHA-256 checksum, then run the PHAR with a compatible PocketMine PHP environment.
 
-**Public distribution is live.** RyzeMP beta.3 and both Bedrock beta.1 libraries are published on Packagist and verified by a clean `composer create-project` installation. Automated CI verifies Composer resolution, PHPUnit and PHAR startup; in-game compatibility still requires real Bedrock client testing.
+**Public distribution is live.** RyzeMP beta.4 and both Bedrock beta.2 libraries are published on Packagist and verified by a clean `composer create-project` installation. The release workflow verifies the same locked dependencies, full PHPUnit suite, native NetherNet, public plugin API and actual PHAR pre-spawn/world spawn. The operator confirmed real-client world entry with the preceding integration.2 build. Final beta.4 host reinstall/gameplay/reconnect checks remain pending.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
 The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `PocketMine-MP.phar` for existing installs.
+
+
+## Bedrock 1.26.60 and Pterodactyl
+
+Protocol 2225 uses first-party [RyzeRTC](https://github.com/RyzeCompany/RyzeRTC/releases/tag/v0.1.0-dev.3), installed outside the PHAR with PHP 8.4 ZTS. The [official egg](https://github.com/RyzeCompany/egg-ryzemp) installs and verifies the compatible runtime. **Reinstall** updates from prepared official prereleases with `RYZEMP_CHANNEL=pruebas`; ordinary restarts preserve the version. HTTP TCP and RakNet/WebRTC UDP share the existing `server-ip` and `server-port`. No additional public port is required.
+
+See [egg updates](docs/EGG_UPDATES.md) and [NetherNet integration](docs/BEDROCK_1_26_60_NETHERNET.md).
 
 ## Native command API
 

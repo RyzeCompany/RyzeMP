@@ -194,6 +194,9 @@ class NetworkSession{
 	private ?CompoundTag $cachedOfflinePlayerData = null;
 
 	private ?EncryptionContext $cipher = null;
+	/** Verified identity public key from NetherNet signaling. Null on RakNet. */
+	private ?string $netherNetIdentityPublicKey = null;
+	private ?string $netherNetIdentityXuid = null;
 
 	/**
 	 * @var string[]
@@ -264,6 +267,19 @@ class NetworkSession{
 
 	private function getLogPrefix() : string{
 		return "NetworkSession: " . $this->getDisplayName();
+	}
+
+	/**
+	 * Only the authenticated WebRTC adapter may call this, before Bedrock login.
+	 * NetherNet is already DTLS encrypted: the extra RakNet AES handshake is
+	 * not performed, but the Bedrock login public key MUST match signaling.
+	 */
+	public function useNetherNetTransport(string $identityPublicKeyDer, ?string $verifiedXuid = null) : void{
+		if($this->netherNetIdentityPublicKey !== null || strlen($identityPublicKeyDer) < 64 || strlen($identityPublicKeyDer) > 4096 || $this->protocolId !== null){
+			throw new \InvalidArgumentException("Invalid NetherNet transport identity initialization");
+		}
+		$this->netherNetIdentityPublicKey = $identityPublicKeyDer;
+		$this->netherNetIdentityXuid = $verifiedXuid;
 	}
 
 	public function getLogger() : \Logger{
@@ -718,9 +734,17 @@ class NetworkSession{
 	/**
 	 * @phpstan-return Promise<true>
 	 */
+	public function supportsTransportReceipts() : bool{
+		return $this->netherNetIdentityPublicKey === null;
+	}
+
 	public function sendDataPacketWithReceipt(ClientboundPacket $packet, bool $immediate = false) : Promise{
 		/** @phpstan-var PromiseResolver<true> $resolver */
 		$resolver = new PromiseResolver();
+		if(!$this->supportsTransportReceipts()){
+			$resolver->reject();
+			return $resolver->getPromise();
+		}
 
 		if(!$this->sendDataPacketInternal($packet, $immediate, $resolver)){
 			$resolver->reject();
@@ -1008,6 +1032,11 @@ class NetworkSession{
 				$error = "Expected XUID but none found";
 			}elseif($clientPubKey === null){
 				$error = "Missing client public key"; //failsafe
+			}elseif($this->netherNetIdentityPublicKey !== null && !hash_equals($this->netherNetIdentityPublicKey, $clientPubKey)){
+				$error = "NetherNet identity does not match Bedrock login public key";
+			}elseif($this->netherNetIdentityPublicKey !== null && (!$authenticated ||
+				($this->netherNetIdentityXuid !== null && (!($this->info instanceof XboxLivePlayerInfo) || $this->info->getXuid() !== $this->netherNetIdentityXuid)))){
+				$error = "NetherNet authenticated XUID does not match Bedrock login";
 			}
 		}
 
@@ -1081,7 +1110,7 @@ class NetworkSession{
 			}
 		}
 
-		if(EncryptionContext::$ENABLED){
+		if(EncryptionContext::$ENABLED && $this->netherNetIdentityPublicKey === null){
 			$this->server->getAsyncPool()->submitTask(new PrepareEncryptionTask($clientPubKey, function(string $encryptionKey, string $handshakeJwt) : void{
 				if(!$this->connected){
 					return;
@@ -1398,7 +1427,7 @@ class NetworkSession{
 		try{
 			$transition = $this->dimensionTransition;
 			$hash = World::chunkHash($chunkX, $chunkZ);
-			if($transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash)){
+			if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash)){
 				$receipt = new PromiseResolver();
 				$receipt->getPromise()->onCompletion(function() use($transition, $hash, $chunkX, $chunkZ) : void{
 					if($this->dimensionTransition !== $transition){ return; }
@@ -1557,7 +1586,7 @@ class NetworkSession{
 
 	private function traceDimension(string $message) : void{
 		$transition = $this->dimensionTransition;
-		if($transition !== null && $transition->hasDiagnostics()){
+		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
 			$this->logger->debug(sprintf("Dimension trace #%d world=%s elapsed=%.3f %s", $transition->getId(), $transition->getTargetWorld(), microtime(true) - $transition->getStartedAt(), $message));
 		}
 	}
@@ -1596,7 +1625,7 @@ class NetworkSession{
 		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
 		$packet = PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0);
 		$transition = $this->dimensionTransition;
-		if($transition !== null && $transition->hasDiagnostics()){
+		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
 			$this->sendDataPacketWithReceipt($packet)->onCompletion(function() use($transition) : void{
 				if($this->dimensionTransition === $transition){ $this->traceDimension("server_ack_transport_received"); }
 			}, function() use($transition) : void{

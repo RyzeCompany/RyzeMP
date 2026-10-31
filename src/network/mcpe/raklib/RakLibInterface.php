@@ -30,6 +30,7 @@ use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\EntityEventBroadcaster;
 use pocketmine\network\mcpe\NetworkSession;
+use pocketmine\network\mcpe\nethernet\NetherNetSharedPortSocket;
 use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\PacketPool;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
@@ -72,6 +73,9 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 
 	private int $rakServerId;
 	private RakLibServer $rakLib;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetIceCommands;
+	private ThreadSafeArray $netherNetPeerEvents;
 
 	/** @var NetworkSession[] */
 	private array $sessions = [];
@@ -115,6 +119,8 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		$mainToThreadBuffer = new ThreadSafeArray();
 		/** @phpstan-var ThreadSafeArray<int, string> $threadToMainBuffer */
 		$threadToMainBuffer = new ThreadSafeArray();
+		$this->netherNetIceCommands = new ThreadSafeArray();
+		$this->netherNetPeerEvents = new ThreadSafeArray();
 
 		$this->rakLib = new RakLibServer(
 			$this->server->getLogger(),
@@ -124,7 +130,9 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 			$this->rakServerId,
 			$this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::NETWORK_MAX_MTU_SIZE, 1492),
 			self::MCPE_RAKNET_PROTOCOL_VERSION,
-			$sleeperEntry
+			$sleeperEntry,
+			$this->netherNetIceCommands,
+			$this->netherNetPeerEvents
 		);
 		$this->eventReceiver = new RakLibToUserThreadMessageReceiver(
 			new PthreadsChannelReader($threadToMainBuffer)
@@ -132,6 +140,40 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		$this->interface = new UserToRakLibThreadMessageSender(
 			new PthreadsChannelWriter($mainToThreadBuffer)
 		);
+	}
+
+	/**
+	 * Activates ICE relay on RakLib's EXISTING UDP socket. The backend must
+	 * already be listening on 127.0.0.1:port; never expose that port in SDP.
+	 * No behavior changes until a signaling service calls this explicitly.
+	 */
+	public function configureNetherNetSharedPort(int $backendPort) : void{
+		$this->rakLib->configureNetherNetSharedPort($backendPort);
+	}
+
+	/** Main-thread observations, matched to the native selected ICE relay endpoint. */
+	public function pollNetherNetPeers() : array{
+		$events = [];
+		for($i = 0; $i < 128 && ($data = $this->netherNetPeerEvents->shift()) !== null; ++$i){
+			$events[] = json_decode($data, true, flags: JSON_THROW_ON_ERROR);
+		}
+		return $events;
+	}
+
+	/** Called only with the ICE ufrag from an authenticated, signed SDP answer. */
+	public function authorizeNetherNetUfrag(string $ufrag) : void{
+		$this->sendNetherNetUfragCommand("+", $ufrag);
+	}
+
+	public function revokeNetherNetUfrag(string $ufrag) : void{
+		$this->sendNetherNetUfragCommand("-", $ufrag);
+	}
+
+	private function sendNetherNetUfragCommand(string $kind, string $ufrag) : void{
+		if(strlen($ufrag) < 4 || strlen($ufrag) > 256 || preg_match('/\A[A-Za-z0-9+\/_=.-]+\z/D', $ufrag) !== 1){
+			throw new \InvalidArgumentException("Invalid ICE username fragment");
+		}
+		$this->netherNetIceCommands[] = $kind . $ufrag;
 	}
 
 	public function start() : void{

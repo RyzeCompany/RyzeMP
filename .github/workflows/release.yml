@@ -6,137 +6,71 @@ concurrency:
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   tests:
     uses: ./.github/workflows/ci.yml
   build:
     needs: tests
+    uses: ./.github/workflows/ci-2225-phar-preview.yml
+  publish:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
-      contents: write # required only for tagged GitHub release publication
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+      contents: write
+      actions: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          submodules: false
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: zlib
-          ini-values: phar.readonly=Off
-          tools: composer
-
-      - name: Check release tag matches RyzeMP version
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          grep -Fq "public const BASE_VERSION = \"$version\";" src/VersionInfo.php || {
-            echo "Release tag $GITHUB_REF_NAME does not match VersionInfo::BASE_VERSION"
-            exit 1
-          }
-
-      - name: Verify PHAR compression support
-        run: |
-          php -r 'if(!extension_loaded("zlib") || !Phar::canCompress(Phar::GZ)){fwrite(STDERR, "Gzip PHAR compression is unavailable\\n"); exit(1);} echo "zlib + Phar::GZ compression available\\n";'
-
-      - name: Install dependencies
-        run: composer install --no-dev --classmap-authoritative --ignore-platform-reqs
-
-      - name: Validate PHP syntax
-        shell: bash
-        run: |
-          set -euo pipefail
-          find src lib generated -type f -name '*.php' -print0 | xargs -0 -n1 php -l
-
-      - name: Build phar
-        run: php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
-
-      - name: Validate phar
-        run: |
-          test -s RyzeMP.phar
-          php -r '$p = new Phar("RyzeMP.phar"); $uncompressed=[]; foreach($p as $f){ if($f->isFile() && !$f->isCompressed(Phar::GZ)){ $uncompressed[]=$f->getPathName(); } } if($uncompressed!==[]){ fwrite(STDERR, "Uncompressed PHAR entries: " . count($uncompressed) . PHP_EOL . implode(PHP_EOL, array_slice($uncompressed, 0, 20)) . PHP_EOL); exit(1); } $size=filesize("RyzeMP.phar"); echo "PHAR OK: " . $p->getPath() . PHP_EOL; echo "FILES: " . $p->count() . PHP_EOL; echo "SIZE: " . $size . " bytes (" . round($size / 1048576, 2) . " MiB)" . PHP_EOL; if($size > 47185920){ fwrite(STDERR, "PHAR is unexpectedly large (>45 MiB) for this multi-version build" . PHP_EOL); exit(1); }'
-
-      - name: Setup PocketMine PHP for smoke test
-        uses: pmmp/setup-php-action@3.2.0
-        with:
-          php-version: '8.4'
-          install-path: ./pm-bin
-          pm-version-major: 5
-
-      - name: Smoke-test RyzeMP identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          php RyzeMP.phar --version | tee /tmp/ryzemp-version.txt
-          grep -q 'RyzeMP ' /tmp/ryzemp-version.txt
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            grep -Fq "RyzeMP ${GITHUB_REF_NAME#v}" /tmp/ryzemp-version.txt
-          fi
-
-      - name: Smoke-test native dimensions startup
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/pm-native-dimensions-smoke
-          mkdir -p /tmp/pm-native-dimensions-smoke/plugins
-          cp resources/pocketmine.yml /tmp/pm-native-dimensions-smoke/pocketmine.yml
-          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/pm-native-dimensions-smoke/pocketmine.yml
-          set +e
-          timeout 35s php RyzeMP.phar             --no-wizard             --disable-ansi             --data=/tmp/pm-native-dimensions-smoke             --plugins=/tmp/pm-native-dimensions-smoke/plugins             > /tmp/pm-native-dimensions-smoke.log 2>&1
-          status=$?
-          set -e
-          cat /tmp/pm-native-dimensions-smoke.log
-          if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/pm-native-dimensions-smoke.log; then
-            echo "Fatal/critical startup error detected"
-            exit 1
-          fi
-          grep -q 'Native dimensions: created world_nether' /tmp/pm-native-dimensions-smoke.log
-          grep -q 'Native dimensions: created world_the_end' /tmp/pm-native-dimensions-smoke.log
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
-            echo "Unexpected PocketMine exit code: $status"
-            exit "$status"
-          fi
-
-      - name: Upload build artifact (best effort, Actions quota dependent)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: RyzeMP-phar-${{ github.sha }}
-          path: RyzeMP.phar
-          if-no-files-found: error
-
-      - name: Prepare versioned PHAR and checksum
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          set -euo pipefail
-          mv RyzeMP.phar "RyzeMP_${GITHUB_REF_NAME}.phar"
-          sha256sum "RyzeMP_${GITHUB_REF_NAME}.phar" > SHA256SUMS.txt
-          sha256sum -c SHA256SUMS.txt
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            RyzeMP_${{ github.ref_name }}.phar
-            SHA256SUMS.txt
-            LICENSE
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          name: RyzeMP-phar
+          path: package
+      - name: Publish the verified beta PHAR and update manifest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/.*public const BASE_VERSION = "\([^"]*\)";.*/\1/p' src/VersionInfo.php)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]
+          tag="v$version"
+          channel=estable
+          flags=(--draft)
+          if [[ "$version" == *-* ]]; then channel=pruebas; flags+=(--prerelease); fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "$tag"; fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' > /tmp/release-draft; then
+            if [[ "$(cat /tmp/release-draft)" != true ]]; then
+              echo "$tag already published; its assets are preserved."
+              exit 0
+            fi
+            test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')" = "$GITHUB_SHA"
+          else
+            test -s "docs/releases/$version.md"
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" \
+              --title "RyzeMP $version · Bedrock 1.26.60 / RyzeRTC" --notes-file "docs/releases/$version.md"
+          fi
+          (cd package && sha256sum -c SHA256SUMS.txt)
+          mv package/RyzeMP.phar "package/RyzeMP_${tag}.phar"
+          (cd package && sha256sum "RyzeMP_${tag}.phar" > SHA256SUMS.txt)
+          cp LICENSE package/LICENSE
+          python3 tools/release-manifest.py --release "$tag" --channel "$channel" \
+            --phar "package/RyzeMP_${tag}.phar" --out package/ryzemp-update.json
+          # Publish the manifest last; keep the release hidden until all files are ready.
+          for name in "RyzeMP_${tag}.phar" SHA256SUMS.txt LICENSE native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
+            mkdir -p existing
+            if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir existing; then
+              cmp "package/$name" "existing/$name"
+            else
+              gh release upload "$tag" "package/$name" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
