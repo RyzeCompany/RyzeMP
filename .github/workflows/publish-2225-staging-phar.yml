@@ -24,8 +24,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          source_sha='3cff1a996c75a08273af8cbce61e2a0b32166953'
-          run='41156848305'
+          source_sha='07a8f0558fed1e2f78ff10b109cde5fb967251d3'
+          run='41158537688'
           git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
           git diff --exit-code "$source_sha" "$GITHUB_SHA" -- src build lib generated resources composer.json composer.lock
           result="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh run download 41156848305 --repo "$GITHUB_REPOSITORY" \
+          gh run download 41158537688 --repo "$GITHUB_REPOSITORY" \
             --name RyzeMP-2225-RyzeRTC-STAGING --dir package
           cd package
           test -s RyzeMP-2225-RyzeRTC-STAGING.phar
@@ -51,13 +51,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='ryzemp-2225-ryzertc-integration.1'
+          tag='ryzemp-2225-ryzertc-integration.2'
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" --prerelease \
-              --title 'RyzeMP 2225 · authenticated RyzeRTC integration (client validation pending)' \
-              --notes 'Bedrock protocol 2225 / 1.26.60 PHAR with first-party RyzeRTC API 2 integration. Built and tested by GitHub Actions 41156848305 from 3cff1a996c75a08273af8cbce61e2a0b32166953. Replaces TCP diagnostics with real authenticated GET metadata and signed full-ICE SDP answers, official HTTPS JWKS verification and renewal, persistent server identity, shared RakLib UDP, verified DataChannels and Minecraft session gateway. CI passes real TCP/UDP/native ICE-DTLS-SCTP binary transport, concurrent sessions and reconnect tests, and actual PHAR startup/restart using live official JWKS with a real legacy RakNet pong on the same public port. Requires RyzeRTC v0.1.0-dev.3 outside the PHAR; Egg installs it separately. Retail Minecraft Bedrock 1.26.60 login, world gameplay and public-host NAT validation are still pending. Terracotta is NOT declared fixed until those client tests pass. Preserve nethernet/operator-key.pem and server data. No Amber dependency; HardCoreFactions unchanged; PR remains unmerged.'
+              --title 'RyzeMP 2225 · chorus plant pre-spawn fix (retail retest required)' \
+              --notes 'Fixes a reproduced server-side AssumptionFailedError after verified retail NetherNet login: minecraft:chorus_plant creative inventory serialization was missing normalization of minecraft:connection_up/down. Both vertical flags are now normalized only for the server model while all 64 original network variants and hashes are retained. Also routes protocol 2225 to the existing official 1.26.60 item-tag data and logs unexpected session source/stack without trace arguments. Built and tested from 07a8f0558fed1e2f78ff10b109cde5fb967251d3 by GitHub Actions 41158537688. Tests cover all 1696 implemented creative entries, 2225 and legacy creative/crafting wire round trips, the complete authenticated native shared-port transport, live official JWKS startup/restart, and the actual PHAR with a synthetic server-side player completing pre-spawn, terrain generation, world spawn and disconnect. The temporary test plugin is excluded from the released PHAR. Keep RyzeRTC v0.1.0-dev.3 outside the PHAR and existing server-ip/server-port. Retail client world entry and gameplay must be retried on the real host; this release does not declare Terracotta definitively solved. No authentication bypass, Amber dependency, main merge or HardCoreFactions change.'
           fi
           gh release upload "$tag" \
-            package/RyzeMP-2225-RyzeRTC-STAGING.phar package/SHA256SUMS.txt package/native-phar-smoke.log \
+            package/RyzeMP-2225-RyzeRTC-STAGING.phar package/SHA256SUMS.txt package/native-phar-smoke.log package/native-prespawn-smoke.log \
             --repo "$GITHUB_REPOSITORY" --clobber

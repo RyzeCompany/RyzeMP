@@ -53,3 +53,17 @@ These tests validate transport and startup. They do **not** authenticate a retai
 The Egg installation, real PHAR startup, TCP/UDP mapping, unauthenticated-offer rejection, RakNet pong, clean shutdown and data-preserving reinstall passed in [Pterodactyl image CI 41157170619](https://github.com/RyzeCompany/egg-ryzemp/actions/runs/41157170619). This does not give access to the operator’s actual Wings node.
 
 No Amber code or dependency is used. HardCoreFactions and the main branch are not modified.
+
+## Retail-client follow-up: pre-spawn crash
+
+The operator’s supplied server log confirms the real 1.26.60 client reached authenticated signaling, ICE/DTLS/SCTP, verified Bedrock login and player creation. The following disconnect was reproduced with the released PHAR: `CreativeInventoryCache` tried to serialize `minecraft:chorus_plant`, whose 2225 network states now have six connection flags. The adapter normalized the four horizontal flags but left `minecraft:connection_up` and `minecraft:connection_down`. The server’s stateless chorus-plant item could therefore not resolve to a network state and raised `AssumptionFailedError` before world entry.
+
+The dictionary now removes both vertical network-only flags from its server-side comparison while retaining every original network NBT variant and hash. No creative item is removed or replaced to suppress the error. The 2225 item-tag loader also uses the existing `item_tags-1.26.60.json` instead of an undefined protocol route.
+
+Regression coverage includes all 1,696 implemented creative entries, wire encoding/decoding of creative data and all recipes for 2225 and legacy clients, and all 64 original chorus-plant connection variants. The actual PHAR test creates a **synthetic server-side session** after authentication, runs real pre-spawn/creative/recipe serialization, requests terrain, reaches world spawn and disconnects. This test fixture is packaged only into a temporary test plugin; it is excluded from the released server PHAR and does not add a production authentication bypass.
+
+Unexpected native-session errors now report the exception source and bounded call stack without trace arguments. Internal invariant messages are retained so a subsequent programming error is actionable without logging JWT/SDP arguments.
+
+The operator must retry the updated PHAR with the retail client to confirm world entry and gameplay. Successful transport/login in the supplied log is confirmed; end-user gameplay is still pending that retry.
+
+The corrected candidate is published as [ryzemp-2225-ryzertc-integration.2](https://github.com/RyzeCompany/RyzeMP/releases/tag/ryzemp-2225-ryzertc-integration.2); use it with the same RyzeRTC v0.1.0-dev.3 runtime. Replace an existing PHAR explicitly because egg reinstall preserves it.
