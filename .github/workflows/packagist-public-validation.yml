@@ -37,8 +37,8 @@ jobs:
           cd /tmp/ryzemp-packagist-smoke
           composer init --no-interaction --name=ryzecompany/packagist-smoke --type=project
           composer require --no-interaction --no-progress --prefer-dist --ignore-platform-reqs --no-scripts --no-audit \
-            'ryzemcbe/bedrock-protocol:1.0.0-beta.1' \
-            'ryzemcbe/bedrock-data:1.0.0-beta.1'
+            'ryzemcbe/bedrock-protocol:1.0.0-beta.2' \
+            'ryzemcbe/bedrock-data:1.0.0-beta.2'
           php -r '
           $lock = json_decode(file_get_contents("composer.lock"), true, 512, JSON_THROW_ON_ERROR);
           $required = [
@@ -53,7 +53,7 @@ jobs:
                       break;
                   }
               }
-              if ($found === null || ltrim($found["version"], "v") !== "1.0.0-beta.1" || ($found["source"]["url"] ?? "") !== $sourceUrl) {
+              if ($found === null || ltrim($found["version"], "v") !== "1.0.0-beta.2" || ($found["source"]["url"] ?? "") !== $sourceUrl) {
                   fwrite(STDERR, "Unexpected Packagist package: " . $name . PHP_EOL);
                   exit(1);
               }

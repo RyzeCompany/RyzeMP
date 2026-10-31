@@ -2,7 +2,7 @@ name: Bedrock 2225 cross-repository integration
 
 on:
   push:
-    branches: [feature/bedrock-1.26.60-nethernet]
+    branches: [feature/bedrock-1.26.60-nethernet, main]
     paths:
       - ".github/workflows/ci-2225-integration.yml"
       - "src/network/mcpe/convert/**"
@@ -28,25 +28,10 @@ jobs:
           install-path: ./bin
           pm-version-major: 5
 
-      - name: Checkout exact 2225 feature dependencies
-        run: |
-          mkdir -p deps
-          git clone --depth 1 --branch feature/bedrock-1.26.60-nethernet \
-            https://github.com/RyzeCompany/BedrockProtocol.git deps/BedrockProtocol
-          git clone --depth 1 --branch feature/bedrock-1.26.60-nethernet \
-            https://github.com/RyzeCompany/BedrockData.git deps/BedrockData
-          test -s deps/BedrockData/required_item_list-1.26.60.json
-          test -s deps/BedrockData/block_state_meta_map-1.26.60.json
+      - name: Install the published protocol and data from composer.lock
+        run: composer install --no-interaction --no-progress
 
-      - name: Configure local path dependencies without publishing
-        run: |
-          composer config --json repositories.stage-protocol '{"type":"path","url":"deps/BedrockProtocol","options":{"symlink":true,"versions":{"ryzemcbe/bedrock-protocol":"dev-feature/bedrock-1.26.60-nethernet"}}}'
-          composer config --json repositories.stage-data '{"type":"path","url":"deps/BedrockData","options":{"symlink":true,"versions":{"ryzemcbe/bedrock-data":"dev-feature/bedrock-1.26.60-nethernet"}}}'
-          composer require --no-interaction --no-progress --with-all-dependencies \
-            "ryzemcbe/bedrock-protocol:dev-feature/bedrock-1.26.60-nethernet" \
-            "ryzemcbe/bedrock-data:dev-feature/bedrock-1.26.60-nethernet"
-
-      - name: Verify loaded dependency branch and all 2225 runtime data
+      - name: Verify locked 2225 protocol and runtime data
         run: |
           php -r 'require "vendor/autoload.php"; echo \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_26_60, "\n";'
           php -d memory_limit=2G vendor/bin/phpunit \

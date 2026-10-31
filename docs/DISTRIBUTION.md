@@ -2,7 +2,7 @@
 
 RyzeMP ships through two complementary channels. Both distribute **the same server source**; neither automatically bundles a PHP interpreter or bypasses the PocketMine-specific extensions.
 
-> Publication status: **v1.0.0-beta.3 is publicly available** on [Packagist](https://packagist.org/packages/ryzemcbe/ryzemp) and [GitHub Releases](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.3). The tagged `v1.0.0-beta.1` BedrockProtocol and BedrockData packages are also public. A clean `composer create-project` installation and GitHub PHAR build have both passed. This is a **beta**, not a stable or fully gameplay-certified release.
+> Publication status: **v1.0.0-beta.4 is publicly available** on [Packagist](https://packagist.org/packages/ryzemcbe/ryzemp) and [GitHub Releases](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.4). The tagged `v1.0.0-beta.2` BedrockProtocol and BedrockData packages are also public. A clean `composer create-project` installation and GitHub PHAR build have both passed. This is a **beta**, not a stable or fully gameplay-certified release.
 
 ## Channel A: Composer project (developers)
 
@@ -11,15 +11,15 @@ The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 Release maintenance checklist for future versions:
 
 1. Confirm the three RyzeCompany repositories remain public, their Composer package names are unique, and their licenses/third-party attribution are suitable for publication. Keep the protocol and data package versions consistent with the RyzeMP core.
-2. Keep the root `composer.json` and `composer.lock` consistent. The lockfile is prepared for `ryzemcbe/bedrock-data:v1.0.0-beta.1` and `ryzemcbe/bedrock-protocol:v1.0.0-beta.1`, with exact tagged Git revisions. Confirm `composer validate --strict` and an end-to-end `composer install` against the final release metadata.
-3. Verify that dependency tags are published and indexed in Packagist before changing constraints. Current verified tags: `v1.0.0-beta.1` for both Bedrock libraries.
+2. Keep the root `composer.json` and `composer.lock` consistent. The lockfile is prepared for `ryzemcbe/bedrock-data:v1.0.0-beta.2` and `ryzemcbe/bedrock-protocol:v1.0.0-beta.2`, with exact tagged Git revisions. Confirm `composer validate --strict` and an end-to-end `composer install` against the final release metadata.
+3. Verify that dependency tags are published and indexed in Packagist before changing constraints. Current verified tags: `v1.0.0-beta.2` for both Bedrock libraries.
 4. For subsequent releases, make sure [Packagist.org](https://packagist.org/) has indexed the relevant tags of `RyzeCompany/BedrockData`, `RyzeCompany/BedrockProtocol`, and `RyzeCompany/RyzeMP`; keep update webhooks configured.
 5. Re-run the clean public installation workflow and confirm the corresponding GitHub Release PHAR plus checksum before announcing new version commands.
 
-The verified public `1.0.0-beta.3` installation command:
+The verified public `1.0.0-beta.4` installation command:
 
 ```bash
-composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist
+composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist
 cd ryzemp
 ```
 
@@ -37,16 +37,18 @@ Private enterprise deployments can instead use a [private Composer repository](h
 
 ## Channel B: GitHub Releases PHAR (server operators)
 
-GitHub Actions now installs the versioned public Composer dependencies without private GitHub credentials and builds `RyzeMP.phar` for `main` and pull requests after syntax checks, PHPUnit, Composer installation, and an automated server startup smoke test. These development artifacts are separate from the public `v1.0.0-beta.3` release.
+GitHub Actions now installs the versioned public Composer dependencies without private GitHub credentials and builds `RyzeMP.phar` for `main` and pull requests after syntax checks, PHPUnit, Composer installation, and an automated server startup smoke test. These development artifacts are separate from the public `v1.0.0-beta.4` release.
 
-The published `v1.0.0-beta.3` tag triggered the release workflow successfully. Future maintainer-created tags beginning with `v` also trigger that workflow. It checks that the tag matches `VersionInfo::BASE_VERSION`, then publishes:
+The published `v1.0.0-beta.4` tag triggered the release workflow successfully. Future maintainer-created tags beginning with `v` also trigger that workflow. It checks that the tag matches `VersionInfo::BASE_VERSION`, then publishes:
 
-- `RyzeMP_v1.0.0-beta.3.phar` — ready-built server archive (without the PHP runtime).
+- `RyzeMP_v1.0.0-beta.4.phar` — ready-built server archive (without the PHP runtime).
 - `SHA256SUMS.txt` — SHA-256 hash of the PHAR.
 - `LICENSE` — software license.
-- Auto-generated GitHub release notes.
+- `ryzemp-update.json` — exact PHAR/native-runtime pair for the egg.
+- Native transport, world-spawn and public command-API logs.
+- Versioned release notes from `docs/releases/`.
 
-Beta tags are marked as prereleases. The workflow never creates a tag by itself.
+After main passes the complete regression and native/PHAR pipeline, the workflow creates the new beta tag and publishes a draft release with its verified PHAR, logs, checksum and update manifest. It publishes the completed prerelease last. Existing published versions are never overwritten. Maintainer-created version tags also use the same pipeline.
 
 To install the released PHAR after the tag build has passed:
 
@@ -81,4 +83,8 @@ RyzeMP resolves `ryzemcbe/bedrock-protocol` and `ryzemcbe/bedrock-data` from Pac
 5. Tag RyzeMP only after its `BASE_VERSION`, tested lockfile, dependencies, and release notes correspond to the chosen version.
 6. Verify both the Composer installation and the downloadable GitHub Release archive, including its SHA-256 hash.
 
-**Current beta.3 publication was verified** with a fresh Packagist `composer create-project`, and the `v1.0.0-beta.3` tagged PHAR build was successful. For future releases, do not announce new installation commands until their dependency versions and downloadable artifacts have been validated.
+**Current beta.4 publication was verified** with a fresh Packagist `composer create-project`, and the `v1.0.0-beta.4` tagged PHAR build was successful. For future releases, do not announce new installation commands until their dependency versions and downloadable artifacts have been validated.
+
+## Public and private integration tests
+
+The ordinary release pipeline uses public Composer packages and tests the public plugin/command API against its actual PHAR. It does not require access to another private repository. `Optional private HCF command API integration` remains available through workflow_dispatch with a valid SUBMODULE_TOKEN that can read the pinned HCF repository. It fails explicitly before tests if credentials are unavailable. HCF source is unchanged, and a public release passing does not claim private HCF compatibility was tested.

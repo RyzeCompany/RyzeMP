@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "02e1881a6eed4162a32434253b9c81d6",
+    "content-hash": "1dbd238c3dc9a72cbff7994abf3175df",
     "packages": [
         {
             "name": "adhocore/json-comment",
@@ -813,42 +813,44 @@
         },
         {
             "name": "ryzemcbe/bedrock-data",
-            "version": "v1.0.0-beta.1",
+            "version": "v1.0.0-beta.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeCompany/BedrockData.git",
-                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557"
+                "reference": "e7e7b7f1b2e125b87792d27cb9a61d74120b08c8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeCompany/BedrockData/zipball/af54c99dadac7e4016c375923b32eb6dc6cad557",
-                "reference": "af54c99dadac7e4016c375923b32eb6dc6cad557",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockData/zipball/e7e7b7f1b2e125b87792d27cb9a61d74120b08c8",
+                "reference": "e7e7b7f1b2e125b87792d27cb9a61d74120b08c8",
                 "shasum": ""
             },
             "type": "library",
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "CC0-1.0"
             ],
             "description": "Blobs of data generated from Minecraft: Bedrock Edition, used by PocketMine-MP",
             "homepage": "https://github.com/RyzeCompany/BedrockData",
             "support": {
-                "source": "https://github.com/RyzeCompany/BedrockData",
-                "issues": "https://github.com/RyzeCompany/BedrockData/issues"
+                "issues": "https://github.com/RyzeCompany/BedrockData/issues",
+                "source": "https://github.com/RyzeCompany/BedrockData"
             },
-            "time": "2026-10-30T11:53:37+00:00"
+            "time": "2026-10-31T03:38:53+00:00",
+            "published-time": "2026-10-31T03:39:18+00:00"
         },
         {
             "name": "ryzemcbe/bedrock-protocol",
-            "version": "v1.0.0-beta.1",
+            "version": "v1.0.0-beta.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RyzeCompany/BedrockProtocol.git",
-                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222"
+                "reference": "011ee6194dbf33af63b839d15b1ec097a7a7b128"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RyzeCompany/BedrockProtocol/zipball/aa88b5a9210ce72d47061119850f6e65a20d0222",
-                "reference": "aa88b5a9210ce72d47061119850f6e65a20d0222",
+                "url": "https://api.github.com/repos/RyzeCompany/BedrockProtocol/zipball/011ee6194dbf33af63b839d15b1ec097a7a7b128",
+                "reference": "011ee6194dbf33af63b839d15b1ec097a7a7b128",
                 "shasum": ""
             },
             "require": {
@@ -873,26 +875,18 @@
                     "pocketmine\\network\\mcpe\\protocol\\": "src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "pocketmine\\network\\mcpe\\protocol\\": "tests/phpunit/"
-                }
-            },
-            "scripts": {
-                "update-create-methods": [
-                    "@php tools/generate-create-static-methods.php"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "LGPL-3.0-or-later"
             ],
             "description": "An implementation of the Minecraft: Bedrock Edition protocol in PHP",
             "homepage": "https://github.com/RyzeCompany/BedrockProtocol",
             "support": {
-                "source": "https://github.com/RyzeCompany/BedrockProtocol",
-                "issues": "https://github.com/RyzeCompany/BedrockProtocol/issues"
+                "issues": "https://github.com/RyzeCompany/BedrockProtocol/issues",
+                "source": "https://github.com/RyzeCompany/BedrockProtocol"
             },
-            "time": "2026-10-30T11:53:30+00:00"
+            "time": "2026-10-31T03:38:49+00:00",
+            "published-time": "2026-10-31T03:39:18+00:00"
         },
         {
             "name": "symfony/filesystem",

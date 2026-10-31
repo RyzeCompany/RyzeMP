@@ -31,10 +31,10 @@ use function str_repeat;
 
 final class VersionInfo{
 	public const NAME = "RyzeMP";
-	public const BASE_VERSION = "1.0.0-beta.3";
+	public const BASE_VERSION = "1.0.0-beta.4";
 	/** PocketMine-MP 5 plugin API compatibility version; independent of the RyzeMP release. */
 	public const PLUGIN_API_VERSION = "5.44.2";
-	public const IS_DEVELOPMENT_BUILD = true;
+	public const IS_DEVELOPMENT_BUILD = false;
 	public const BUILD_CHANNEL = "beta";
 	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";
 

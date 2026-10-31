@@ -13,10 +13,10 @@ La seleccion usa la fecha de publicacion. Solo participan releases con el asset 
 
 1. Completar las pruebas del PHAR y de la version nativa necesaria.
 2. Mantener `tools/ryzertc-runtime.json` con la version **exacta** de RyzeRTC, API, ABI y SHA-256 probados con ese PHAR.
-3. Publicar PHAR y checksums mediante el workflow de release. Los tags `v*` generan el manifiesto automaticamente: tags con sufijo (`-beta`, etc.) van a pruebas; los demas, a estable.
+3. Publicar PHAR y checksums mediante el workflow de release. El pipeline normal verificado y los tags `v*` generan el manifiesto automaticamente: tags con sufijo (`-beta`, etc.) van a pruebas; los demas, a estable.
 4. El workflow publica `ryzemp-update.json` **despues** de los binarios. Ese archivo habilita la actualizacion. No editar los assets de una version ya distribuida: publicar un tag nuevo.
 
-`publish-2225-staging-phar.yml` tambien genera el manifiesto para `ryzemp-2225-ryzertc-integration.2`, conservando el PHAR y los logs ya publicados. El manifiesto describe el mismo PHAR probado y RyzeRTC v0.1.0-dev.3; no implica una recompilacion.
+La publicacion inicial genero el manifiesto para `ryzemp-2225-ryzertc-integration.2`, conservando el PHAR y los logs ya publicados. El manifiesto describe el mismo PHAR probado y RyzeRTC v0.1.0-dev.3; no implica una recompilacion.
 
 ## Validacion y recuperacion
 

@@ -1,25 +1,11 @@
-name: Authenticated NetherNet integration and 2225 PHAR
+name: Verify locked 2225 PHAR and authenticated NetherNet
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: nethernet-verification-${{ github.ref }}
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [feature/bedrock-1.26.60-nethernet]
-    paths:
-      - ".github/workflows/ci-2225-phar-preview.yml"
-      - "tests/phpunit/network/mcpe/nethernet/**"
-      - "src/network/mcpe/nethernet/**"
-      - "src/network/mcpe/convert/**"
-      - "src/data/bedrock/ItemTagToIdMap.php"
-      - "tests/phpunit/network/mcpe/cache/**"
-      - "tests/fixtures/prespawn/**"
-      - "tests/nethernet-*"
-      - "src/network/mcpe/handler/ResourcePacksPacketHandler.php"
-      - "src/Server.php"
-      - "src/network/mcpe/raklib/**"
-      - "src/network/mcpe/NetworkSession.php"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -38,43 +24,13 @@ jobs:
           php-version: '8.4'
           install-path: ./pm-bin
           pm-version-major: 5
-      - name: Checkout staged 2225 libraries
+      - name: Install published dependencies from the committed lockfile
+        run: composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+      - name: Verify locked protocol and PHP source
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p deps
-          git clone --depth 1 --branch feature/bedrock-1.26.60-nethernet \
-            https://github.com/RyzeCompany/BedrockProtocol.git deps/BedrockProtocol
-          git clone --depth 1 --branch feature/bedrock-1.26.60-nethernet \
-            https://github.com/RyzeCompany/BedrockData.git deps/BedrockData
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path("deps/BedrockProtocol/src/ProtocolInfo.php")
-          s=p.read_text()
-          assert "public const CURRENT_PROTOCOL = self::PROTOCOL_1_26_52;" in s
-          s=s.replace("public const CURRENT_PROTOCOL = self::PROTOCOL_1_26_52;", "public const CURRENT_PROTOCOL = self::PROTOCOL_1_26_60;")
-          s=s.replace("self::CURRENT_PROTOCOL,", "self::PROTOCOL_1_26_52,\n\t\tself::CURRENT_PROTOCOL,", 1)
-          s=s.replace("public const MINECRAFT_VERSION = 'v26.52';", "public const MINECRAFT_VERSION = 'v26.60';")
-          s=s.replace("public const MINECRAFT_VERSION_NETWORK = '1.26.52';", "public const MINECRAFT_VERSION_NETWORK = '1.26.60';")
-          p.write_text(s)
-          PY
-      - name: Install staged 2225 protocol and data only
-        shell: bash
-        run: |
-          set -euo pipefail
-          composer config --json repositories.stage-protocol \
-            '{"type":"path","url":"deps/BedrockProtocol","options":{"symlink":false,"versions":{"ryzemcbe/bedrock-protocol":"dev-feature/bedrock-1.26.60-nethernet"}}}'
-          composer config --json repositories.stage-data \
-            '{"type":"path","url":"deps/BedrockData","options":{"symlink":false,"versions":{"ryzemcbe/bedrock-data":"dev-feature/bedrock-1.26.60-nethernet"}}}'
-          composer require --no-interaction --no-progress --with-all-dependencies \
-            "ryzemcbe/bedrock-protocol:dev-feature/bedrock-1.26.60-nethernet" \
-            "ryzemcbe/bedrock-data:dev-feature/bedrock-1.26.60-nethernet"
-          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
-      - name: Verify staged protocol and PHP source
-        shell: bash
-        run: |
-          set -euo pipefail
-          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; authenticated RyzeRTC integration follows\n";'
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 published protocol and data locked; authenticated RyzeRTC integration follows\n";'
           find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
@@ -95,26 +51,28 @@ jobs:
           export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/.rtc/lib"
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
           php -n -d "extension=$GITHUB_WORKSPACE/.rtc/ryzertc.so" tests/nethernet-native-integration.php
-      - name: Build and validate candidate PHAR
+      - name: Build and validate release PHAR
         shell: bash
         run: |
           set -euo pipefail
           composer install --no-interaction --no-progress --no-dev --classmap-authoritative
-          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP-2225-RyzeRTC-STAGING.phar
-          test -s RyzeMP-2225-RyzeRTC-STAGING.phar
-          php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
-          php RyzeMP-2225-RyzeRTC-STAGING.phar --version
-          sha256sum RyzeMP-2225-RyzeRTC-STAGING.phar > SHA256SUMS.txt
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
+          test -s RyzeMP.phar
+          php -r '$p=new Phar("RyzeMP.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
+          php RyzeMP.phar --version
+          sha256sum RyzeMP.phar > SHA256SUMS.txt
       - name: Boot real PHAR with live Minecraft keys, HTTP signaling, RakNet UDP and persistent identity
         shell: bash
         run: |
           set -euo pipefail
-          python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP-2225-RyzeRTC-STAGING.phar
-          php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so"))throw new RuntimeException("Native library embedded in PHAR");}'
+          python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+          php -r '$p=new Phar("RyzeMP.phar"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so"))throw new RuntimeException("Native library embedded in PHAR");}'
+      - name: Public plugin command API against the actual PHAR
+        run: python3 tests/command-api-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
       - name: Real PHAR pre-spawn, creative/recipes, terrain and world spawn regression
         shell: bash
         run: |
-          python3 tests/nethernet-prespawn-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP-2225-RyzeRTC-STAGING.phar
+          python3 tests/nethernet-prespawn-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
       - name: Smoke test headless startup and explicit missing-native diagnostics
         shell: bash
         run: |
@@ -123,7 +81,7 @@ jobs:
           cp resources/pocketmine.yml /tmp/ryzemp-2225-smoke/pocketmine.yml
           sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' /tmp/ryzemp-2225-smoke/pocketmine.yml
           set +e
-          timeout 35s php RyzeMP-2225-RyzeRTC-STAGING.phar \
+          timeout 35s php RyzeMP.phar \
             --no-wizard --disable-ansi \
             --data=/tmp/ryzemp-2225-smoke \
             --plugins=/tmp/ryzemp-2225-smoke/plugins \
@@ -132,7 +90,7 @@ jobs:
           set -e
           tail -n 80 /tmp/ryzemp-2225-smoke.log
           if grep -Eiq 'Fatal error|Uncaught|CRITICAL|EMERGENCY' /tmp/ryzemp-2225-smoke.log; then
-            echo 'Server failed to start cleanly with 2225 staging'
+            echo 'Server failed to start cleanly with locked 2225 dependencies'
             exit 1
           fi
           grep -q 'NetherNet UNAVAILABLE: PHP native extension' /tmp/ryzemp-2225-smoke.log
@@ -143,11 +101,12 @@ jobs:
       - name: Upload downloadable PHAR candidate
         uses: actions/upload-artifact@v4
         with:
-          name: RyzeMP-2225-RyzeRTC-STAGING
+          name: RyzeMP-phar
           path: |
-            RyzeMP-2225-RyzeRTC-STAGING.phar
+            RyzeMP.phar
             SHA256SUMS.txt
             native-phar-smoke.log
             native-prespawn-smoke.log
-          retention-days: 30
+            public-command-smoke.log
+          retention-days: 2
           if-no-files-found: error
