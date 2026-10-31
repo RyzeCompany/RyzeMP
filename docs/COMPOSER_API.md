@@ -1,7 +1,7 @@
 # RyzeMP API for plugin developers
 
 The package is [`ryzemcbe/ryzemp`](https://packagist.org/packages/ryzemcbe/ryzemp).
-Composer API version **5.44.2** corresponds to the public plugin API of RyzeMP
+Composer API version **5.44.2-p1** corresponds to the public plugin API of RyzeMP
 **1.0.0-beta.4**, including Bedrock 1.26.60 / protocol 2225. The `pocketmine\`
 namespace and plugin API remain compatible with existing PocketMine-MP 5 plugins.
 
@@ -12,7 +12,7 @@ Run these commands in an existing Composer project:
 ```bash
 composer config minimum-stability beta
 composer config prefer-stable true
-composer require --dev ryzemcbe/ryzemp:^5.44.2
+composer require --dev ryzemcbe/ryzemp:^5.44.2-p1
 ```
 
 The beta setting allows the tagged BedrockProtocol and BedrockData dependencies.
@@ -35,7 +35,7 @@ Install the RyzeCompany fork as a plugin dependency:
 composer require ryzecompany/invmenu:^4.7.5
 ```
 
-InvMenu requires `ryzemcbe/ryzemp:^5.44.2` automatically. Its PHP namespace remains
+InvMenu requires `ryzemcbe/ryzemp:^5.44.2-p1` automatically. Its PHP namespace remains
 `muqsit\invmenu`; the fork replaces the matching upstream InvMenu version, so
 Composer does not install two copies of its classes. Include InvMenu with your
 normal virion/plugin bundling process and exclude server dependencies from the PHAR.
@@ -47,17 +47,21 @@ The Git repository has two explicit tag series:
 | Tag | Purpose |
 | --- | --- |
 | `v1.0.0-beta.4` | Server release, PHAR and egg update manifest |
-| `5.44.2` | Composer/plugin API compatibility version |
+| `5.44.2-p1` | Composer artifact for plugin API 5.44.2 |
 
-The numeric API tag has no `v` prefix and does not create a GitHub PHAR release.
+The Composer API tag has no `v` prefix and does not create a GitHub PHAR release.
 It keeps Composer's comparison with PocketMine's API/advisory version ranges
 consistent while preserving RyzeMP's independent server version.
 
 After the complete main-branch PHAR pipeline succeeds, the Composer API workflow
 installs RyzeMP as a dependency in a clean project, exercises its actual protocol
-and inventory APIs, and publishes the numeric `PLUGIN_API_VERSION` tag. Existing
-tags are preserved. API changes intended for Composer consumers need a new API
+and inventory APIs, and publishes the versioned `COMPOSER_API_VERSION` tag. Existing
+tags are preserved. API changes intended for Composer consumers need a new Composer artifact
 version; changing only the server's `BASE_VERSION` does not move a published API tag.
 
 Packagist's GitHub hook indexes the tag. Verify the indexed version and a clean
 consumer installation before announcing a new developer API release.
+
+The `p1` artifact retains plugin API 5.44.2 and makes resource-pack completion
+idempotent while asynchronous player creation is pending. Repeated or reentrant
+completion packets cannot start multiple player factories.

@@ -42,7 +42,7 @@ See [egg updates](docs/EGG_UPDATES.md) and [NetherNet integration](docs/BEDROCK_
 
 ## API for plugin developers
 
-Use `ryzemcbe/ryzemp:^5.44.2` as a Composer development dependency. The numeric
+Use `ryzemcbe/ryzemp:^5.44.2-p1` as a Composer development dependency. The numeric
 Composer version follows the compatible plugin API; the server release remains
 `1.0.0-beta.4`. See [the Composer API guide](docs/COMPOSER_API.md) for installation,
 InvMenu, workstation requirements and the two tag series.

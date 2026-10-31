@@ -84,6 +84,7 @@ class ResourcePacksPacketHandler extends PacketHandler{
 
 	private bool $requestedMetadata = false;
 	private bool $requestedStack = false;
+	private bool $completed = false;
 
 	/** @var bool[][] uuid => [chunk index => hasSent] */
 	private array $downloadedChunks = [];
@@ -156,6 +157,9 @@ class ResourcePacksPacketHandler extends PacketHandler{
 	}
 
 	public function handleResourcePackClientResponse(ResourcePackClientResponsePacket $packet) : bool{
+		if($this->completed){
+			return true;
+		}
 		switch($packet->status){
 			case ResourcePackClientResponsePacket::STATUS_REFUSED:
 				//TODO: add lang strings for this
@@ -229,6 +233,9 @@ class ResourcePacksPacketHandler extends PacketHandler{
 				$this->session->getLogger()->debug("Applying resource pack stack");
 				break;
 			case ResourcePackClientResponsePacket::STATUS_COMPLETED:
+				// Player creation may complete asynchronously while this handler is
+				// still installed. Latch before the callback, including reentrant calls.
+				$this->completed = true;
 				$this->session->getLogger()->debug("Resource packs sequence completed");
 				($this->completionCallback)();
 				break;
