@@ -284,6 +284,14 @@ class ResourcePacksPacketHandler extends PacketHandler{
 		$packId = $pack->getPackId();
 		$offset = $chunkIndex * self::PACK_CHUNK_SIZE;
 		$chunkData = $pack->getPackChunk($offset, self::PACK_CHUNK_SIZE);
+		if(!$this->session->supportsTransportReceipts()){
+			// SCTP supplies reliable ordered delivery; the next Minecraft chunk request
+			// drives progress. Do not invent a RakNet ACK from a local WebRTC enqueue.
+			if(!$this->session->sendDataPacket(ResourcePackChunkDataPacket::create($packId, $chunkIndex, $offset, $chunkData), true)){
+				$this->disconnectWithError("Plugin interrupted sending of resource packs");
+			}
+			return;
+		}
 		$this->activeRequests++;
 		$this->session
 			->sendDataPacketWithReceipt(ResourcePackChunkDataPacket::create($packId, $chunkIndex, $offset, $chunkData))

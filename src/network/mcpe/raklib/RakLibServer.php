@@ -64,7 +64,8 @@ class RakLibServer extends Thread{
 		protected int $maxMtuSize,
 		protected int $protocolVersion,
 		protected SleeperHandlerEntry $sleeperEntry,
-		ThreadSafeArray $netherNetIceCommands
+		ThreadSafeArray $netherNetIceCommands,
+		private ThreadSafeArray $netherNetPeerEvents
 	){
 		$this->netherNetIceCommands = $netherNetIceCommands;
 		$this->mainPath = \pocketmine\PATH;
@@ -108,7 +109,7 @@ class RakLibServer extends Thread{
 		\GlobalLogger::set($this->logger);
 
 		$socket = $this->netherNetIceBackendPort !== null
-			? new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands)
+			? new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands, $this->netherNetPeerEvents)
 			: new ServerSocket($this->address->deserialize());
 		$manager = new Server(
 			$this->serverId,

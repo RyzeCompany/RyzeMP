@@ -1,4 +1,4 @@
-name: Experimental 2225 RyzeRTC-ready PHAR
+name: Authenticated NetherNet integration and 2225 PHAR
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -11,8 +11,8 @@ on:
       - ".github/workflows/ci-2225-phar-preview.yml"
       - "tests/phpunit/network/mcpe/nethernet/**"
       - "src/network/mcpe/nethernet/**"
-      - "tests/nethernet-tcp-probe.php"
-      - "tests/nethernet-identity-verifier.php"
+      - "tests/nethernet-*"
+      - "src/network/mcpe/handler/ResourcePacksPacketHandler.php"
       - "src/Server.php"
       - "src/network/mcpe/raklib/**"
       - "src/network/mcpe/NetworkSession.php"
@@ -70,14 +70,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; RyzeRTC transport not active\n";'
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; authenticated RyzeRTC integration follows\n";'
           find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
-          php tests/nethernet-tcp-probe.php
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
           RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
           composer install --no-interaction --no-progress
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
+      - name: Install pinned RyzeRTC API 2 and exercise real authenticated shared-port transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .rtc
+          curl -fsSL --retry 3 'https://github.com/RyzeCompany/RyzeRTC/releases/download/v0.1.0-dev.3/ryzertc-linux-x86_64-php84-zts.zip' -o .rtc/runtime.zip
+          echo '9ecea6cc9d239b8c583d042c91df0448432321ceaf128850fe5b27bcde234602  .rtc/runtime.zip' | sha256sum -c -
+          unzip -q .rtc/runtime.zip -d .rtc
+          (cd .rtc && sha256sum -c SHA256SUMS.txt)
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/.rtc/lib"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          php -n -d "extension=$GITHUB_WORKSPACE/.rtc/ryzertc.so" tests/nethernet-native-integration.php
       - name: Build and validate candidate PHAR
         shell: bash
         run: |
@@ -88,6 +99,12 @@ jobs:
           php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
           php RyzeMP-2225-RyzeRTC-STAGING.phar --version
           sha256sum RyzeMP-2225-RyzeRTC-STAGING.phar > SHA256SUMS.txt
+      - name: Boot real PHAR with live Minecraft keys, HTTP signaling, RakNet UDP and persistent identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP-2225-RyzeRTC-STAGING.phar
+          php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so"))throw new RuntimeException("Native library embedded in PHAR");}'
       - name: Smoke test headless startup and explicit missing-native diagnostics
         shell: bash
         run: |
@@ -120,5 +137,6 @@ jobs:
           path: |
             RyzeMP-2225-RyzeRTC-STAGING.phar
             SHA256SUMS.txt
+            native-phar-smoke.log
           retention-days: 30
           if-no-files-found: error

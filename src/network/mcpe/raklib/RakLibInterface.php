@@ -75,6 +75,7 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	private RakLibServer $rakLib;
 	/** @phpstan-var ThreadSafeArray<int, string> */
 	private ThreadSafeArray $netherNetIceCommands;
+	private ThreadSafeArray $netherNetPeerEvents;
 
 	/** @var NetworkSession[] */
 	private array $sessions = [];
@@ -119,6 +120,7 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		/** @phpstan-var ThreadSafeArray<int, string> $threadToMainBuffer */
 		$threadToMainBuffer = new ThreadSafeArray();
 		$this->netherNetIceCommands = new ThreadSafeArray();
+		$this->netherNetPeerEvents = new ThreadSafeArray();
 
 		$this->rakLib = new RakLibServer(
 			$this->server->getLogger(),
@@ -129,7 +131,8 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 			$this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::NETWORK_MAX_MTU_SIZE, 1492),
 			self::MCPE_RAKNET_PROTOCOL_VERSION,
 			$sleeperEntry,
-			$this->netherNetIceCommands
+			$this->netherNetIceCommands,
+			$this->netherNetPeerEvents
 		);
 		$this->eventReceiver = new RakLibToUserThreadMessageReceiver(
 			new PthreadsChannelReader($threadToMainBuffer)
@@ -146,6 +149,15 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	 */
 	public function configureNetherNetSharedPort(int $backendPort) : void{
 		$this->rakLib->configureNetherNetSharedPort($backendPort);
+	}
+
+	/** Main-thread observations, matched to the native selected ICE relay endpoint. */
+	public function pollNetherNetPeers() : array{
+		$events = [];
+		for($i = 0; $i < 128 && ($data = $this->netherNetPeerEvents->shift()) !== null; ++$i){
+			$events[] = json_decode($data, true, flags: JSON_THROW_ON_ERROR);
+		}
+		return $events;
 	}
 
 	/** Called only with the ICE ufrag from an authenticated, signed SDP answer. */

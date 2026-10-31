@@ -59,7 +59,8 @@ final class NetherNetSessionGateway{
 		string $verifiedIdentityPublicKeyDer,
 		\Closure $send,
 		\Closure $close,
-		bool $supportsReceipts = false
+		bool $supportsReceipts = false,
+		?string $verifiedXuid = null
 	) : NetworkSession{
 		if($id <= 0 || isset($this->sessions[$id])){
 			throw new \InvalidArgumentException("Invalid or duplicate NetherNet connection ID");
@@ -77,7 +78,7 @@ final class NetherNetSessionGateway{
 			$verifiedIp,
 			$verifiedPort
 		);
-		$session->useNetherNetTransport($verifiedIdentityPublicKeyDer);
+		$session->useNetherNetTransport($verifiedIdentityPublicKeyDer, $verifiedXuid);
 		$this->sessions[$id] = $session;
 		return $session;
 	}

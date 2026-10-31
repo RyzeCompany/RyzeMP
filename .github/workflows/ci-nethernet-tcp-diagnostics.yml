@@ -1,13 +1,10 @@
-name: NetherNet TCP diagnostics and RakNet shared port
+name: NetherNet identity security regression
 on:
   push:
     branches: [feature/bedrock-1.26.60-nethernet]
     paths:
-      - src/network/mcpe/nethernet/NetherNetSignalingProbeInterface.php
-      - src/Server.php
-      - tests/nethernet-tcp-probe.php
-      - tests/nethernet-identity-verifier.php
-      - src/network/mcpe/nethernet/NetherNetIdentityAssertionVerifier.php
+      - src/network/mcpe/nethernet/**
+      - tests/nethernet-*
       - .github/workflows/ci-nethernet-tcp-diagnostics.yml
   workflow_dispatch:
 permissions:
@@ -23,18 +20,16 @@ jobs:
         with:
           php-version: '8.4'
           tools: none
-      - name: Syntax and same UDP/TCP port with safe refusals
+      - name: Syntax and JWT, DTLS signatures and persistent server identity
         run: |
           set -euo pipefail
-          php -l src/network/mcpe/nethernet/NetherNetSignalingProbeInterface.php
+          php -l src/network/mcpe/nethernet/NetherNetHttpServer.php
           php -l src/Server.php
-          php -l tests/nethernet-tcp-probe.php
-          php tests/nethernet-tcp-probe.php
           php -l src/network/mcpe/nethernet/NetherNetIdentityAssertionVerifier.php
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
           openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
           RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
-          grep -Fq 'NetherNetSignalingProbeInterface' src/Server.php
+          grep -Fq 'NetherNetInterface' src/Server.php
           if grep -Eq 'nethernet-enabled=|nethernet-ice-port=19134' src/Server.php; then
             echo 'Unexpected additional NetherNet config introduced'
             exit 1

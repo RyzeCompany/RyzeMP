@@ -29,7 +29,7 @@ final class NetherNetIdentityAssertionVerifier{
     private const MAX_IDENTITY = 65536;
     private const MAX_TOKEN = 32768;
     private const SKEW = 60;
-    /** @var array<string, array{pem: string, kty: string}> */
+    /** @var array<string, array{pem: string, kty: string, alg: ?string}> */
     private array $keys;
 
     private function __construct(array $keys){
@@ -53,7 +53,9 @@ final class NetherNetIdentityAssertionVerifier{
         }
         $keys = [];
         foreach($doc['keys'] as $i => $jwk){
-            if(!is_array($jwk) || !in_array($jwk['kty'] ?? null, ['RSA', 'EC'], true)){
+            if(!is_array($jwk) || !in_array($jwk['kty'] ?? null, ['RSA', 'EC'], true) ||
+                (isset($jwk['use']) && $jwk['use'] !== 'sig') ||
+                (isset($jwk['key_ops']) && (!is_array($jwk['key_ops']) || !in_array('verify', $jwk['key_ops'], true)))){
                 continue;
             }
             if(count($keys) >= 32){throw new \InvalidArgumentException('Too many Minecraft JWKS keys');}
@@ -61,7 +63,7 @@ final class NetherNetIdentityAssertionVerifier{
             if(strlen($kid) > 256 || isset($keys[$kid])){throw new \InvalidArgumentException('Duplicate/invalid JWKS key id');}
             $pem = self::jwkPublicPem($jwk);
             if($pem !== null){
-                $keys[$kid] = ['pem' => $pem, 'kty' => $jwk['kty']];
+                $keys[$kid] = ['pem' => $pem, 'kty' => $jwk['kty'], 'alg' => is_string($jwk['alg'] ?? null) ? $jwk['alg'] : null];
             }
         }
         return new self($keys);
@@ -82,7 +84,9 @@ final class NetherNetIdentityAssertionVerifier{
             throw new \InvalidArgumentException('Invalid identity Base64');
         }
         $identity = json_decode($identityJson, true, 16, JSON_THROW_ON_ERROR);
-        if(!is_array($identity) || !isset($identity['assertion']) || !is_string($identity['assertion'])){
+        if(!is_array($identity) || ($identity['idp']['protocol'] ?? null) !== 'default' ||
+            !is_string($identity['idp']['domain'] ?? null) ||
+            !isset($identity['assertion']) || !is_string($identity['assertion'])){
             throw new \InvalidArgumentException('Invalid identity wrapper');
         }
         $assertion = json_decode($identity['assertion'], true, 16, JSON_THROW_ON_ERROR);
@@ -91,29 +95,16 @@ final class NetherNetIdentityAssertionVerifier{
             throw new \InvalidArgumentException('Invalid identity assertion');
         }
         $claims = $this->verifyMinecraftToken($assertion['token'], $now ?? time());
-        $fingerprints = [];
-        foreach(explode("\n", $normalized) as $line){
-            if(!str_starts_with($line, 'a=fingerprint:')){continue;}
-            $value = trim(substr($line, strlen('a=fingerprint:')));
-            if(!preg_match('/\A([a-z0-9-]+) ([A-Fa-f0-9:]+)\z/D', $value, $matches)){
-                throw new \InvalidArgumentException('Invalid SDP fingerprint syntax');
-            }
-            if(count($fingerprints) >= 8){throw new \InvalidArgumentException('Too many SDP fingerprints');}
-            $fingerprints[] = ['algorithm' => $matches[1], 'digest' => $matches[2]];
-        }
-        if($fingerprints === []){
-            throw new \InvalidArgumentException('SDP missing DTLS fingerprints');
-        }
-        $canonical = json_encode(['fingerprint' => $fingerprints], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $canonical = self::canonicalFingerprints($offerSdp);
         $detached = explode('.', $assertion['fingerprints']);
         if(count($detached) !== 3 || $detached[1] !== ''){
             throw new \InvalidArgumentException('Invalid detached fingerprint JWS');
         }
         $protected = self::decodeJsonPart($detached[0]);
-        if(($protected['alg'] ?? null) !== 'ES384'){
+        if(($protected['alg'] ?? null) !== 'ES384' || isset($protected['crit']) || isset($protected['b64'])){
             throw new \InvalidArgumentException('NetherNet fingerprint algorithm must be ES384');
         }
-        $der = base64_decode($claims['cpk'], true);
+        $der = self::publicKeyDer($claims['cpk']);
         if($der === false || strlen($der) < 64 || strlen($der) > 4096){
             throw new \InvalidArgumentException('Invalid client identity public key');
         }
@@ -136,6 +127,64 @@ final class NetherNetIdentityAssertionVerifier{
         ];
     }
 
+    /** Exact signed bytes; used for offers and answers. */
+    public static function canonicalFingerprints(string $sdp) : string{
+        $fingerprints = [];
+        foreach(explode("\n", str_replace("\r\n", "\n", $sdp)) as $line){
+            if(!str_starts_with($line, 'a=fingerprint:')){continue;}
+            if(preg_match('/\Aa=fingerprint:(sha-256|sha-384|sha-512) ([A-Fa-f0-9]{2}(?::[A-Fa-f0-9]{2})+)\z/D', $line, $m) !== 1){
+                throw new \InvalidArgumentException('Invalid DTLS fingerprint syntax');
+            }
+            $bytes = ['sha-256' => 32, 'sha-384' => 48, 'sha-512' => 64][$m[1]];
+            if(strlen($m[2]) !== $bytes * 3 - 1 || count($fingerprints) >= 8){
+                throw new \InvalidArgumentException('Invalid DTLS fingerprint length');
+            }
+            $fingerprints[] = ['algorithm' => $m[1], 'digest' => $m[2]];
+        }
+        if($fingerprints === []){throw new \InvalidArgumentException('SDP missing DTLS fingerprints');}
+        return json_encode(['fingerprint' => $fingerprints], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
+    /** Retail tokens use base64 SPKI; also accept the documented public EC JWK representation. */
+    public static function publicKeyDer(string|array $cpk) : string{
+        if(is_array($cpk)){
+            if(($cpk['kty'] ?? null) !== 'EC' || ($cpk['crv'] ?? null) !== 'P-384' || isset($cpk['d']) || isset($cpk['x5c'])){
+                throw new \InvalidArgumentException('Invalid public cpk JWK');
+            }
+            $pem = self::jwkPublicPem($cpk);
+            $der = $pem === null ? false : base64_decode(preg_replace('~-----[^-]+-----|\s+~', '', $pem), true);
+        }else{
+            $der = base64_decode($cpk, true);
+        }
+        if($der === false || strlen($der) < 64 || strlen($der) > 4096){throw new \InvalidArgumentException('Invalid cpk');}
+        return $der;
+    }
+
+    /** OpenSSL DER ECDSA -> fixed-width JOSE signature. */
+    public static function ecdsaDerToJose(string $der) : string{
+        $offset = 0;
+        $length = static function() use ($der, &$offset) : int{
+            if($offset >= strlen($der)){throw new \RuntimeException('Truncated ECDSA signature');}
+            $n = ord($der[$offset++]);
+            if($n < 128){return $n;}
+            if($n !== 129 || $offset >= strlen($der)){throw new \RuntimeException('Invalid ECDSA length');}
+            return ord($der[$offset++]);
+        };
+        if(ord($der[$offset++]) !== 48){throw new \RuntimeException('Invalid ECDSA sequence');}
+        $length();
+        $raw = '';
+        for($i = 0; $i < 2; ++$i){
+            if(ord($der[$offset++]) !== 2){throw new \RuntimeException('Invalid ECDSA integer');}
+            $n = $length();
+            $part = ltrim(substr($der, $offset, $n), "\0");
+            $offset += $n;
+            if(strlen($part) > 48){throw new \RuntimeException('ECDSA integer too wide');}
+            $raw .= str_pad($part, 48, "\0", STR_PAD_LEFT);
+        }
+        if($offset !== strlen($der)){throw new \RuntimeException('Trailing ECDSA data');}
+        return $raw;
+    }
+
     /** @return array<string, mixed> */
     private function verifyMinecraftToken(string $jwt, int $now) : array{
         if(strlen($jwt) > self::MAX_TOKEN){throw new \InvalidArgumentException('Identity JWT too large');}
@@ -144,14 +193,16 @@ final class NetherNetIdentityAssertionVerifier{
         $header = self::decodeJsonPart($parts[0]);
         $claims = self::decodeJsonPart($parts[1]);
         $alg = $header['alg'] ?? null;
-        if(!in_array($alg, ['RS256', 'RS384', 'ES256', 'ES384'], true)){
+        if(!in_array($alg, ['RS256', 'RS384', 'ES256', 'ES384'], true) || isset($header['crit']) || isset($header['b64']) ||
+            !is_string($header['kid'] ?? null) || strlen($header['kid']) > 256){
             throw new \InvalidArgumentException('Unsupported Minecraft JWT algorithm');
         }
         $signature = self::decodeUrlPart($parts[2]);
         $verified = false;
         foreach($this->keys as $kid => $entry){
             if(isset($header['kid']) && $header['kid'] !== $kid){continue;}
-            if(($entry['kty'] === 'RSA') !== str_starts_with($alg, 'RS')){continue;}
+            if(($entry['kty'] === 'RSA') !== str_starts_with($alg, 'RS') ||
+                ($entry['alg'] !== null && $entry['alg'] !== $alg)){continue;}
             $key = openssl_pkey_get_public($entry['pem']);
             if($key === false){continue;}
             $raw = str_starts_with($alg, 'ES') ? self::ecdsaJoseToDer($signature, $alg === 'ES384' ? 48 : 32) : $signature;
@@ -169,8 +220,8 @@ final class NetherNetIdentityAssertionVerifier{
             !is_int($claims['exp'] ?? null) || $claims['exp'] <= $now - self::SKEW ||
             (isset($claims['nbf']) && (!is_int($claims['nbf']) || $claims['nbf'] > $now + self::SKEW)) ||
             (isset($claims['iat']) && (!is_int($claims['iat']) || $claims['iat'] > $now + self::SKEW)) ||
-            !is_string($claims['cpk'] ?? null) ||
-            !is_string($claims['xid'] ?? null) || $claims['xid'] === ''){
+            !(is_string($claims['cpk'] ?? null) || is_array($claims['cpk'] ?? null)) ||
+            !is_string($claims['xid'] ?? null) || preg_match('/\A[0-9]{1,20}\z/D', $claims['xid']) !== 1){
             throw new \InvalidArgumentException('Minecraft token claims invalid or expired');
         }
         return $claims;
@@ -191,7 +242,7 @@ final class NetherNetIdentityAssertionVerifier{
         if($s === false){throw new \InvalidArgumentException('Bad Base64URL data');}
         return $s;
     }
-    private static function encodeUrl(string $data) : string{
+    public static function encodeUrl(string $data) : string{
         return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 
@@ -210,15 +261,15 @@ final class NetherNetIdentityAssertionVerifier{
         if((ord($s[0]) & 0x80) !== 0){$s = "\0" . $s;}
         return self::tlv(2, $s);
     }
-    private static function ecdsaJoseToDer(string $raw, int $n) : string{
+    public static function ecdsaJoseToDer(string $raw, int $n) : string{
         if(strlen($raw) !== 2 * $n){throw new \InvalidArgumentException('Invalid ECDSA signature length');}
         return self::tlv(48, self::derInt(substr($raw, 0, $n)) . self::derInt(substr($raw, $n)));
     }
-    private static function derToPem(string $der) : string{
+    public static function derToPem(string $der) : string{
         return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
     }
     /** @param array<string, mixed> $jwk */
-    private static function jwkPublicPem(array $jwk) : ?string{
+    public static function jwkPublicPem(array $jwk) : ?string{
         if(isset($jwk['x5c'][0]) && is_string($jwk['x5c'][0])){
             $cert = base64_decode($jwk['x5c'][0], true);
             if($cert === false || strlen($cert) > 16384){return null;}

@@ -41,7 +41,8 @@ final class NetherNetSharedPortSocket extends ServerSocket{
 	public function __construct(
 		InternetAddress $bindAddress,
 		private int $iceBackendPort,
-		private ThreadSafeArray $commands
+		private ThreadSafeArray $commands,
+		private ?ThreadSafeArray $peerEvents = null
 	){
 		if($bindAddress->getVersion() !== 4){
 			throw new \InvalidArgumentException("The first shared-port implementation supports IPv4 only");
@@ -120,7 +121,9 @@ final class NetherNetSharedPortSocket extends ServerSocket{
 			socket_close($this->relays[$key]["socket"]);
 			unset($this->relays[$key]);
 		}
-		if(count($this->relays) >= self::MAX_RELAYS){
+		if(count($this->relays) >= self::MAX_RELAYS ||
+			count(array_filter($this->relays, static fn(array $r) => $r["ufrag"] === $ufrag)) >= 8 ||
+			($this->peerEvents !== null && count($this->peerEvents) >= 1024)){
 			return null;
 		}
 		$socket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
@@ -132,6 +135,10 @@ final class NetherNetSharedPortSocket extends ServerSocket{
 			!@socket_set_nonblock($socket)){
 			socket_close($socket);
 			return null;
+		}
+		if($this->peerEvents !== null){
+			socket_getsockname($socket, $relayIp, $relayPort);
+			$this->peerEvents[] = json_encode(["ufrag" => $ufrag, "ip" => $ip, "port" => $port, "relayPort" => $relayPort], JSON_THROW_ON_ERROR);
 		}
 		$this->relays[$key] = [
 			"socket" => $socket,
