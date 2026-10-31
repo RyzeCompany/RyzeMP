@@ -176,6 +176,45 @@ final class NativeCommandApiTest extends TestCase{
 	}
 
 
+
+	public function testAvailableCommandsWirePermissionUsesCanonicalCasingOnModernProtocols() : void{
+		$command = $this->command(static function(BaseCommand $cmd) : void{
+			$cmd->registerArgument(0, new RawStringArgument("namecrate"));
+		});
+		$map = $this->createMock(SimpleCommandMap::class);
+		$map->method("getCommands")->willReturn(["crate" => $command]);
+		$server = $this->createMock(\pocketmine\Server::class);
+		$server->method("getCommandMap")->willReturn($map);
+		$player = $this->createMock(\pocketmine\player\Player::class);
+		(new \ReflectionProperty(\pocketmine\entity\Entity::class, "closed"))->setValue($player, true);
+		(new \ReflectionProperty(\pocketmine\player\Player::class, "logger"))->setValue($player, $this->createMock(\Logger::class));
+		$player->method("hasPermission")->willReturn(true);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+			$session->method("getProtocolId")->willReturn($protocol);
+			$packet = null;
+			$session->method("sendDataPacket")->willReturnCallback(static function($sent) use (&$packet) : bool{
+				$packet = $sent;
+				return true;
+			});
+			$session->syncAvailableCommands();
+			self::assertInstanceOf(AvailableCommandsPacket::class, $packet);
+
+			$writer = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($writer, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
+			$commands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertCount(1, $commands);
+			self::assertSame($protocol >= 898 ? "Any" : "any", $commands[0]->getPermission(),
+				"AvailableCommands wire permission must match the protocol's case-sensitive enum string");
+			self::assertSame("namecrate", $commands[0]->getOverloads()[0]->getParameters()[0]->paramName);
+		}
+	}
+
 	public function testFullCommandPacketDeduplicatesEnumsAndSurvivesEveryProtocolGeneration() : void{
 		$hard = static fn(string $arg, string $name, array $values) :
 			CommandParameter => CommandParameter::enum($arg, new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($name, $values), 0);
