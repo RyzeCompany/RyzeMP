@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine;
 
+use Composer\Autoload\ClassLoader;
+use Composer\InstalledVersions;
+use ReflectionClass;
 use function define;
 use function defined;
 use function dirname;
@@ -35,8 +38,10 @@ define('pocketmine\_CORE_CONSTANTS_INCLUDED', true);
 
 define('pocketmine\PATH', dirname(__DIR__) . '/');
 define('pocketmine\RESOURCE_PATH', dirname(__DIR__) . '/resources/');
-define('pocketmine\BEDROCK_DATA_PATH', dirname(__DIR__) . '/vendor/ryzemcbe/bedrock-data/');
+// Composer consumers install dependencies beside RyzeMP, not inside its own
+// vendor directory. The same installed paths also work in the server PHAR.
+define('pocketmine\BEDROCK_DATA_PATH', InstalledVersions::getInstallPath('ryzemcbe/bedrock-data') . '/');
 define('pocketmine\LOCALE_DATA_PATH', dirname(__DIR__) . '/resources/translations/');
-define('pocketmine\BEDROCK_BLOCK_UPGRADE_SCHEMA_PATH', dirname(__DIR__) . '/vendor/pocketmine/bedrock-block-upgrade-schema/');
-define('pocketmine\BEDROCK_ITEM_UPGRADE_SCHEMA_PATH', dirname(__DIR__) . '/vendor/pocketmine/bedrock-item-upgrade-schema/');
-define('pocketmine\COMPOSER_AUTOLOADER_PATH', dirname(__DIR__) . '/vendor/autoload.php');
+define('pocketmine\BEDROCK_BLOCK_UPGRADE_SCHEMA_PATH', InstalledVersions::getInstallPath('pocketmine/bedrock-block-upgrade-schema') . '/');
+define('pocketmine\BEDROCK_ITEM_UPGRADE_SCHEMA_PATH', InstalledVersions::getInstallPath('pocketmine/bedrock-item-upgrade-schema') . '/');
+define('pocketmine\COMPOSER_AUTOLOADER_PATH', dirname((new ReflectionClass(ClassLoader::class))->getFileName(), 2) . '/autoload.php');

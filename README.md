@@ -40,6 +40,13 @@ Protocol 2225 uses first-party [RyzeRTC](https://github.com/RyzeCompany/RyzeRTC/
 
 See [egg updates](docs/EGG_UPDATES.md) and [NetherNet integration](docs/BEDROCK_1_26_60_NETHERNET.md).
 
+## API for plugin developers
+
+Use `ryzemcbe/ryzemp:^5.44.2` as a Composer development dependency. The numeric
+Composer version follows the compatible plugin API; the server release remains
+`1.0.0-beta.4`. See [the Composer API guide](docs/COMPOSER_API.md) for installation,
+InvMenu, workstation requirements and the two tag series.
+
 ## Native command API
 
 RyzeMP includes Commando 3.3.0 for plugins, with structured arguments emitted

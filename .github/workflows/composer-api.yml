@@ -1,0 +1,71 @@
+name: RyzeMP Composer API
+
+on:
+  pull_request:
+    paths:
+      - composer.json
+      - composer.lock
+      - src/CoreConstants.php
+      - src/VersionInfo.php
+      - tests/composer-api-consumer.php
+      - .github/workflows/composer-api.yml
+  workflow_run:
+    workflows: [Build and Release Phar]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  consumer:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Validate the package
+        run: composer validate --strict --no-check-all
+      - name: Prepare a plugin developer consumer
+        run: php tests/composer-api-consumer.php prepare "$RUNNER_TEMP/ryzemp-api-consumer"
+      - name: Install the API with security checks enabled
+        run: composer install --working-dir="$RUNNER_TEMP/ryzemp-api-consumer" --no-interaction --no-progress --no-scripts
+      - name: Exercise the installed API and its real protocol data
+        run: php -d memory_limit=512M tests/composer-api-consumer.php verify "$RUNNER_TEMP/ryzemp-api-consumer"
+
+  publish:
+    if: (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Publish the immutable Composer API tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_version="$(sed -n 's/.*public const PLUGIN_API_VERSION = "\([^"]*\)";.*/\1/p' src/VersionInfo.php)"
+          [[ "$api_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$api_version" > /tmp/ryzemp-api-tag.json; then
+            echo "Composer API $api_version already exists; the published tag is preserved."
+            exit 0
+          fi
+          source_sha="$(git rev-parse HEAD)"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$api_version" -f "sha=$source_sha"
+          echo "Published Composer API $api_version from $source_sha."
+          echo 'This numeric tag does not create a PHAR release or change the egg channel.'

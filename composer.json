@@ -31,7 +31,7 @@
         "ext-yaml": ">=2.0.0",
         "ext-zip": "*",
         "ext-zlib": ">=1.2.11",
-        "composer-runtime-api": "^2.0",
+        "composer-runtime-api": "^2.1",
         "adhocore/json-comment": "~1.2.0",
         "netresearch/jsonmapper": "~v5.0.0",
         "pocketmine/bedrock-block-upgrade-schema": "~5.2.0+bedrock-1.21.110",
