@@ -274,6 +274,18 @@ final class NativeCommandApiTest extends TestCase{
 		$names = array_map(static fn($e) : string => $e->getName(), $packet->enums);
 		self::assertSame(count($names), count(array_unique($names)), "No duplicated named enums in the complete packet");
 		self::assertCount(2, $packet->commandData);
+		$diagnostic = CommandMetadata::describeCrateOverloads($commandData);
+		self::assertCount(3, $diagnostic, "Only edit/remove overloads are logged");
+		$entry = json_decode($diagnostic[0], true, flags: JSON_THROW_ON_ERROR);
+		self::assertSame("crate", $entry["command"]);
+		self::assertSame("edit", $entry["arguments"][0]["values"][0]);
+		self::assertSame($crates, $entry["arguments"][2]["values"]);
+		self::assertSame($effects, $entry["arguments"][3]["values"]);
+		self::assertStringNotContainsString('"default"', implode("\n", $diagnostic), "Unrelated rank data must not be logged");
+		self::assertSame(
+			['{"status":"no_crate_edit_or_remove_overloads"}'],
+			CommandMetadata::describeCrateOverloads([$commandData[1]])
+		);
 
 		foreach([589, 649, 898, 2193, 2225] as $protocol){
 			$writer = new \pmmp\encoding\ByteBufferWriter();
@@ -282,6 +294,11 @@ final class NativeCommandApiTest extends TestCase{
 			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
 			$commands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
 			self::assertSame(["crate", "rank"], array_map(static fn($c) : string => $c->getName(), $commands));
+			$wireTrace = CommandMetadata::describeCrateOverloads($commands);
+			self::assertCount(3, $wireTrace);
+			$wireEntry = json_decode($wireTrace[0], true, flags: JSON_THROW_ON_ERROR);
+			self::assertSame($crates, $wireEntry["arguments"][2]["values"]);
+			self::assertSame($effects, $wireEntry["arguments"][3]["values"]);
 			$variants = $commands[0]->getOverloads();
 			self::assertSame(["effect"], $variants[0]->getParameters()[1]->enum->getValues());
 			self::assertSame(["rewards"], $variants[1]->getParameters()[1]->enum->getValues());
