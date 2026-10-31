@@ -11,6 +11,7 @@ on:
       - ".github/workflows/ci-2225-phar-preview.yml"
       - "tests/phpunit/network/mcpe/nethernet/**"
       - "src/network/mcpe/nethernet/**"
+      - "tests/nethernet-tcp-probe.php"
       - "src/Server.php"
       - "src/network/mcpe/raklib/**"
       - "src/network/mcpe/NetworkSession.php"
@@ -70,6 +71,7 @@ jobs:
           set -euo pipefail
           php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; RyzeRTC transport not active\n";'
           find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+          php tests/nethernet-tcp-probe.php
           composer install --no-interaction --no-progress
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
       - name: Build and validate candidate PHAR
