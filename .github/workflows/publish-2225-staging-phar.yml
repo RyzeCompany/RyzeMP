@@ -1,0 +1,63 @@
+name: Publish RyzeMP 2225 experimental PHAR for Egg
+
+on:
+  push:
+    branches: [feature/bedrock-1.26.60-nethernet]
+    paths: ['.github/workflows/publish-2225-staging-phar.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify proven CI build and source ancestry
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source_sha='af8d0d491eed54333a88de2cc55e32245390c62a'
+          run='41146746671'
+          git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
+          git diff --exit-code "$source_sha" "$GITHUB_SHA" -- src build lib generated resources composer.json composer.lock
+          result="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
+          head="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json headSha --jq '.headSha')"
+          test "$result" = success
+          test "$head" = "$source_sha"
+      - name: Download exact experimental 2225 build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 41146746671 --repo "$GITHUB_REPOSITORY" \
+            --name RyzeMP-2225-RyzeRTC-STAGING --dir package
+          cd package
+          test -s RyzeMP-2225-RyzeRTC-STAGING.phar
+          test -s SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          test "$(stat -c %s RyzeMP-2225-RyzeRTC-STAGING.phar)" -gt 1000000
+      - name: Publish explicit staging prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='ryzemp-2225-rtc-staging.1'
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --prerelease \
+              --title 'RyzeMP 2225 · RyzeRTC STAGING PHAR (experimental)' \
+              --notes 'EXPERIMENTAL Bedrock protocol 2225 staged PHAR built in GitHub Actions 41146746671 from af8d0d491eed54333a88de2cc55e32245390c62a. Includes staged protocol/data, no Amber dependency. Does NOT contain RyzeRTC .so. Native extension is installed separately by the Pterodactyl Egg. This PHAR explicitly reports NetherNet transport unavailable because authenticated signaling and shared RakNet UDP are still incomplete. Not ready for real Minecraft 1.26.60 clients or production.'
+          fi
+          gh release upload "$tag" \
+            package/RyzeMP-2225-RyzeRTC-STAGING.phar package/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --clobber
