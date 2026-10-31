@@ -52,10 +52,12 @@ jobs:
               echo "$tag already published; its assets are preserved."
               exit 0
             fi
-            draft_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')"
+            draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$tag\") | .id")"
+            [[ "$draft_id" =~ ^[0-9]+$ ]]
+            draft_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.target_commitish')"
             if [[ "$draft_target" != "$GITHUB_SHA" ]]; then
               # An empty draft can be resumed after a publishing-only correction.
-              test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets | length')" = 0
+              test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.assets | length')" = 0
               gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
             fi
           else
