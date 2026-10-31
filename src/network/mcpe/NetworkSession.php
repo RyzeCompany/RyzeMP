@@ -1363,7 +1363,10 @@ class NetworkSession{
 			$commandData[$command->getLabel()] = $data;
 		}
 
-		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble(array_values($commandData), [], []));
+		// Resolve all enum definitions consistently across the entire command list,
+		// not one command at a time (subcommand overloads repeat enum names).
+		$normalized = \pocketmine\command\CommandMetadata::canonicalizePacketEnums(array_values($commandData));
+		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble($normalized, [], []));
 	}
 
 	/**
