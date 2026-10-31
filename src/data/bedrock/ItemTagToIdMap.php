@@ -45,6 +45,7 @@ final class ItemTagToIdMap{
 	use ProtocolSingletonTrait;
 
 	private const PATHS = [
+		2225 => "-1.26.60",
 		ProtocolInfo::PROTOCOL_1_26_51 => "-1.26.51",
 		ProtocolInfo::PROTOCOL_1_26_45 => "",
 		ProtocolInfo::PROTOCOL_1_26_40 => "",

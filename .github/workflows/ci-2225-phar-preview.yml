@@ -11,6 +11,10 @@ on:
       - ".github/workflows/ci-2225-phar-preview.yml"
       - "tests/phpunit/network/mcpe/nethernet/**"
       - "src/network/mcpe/nethernet/**"
+      - "src/network/mcpe/convert/**"
+      - "src/data/bedrock/ItemTagToIdMap.php"
+      - "tests/phpunit/network/mcpe/cache/**"
+      - "tests/fixtures/prespawn/**"
       - "tests/nethernet-*"
       - "src/network/mcpe/handler/ResourcePacksPacketHandler.php"
       - "src/Server.php"
@@ -77,6 +81,8 @@ jobs:
           RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
           composer install --no-interaction --no-progress
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/cache
       - name: Install pinned RyzeRTC API 2 and exercise real authenticated shared-port transport
         shell: bash
         run: |
@@ -105,6 +111,10 @@ jobs:
           set -euo pipefail
           python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP-2225-RyzeRTC-STAGING.phar
           php -r '$p=new Phar("RyzeMP-2225-RyzeRTC-STAGING.phar"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so"))throw new RuntimeException("Native library embedded in PHAR");}'
+      - name: Real PHAR pre-spawn, creative/recipes, terrain and world spawn regression
+        shell: bash
+        run: |
+          python3 tests/nethernet-prespawn-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP-2225-RyzeRTC-STAGING.phar
       - name: Smoke test headless startup and explicit missing-native diagnostics
         shell: bash
         run: |
@@ -138,5 +148,6 @@ jobs:
             RyzeMP-2225-RyzeRTC-STAGING.phar
             SHA256SUMS.txt
             native-phar-smoke.log
+            native-prespawn-smoke.log
           retention-days: 30
           if-no-files-found: error

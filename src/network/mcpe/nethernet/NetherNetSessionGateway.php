@@ -98,9 +98,18 @@ final class NetherNetSessionGateway{
 				disconnectScreenMessage: KnownTranslationFactory::pocketmine_disconnect_error_badPacket()
 			);
 		}catch(\Throwable $e){
-			$this->server->getLogger()->emergency(
-				"Unexpected NetherNet session error for " . $session->getDisplayName()
-			);
+			$logger = $this->server->getLogger();
+			$logger->emergency("Unexpected NetherNet session error for " . $session->getDisplayName() .
+				": " . get_class($e) . " at " . $e->getFile() . ":" . $e->getLine());
+			if($e instanceof \pocketmine\utils\AssumptionFailedError){
+				$logger->error("Internal invariant: " . substr($e->getMessage(), 0, 2048));
+			}
+			// Deliberately omit trace arguments: packet/SDP/JWT values must not be logged.
+			foreach(array_slice($e->getTrace(), 0, 16) as $i => $frame){
+				$logger->error("NetherNet trace #$i " . ($frame["class"] ?? "") .
+					($frame["type"] ?? "") . $frame["function"] . " at " .
+					($frame["file"] ?? "[internal]") . ":" . ($frame["line"] ?? 0));
+			}
 			throw $e;
 		}
 	}

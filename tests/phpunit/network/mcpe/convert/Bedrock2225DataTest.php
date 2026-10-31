@@ -53,4 +53,22 @@ final class Bedrock2225DataTest extends TestCase{
 		self::assertCount(23960, $converter->getBlockTranslator()->getBlockStateDictionary()->getStates());
 	}
 
+	public function testChorusPlantMapsToItsRealNetworkStateAndRetainsAllConnectionVariants() : void{
+		$this->requireStagedAssets();
+		$converter = TypeConverter::getInstance(2225);
+		$dictionary = $converter->getBlockTranslator()->getBlockStateDictionary();
+		[, , $runtimeId] = $converter->getItemTranslator()->toNetworkId(\pocketmine\block\VanillaBlocks::CHORUS_PLANT()->asItem());
+		self::assertNotNull($runtimeId);
+		self::assertSame("minecraft:chorus_plant", $dictionary->generateDataFromStateId($runtimeId)?->getName());
+		$variants = 0;
+		foreach($dictionary->getStates() as $id => $state){
+			if($state->getStateName() !== "minecraft:chorus_plant"){continue;}
+			++$variants;
+			self::assertSame([], $state->generateCurrentStateData()->getStates());
+			self::assertCount(6, $state->generateStateData()->getStates());
+			self::assertSame($id, $dictionary->lookupStateIdFromData($state->generateStateData()));
+		}
+		self::assertSame(64, $variants);
+	}
+
 }

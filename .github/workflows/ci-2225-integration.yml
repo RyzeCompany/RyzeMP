@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/ci-2225-integration.yml"
       - "src/network/mcpe/convert/**"
+      - "src/data/bedrock/ItemTagToIdMap.php"
+      - "tests/phpunit/network/mcpe/cache/**"
       - "tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php"
   pull_request:
     branches: [main]
@@ -53,3 +55,6 @@ jobs:
           php -d memory_limit=2G vendor/bin/phpunit \
             --bootstrap vendor/autoload.php --fail-on-warning \
             tests/phpunit/network/mcpe/nethernet
+          php -d memory_limit=2G vendor/bin/phpunit \
+            --bootstrap vendor/autoload.php --fail-on-warning \
+            tests/phpunit/network/mcpe/cache
