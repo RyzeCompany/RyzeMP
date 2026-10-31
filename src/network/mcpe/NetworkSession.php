@@ -83,6 +83,7 @@ use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler;
+use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler;
 use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\network\mcpe\protocol\ServerboundPacket;
 use pocketmine\network\mcpe\protocol\ServerToClientHandshakePacket;
@@ -715,6 +716,23 @@ class NetworkSession{
 				}
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
+				// Inspect the actual outbound bytes, after DataPacketSendEvent has run.
+				// This is opt-in and only applies to AvailableCommandsPacket.
+				if($evPacket instanceof AvailableCommandsPacket &&
+					$this->server->getConfigGroup()->getPropertyBool("debug.crate-command-packets", false)){
+					try{
+						$decoded = new AvailableCommandsPacket();
+						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
+						$wireCommands = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+						$this->logger->debug("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
+						foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads($wireCommands) as $line){
+							$this->logger->debug("[CrateCommandTrace] stage=wire " . $line);
+						}
+					}catch(\Throwable $e){
+						// Diagnostics must never interrupt a valid connection.
+						$this->logger->warning("[CrateCommandTrace] stage=wire_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
+					}
+				}
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
@@ -1364,6 +1382,15 @@ class NetworkSession{
 			);
 
 			$commandData[$command->getLabel()] = $data;
+		}
+
+		// Disabled by default: report only crate edit/remove structures before
+		// normalization, never raw packet bytes or unrelated player commands.
+		if($this->server->getConfigGroup()->getPropertyBool("debug.crate-command-packets", false)){
+			$this->logger->debug("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
+			foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
+				$this->logger->debug("[CrateCommandTrace] stage=metadata " . $line);
+			}
 		}
 
 		// Resolve all enum definitions consistently across the entire command list,
