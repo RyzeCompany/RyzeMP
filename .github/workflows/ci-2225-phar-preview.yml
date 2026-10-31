@@ -73,7 +73,9 @@ jobs:
           php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 ){exit(1);} echo "2225 protocol and data staged; RyzeRTC transport not active\n";'
           find src lib generated tests/phpunit/network/mcpe/nethernet -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
           php tests/nethernet-tcp-probe.php
-          php tests/nethernet-identity-verifier.php
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
+          RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
           composer install --no-interaction --no-progress
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/nethernet
       - name: Build and validate candidate PHAR
