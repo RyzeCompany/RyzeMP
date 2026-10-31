@@ -34,6 +34,8 @@ final class VersionInfo{
 	public const BASE_VERSION = "1.0.0-beta.4";
 	/** PocketMine-MP 5 plugin API compatibility version; independent of the RyzeMP release. */
 	public const PLUGIN_API_VERSION = "5.44.2";
+	/** Immutable Composer artifact revision; plugin compatibility uses PLUGIN_API_VERSION. */
+	public const COMPOSER_API_VERSION = "5.44.2-p1";
 	public const IS_DEVELOPMENT_BUILD = false;
 	public const BUILD_CHANNEL = "beta";
 	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";

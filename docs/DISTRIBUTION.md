@@ -9,7 +9,7 @@ RyzeMP ships through two complementary channels. Both distribute **the same serv
 The main package is `ryzemcbe/ryzemp` with Composer type `project`.
 
 Plugin developers can require the same source using its numeric Composer API
-tag, `ryzemcbe/ryzemp:^5.44.2`. This is separate from the server/PHAR version.
+tag, `ryzemcbe/ryzemp:^5.44.2-p1`. This is separate from the server/PHAR version.
 See [the Composer API guide](COMPOSER_API.md). Numeric API tags do not create
 GitHub Releases or replace egg manifests.
 

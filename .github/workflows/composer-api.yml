@@ -58,8 +58,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          api_version="$(sed -n 's/.*public const PLUGIN_API_VERSION = "\([^"]*\)";.*/\1/p' src/VersionInfo.php)"
-          [[ "$api_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          api_version="$(sed -n 's/.*public const COMPOSER_API_VERSION = "\([^"]*\)";.*/\1/p' src/VersionInfo.php)"
+          [[ "$api_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-p[0-9]+)?$ ]]
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$api_version" > /tmp/ryzemp-api-tag.json; then
             echo "Composer API $api_version already exists; the published tag is preserved."
             exit 0

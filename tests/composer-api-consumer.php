@@ -13,7 +13,7 @@ if($directory === '' || !in_array($mode, ['prepare', 'verify'], true)){
 
 if($mode === 'prepare'){
 	$source = dirname(__DIR__);
-	if(!preg_match('/public const PLUGIN_API_VERSION = "([0-9]+\\.[0-9]+\\.[0-9]+)";/', file_get_contents($source . '/src/VersionInfo.php'), $matches)){
+	if(!preg_match('/public const COMPOSER_API_VERSION = "([0-9]+\\.[0-9]+\\.[0-9]+(?:-p[0-9]+)?)";/', file_get_contents($source . '/src/VersionInfo.php'), $matches)){
 		throw new RuntimeException('Cannot read the Composer API version.');
 	}
 	if(!is_dir($directory) && !mkdir($directory, 0777, true)){
@@ -60,4 +60,4 @@ $inventory->setItem(0, \pocketmine\item\VanillaItems::DIAMOND()->setCount(3));
 if($inventory->getItem(0)->getCount() !== 3){
 	throw new RuntimeException('Real inventory API did not retain its contents.');
 }
-echo 'RyzeMP Composer API ' . \pocketmine\VersionInfo::PLUGIN_API_VERSION . ': autoload, dependency paths, protocol data and inventory verified.' . PHP_EOL;
+echo 'RyzeMP Composer API ' . \pocketmine\VersionInfo::COMPOSER_API_VERSION . ': autoload, dependency paths, protocol data and inventory verified.' . PHP_EOL;
