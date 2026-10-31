@@ -168,6 +168,8 @@ class NetworkSession{
 	private PacketRateLimiter $gamePacketLimiter;
 
 	private \PrefixedLogger $logger;
+	/** Temporary: trace the first command synchronization only, per session. */
+	private bool $crateCommandTraceCompleted = false;
 	private ?Player $player = null;
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
@@ -716,17 +718,17 @@ class NetworkSession{
 				}
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
-				// Inspect the actual outbound bytes, after DataPacketSendEvent has run.
-				// This is opt-in and only applies to AvailableCommandsPacket.
-				if($evPacket instanceof AvailableCommandsPacket &&
-					$this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::DEBUG_CRATE_COMMAND_PACKETS, false)){
+				// Read only the first outgoing AvailableCommandsPacket of this session.
+				// DataPacketSendEvent has already run, so these are the final bytes.
+				if($evPacket instanceof AvailableCommandsPacket && !$this->crateCommandTraceCompleted){
+					$this->crateCommandTraceCompleted = true; // Avoid duplicate logs on later refreshes.
 					try{
 						$decoded = new AvailableCommandsPacket();
 						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
 						$wireCommands = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
-						$this->logger->debug("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
+						$this->logger->info("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
 						foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads($wireCommands) as $line){
-							$this->logger->debug("[CrateCommandTrace] stage=wire " . $line);
+							$this->logger->info("[CrateCommandTrace] stage=wire " . $line);
 						}
 					}catch(\Throwable $e){
 						// Diagnostics must never interrupt a valid connection.
@@ -1384,12 +1386,12 @@ class NetworkSession{
 			$commandData[$command->getLabel()] = $data;
 		}
 
-		// Disabled by default: report only crate edit/remove structures before
-		// normalization, never raw packet bytes or unrelated player commands.
-		if($this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::DEBUG_CRATE_COMMAND_PACKETS, false)){
-			$this->logger->debug("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
+		// Temporary diagnostic, automatically logged once per session.
+		// Only crate edit/remove arguments are included; never raw packet bytes.
+		if(!$this->crateCommandTraceCompleted){
+			$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
 			foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
-				$this->logger->debug("[CrateCommandTrace] stage=metadata " . $line);
+				$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
 			}
 		}
 
