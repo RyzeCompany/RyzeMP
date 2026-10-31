@@ -175,6 +175,85 @@ final class NativeCommandApiTest extends TestCase{
 		self::assertContains("samplealias", $data->commandData[0]->aliases->getValues());
 	}
 
+
+	public function testFullCommandPacketDeduplicatesEnumsAndSurvivesEveryProtocolGeneration() : void{
+		$hard = static fn(string $arg, string $name, array $values) :
+			CommandParameter => CommandParameter::enum($arg, new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($name, $values), 0);
+		$soft = static fn(string $arg, string $name, array $values) :
+			CommandParameter => CommandParameter::softEnum($arg, new \pocketmine\network\mcpe\protocol\types\command\CommandSoftEnum($name, $values), 0);
+		$makeOverload = static fn(array $parameters) => new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, $parameters);
+		$crates = ["King", "Mythic", "Legends", "Zeus", "Infernal", "KOTH"];
+		$effects = ["NONE", "HEART", "LAVA", "RAINBOW_HELIX"];
+		$commandData = [
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				"crate", "Crates", 0, 0, null, [
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:edit", ["edit"]),
+						$hard("field", "hcf:crate:field", ["effect"]),
+						$hard("namecrate", "hcf:crate_choice", $crates),
+						$hard("effect", "hcf:effects", $effects)
+					]),
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:edit", ["edit"]),
+						$hard("field", "hcf:crate:field", ["rewards"]),
+						$hard("namecrate", "hcf:crate_choice", $crates),
+						CommandParameter::standard("amount", AvailableCommandsPacket::ARG_TYPE_INT)
+					]),
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:remove", ["remove"]),
+						$hard("namecrate", "hcf:crate_choice", $crates)
+					])
+				], []
+			),
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				"rank", "Ranks", 0, 0, null, [
+					$makeOverload([
+						$soft("rank", "hcf:rank", ["default", "admin"]),
+						$hard("unrelated", "many:values", ["default", ...array_map(
+							static fn(int $n) : string => "value_" . $n, range(1, 300)
+						)])
+					])
+				], []
+			)
+		];
+
+		// Reproduce the real assembler problem: the same named enum was emitted
+		// several times because each overload created a new object instance.
+		$original = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($commandData, [], []);
+		$originalNames = array_map(static fn($e) : string => $e->getName(), $original->enums);
+		self::assertGreaterThan(count(array_unique($originalNames)), count($originalNames));
+
+		\pocketmine\command\CommandMetadata::canonicalizePacketEnums($commandData);
+		$overloads = $commandData[0]->getOverloads();
+		self::assertSame($overloads[0]->getParameters()[0]->enum, $overloads[1]->getParameters()[0]->enum);
+		self::assertSame($overloads[0]->getParameters()[2]->enum, $overloads[1]->getParameters()[2]->enum);
+		self::assertSame($overloads[0]->getParameters()[2]->enum, $overloads[2]->getParameters()[1]->enum);
+		self::assertNotSame($overloads[0]->getParameters()[1]->enum, $overloads[1]->getParameters()[1]->enum);
+		self::assertNotSame($overloads[0]->getParameters()[1]->enum->getName(), $overloads[1]->getParameters()[1]->enum->getName());
+
+		$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($commandData, [], []);
+		$names = array_map(static fn($e) : string => $e->getName(), $packet->enums);
+		self::assertSame(count($names), count(array_unique($names)), "No duplicated named enums in the complete packet");
+		self::assertCount(2, $packet->commandData);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$writer = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($writer, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
+			$commands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertSame(["crate", "rank"], array_map(static fn($c) : string => $c->getName(), $commands));
+			$variants = $commands[0]->getOverloads();
+			self::assertSame(["effect"], $variants[0]->getParameters()[1]->enum->getValues());
+			self::assertSame(["rewards"], $variants[1]->getParameters()[1]->enum->getValues());
+			self::assertSame($crates, $variants[0]->getParameters()[2]->enum->getValues());
+			self::assertSame($crates, $variants[1]->getParameters()[2]->enum->getValues());
+			self::assertSame($crates, $variants[2]->getParameters()[1]->enum->getValues());
+			self::assertSame($effects, $variants[0]->getParameters()[3]->enum->getValues());
+			self::assertSame(["default", "admin"], $commands[1]->getOverloads()[0]->getParameters()[0]->enum->getValues());
+		}
+	}
+
 	public function testNativeSetupNeedsNoOutgoingInterceptor() : void{
 		self::assertSame(1, CommandMetadata::API_VERSION);self::assertTrue(PacketHooker::isRegistered());
 		PacketHooker::register($this->plugin);PacketHooker::register($this->plugin);
