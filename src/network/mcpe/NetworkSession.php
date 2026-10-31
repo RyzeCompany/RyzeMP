@@ -719,7 +719,7 @@ class NetworkSession{
 				// Inspect the actual outbound bytes, after DataPacketSendEvent has run.
 				// This is opt-in and only applies to AvailableCommandsPacket.
 				if($evPacket instanceof AvailableCommandsPacket &&
-					$this->server->getConfigGroup()->getPropertyBool("debug.crate-command-packets", false)){
+					$this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::DEBUG_CRATE_COMMAND_PACKETS, false)){
 					try{
 						$decoded = new AvailableCommandsPacket();
 						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
@@ -1386,7 +1386,7 @@ class NetworkSession{
 
 		// Disabled by default: report only crate edit/remove structures before
 		// normalization, never raw packet bytes or unrelated player commands.
-		if($this->server->getConfigGroup()->getPropertyBool("debug.crate-command-packets", false)){
+		if($this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::DEBUG_CRATE_COMMAND_PACKETS, false)){
 			$this->logger->debug("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
 			foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
 				$this->logger->debug("[CrateCommandTrace] stage=metadata " . $line);
