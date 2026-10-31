@@ -66,6 +66,7 @@ final class YmlServerProperties{
 	public const CONSOLE_ENABLE_INPUT = 'console.enable-input';
 	public const CONSOLE_TITLE_TICK = 'console.title-tick';
 	public const DEBUG = 'debug';
+	public const DEBUG_CRATE_COMMAND_PACKETS = 'debug.crate-command-packets';
 	public const DEBUG_LEVEL = 'debug.level';
 	public const FISHING = 'fishing';
 	public const FISHING_BITE_WAIT_MAX_TICKS = 'fishing.bite-wait-max-ticks';
