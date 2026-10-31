@@ -1,0 +1,35 @@
+name: NetherNet TCP diagnostics and RakNet shared port
+on:
+  push:
+    branches: [feature/bedrock-1.26.60-nethernet]
+    paths:
+      - src/network/mcpe/nethernet/NetherNetSignalingProbeInterface.php
+      - src/Server.php
+      - tests/nethernet-tcp-probe.php
+      - .github/workflows/ci-nethernet-tcp-diagnostics.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tcp-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: none
+      - name: Syntax and same UDP/TCP port with safe refusals
+        run: |
+          set -euo pipefail
+          php -l src/network/mcpe/nethernet/NetherNetSignalingProbeInterface.php
+          php -l src/Server.php
+          php -l tests/nethernet-tcp-probe.php
+          php tests/nethernet-tcp-probe.php
+          grep -Fq 'NetherNetSignalingProbeInterface' src/Server.php
+          if grep -Eq 'nethernet-enabled=|nethernet-ice-port=19134' src/Server.php; then
+            echo 'Unexpected additional NetherNet config introduced'
+            exit 1
+          fi
