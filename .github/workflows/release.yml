@@ -140,3 +140,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish egg update manifest after release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          channel=estable
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then channel=pruebas; fi
+          python3 tools/release-manifest.py --release "$GITHUB_REF_NAME" --channel "$channel" \
+            --phar "RyzeMP_${GITHUB_REF_NAME}.phar" --out ryzemp-update.json
+          # This asset opts the completed release into automatic reinstall updates.
+          # Never silently replace an already-published update manifest.
+          if gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --pattern ryzemp-update.json --dir existing-manifest; then
+            cmp ryzemp-update.json existing-manifest/ryzemp-update.json
+          else
+            gh release upload "$GITHUB_REF_NAME" ryzemp-update.json --repo "$GITHUB_REPOSITORY"
+          fi
+
