@@ -24,8 +24,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          source_sha='af8d0d491eed54333a88de2cc55e32245390c62a'
-          run='41146746671'
+          source_sha='dc7cfce9a34a925fe4f16d66a8dc29cef9d4784b'
+          run='41153670102'
           git merge-base --is-ancestor "$source_sha" "$GITHUB_SHA"
           git diff --exit-code "$source_sha" "$GITHUB_SHA" -- src build lib generated resources composer.json composer.lock
           result="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')"
@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh run download 41146746671 --repo "$GITHUB_REPOSITORY" \
+          gh run download 41153670102 --repo "$GITHUB_REPOSITORY" \
             --name RyzeMP-2225-RyzeRTC-STAGING --dir package
           cd package
           test -s RyzeMP-2225-RyzeRTC-STAGING.phar
@@ -51,12 +51,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag='ryzemp-2225-rtc-staging.1'
+          tag='ryzemp-2225-rtc-tcp-diagnostics.1'
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" --prerelease \
-              --title 'RyzeMP 2225 · RyzeRTC STAGING PHAR (experimental)' \
-              --notes 'EXPERIMENTAL Bedrock protocol 2225 staged PHAR built in GitHub Actions 41146746671 from af8d0d491eed54333a88de2cc55e32245390c62a. Includes staged protocol/data, no Amber dependency. Does NOT contain RyzeRTC .so. Native extension is installed separately by the Pterodactyl Egg. This PHAR explicitly reports NetherNet transport unavailable because authenticated signaling and shared RakNet UDP are still incomplete. Not ready for real Minecraft 1.26.60 clients or production.'
+              --title 'RyzeMP 2225 · first-party RTC TCP DIAGNOSTICS (experimental)' \
+              --notes 'EXPERIMENTAL Bedrock protocol 2225 staged PHAR built in GitHub Actions 41153670102 from dc7cfce9a34a925fe4f16d66a8dc29cef9d4784b. Includes staged 2225 protocol/data plus a bounded same-public-port TCP diagnostic endpoint (GET /v1/join returns 404, SDP POST returns 503), and an unconnected validator for official Minecraft JWT and detached ES384 DTLS fingerprint assertions. Test using TCP and UDP on the original port. NO Minecraft 1.26.60 game sessions are enabled. Does NOT contain RyzeRTC .so; Egg loads that separately. Signaling identity key updates, persistent server signer, signed answers, UDP shared mux and DataChannel sessions are NOT complete. Never use in production or claim Terracotta resolved.'
           fi
           gh release upload "$tag" \
             package/RyzeMP-2225-RyzeRTC-STAGING.phar package/SHA256SUMS.txt \
