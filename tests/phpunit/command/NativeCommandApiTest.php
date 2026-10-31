@@ -166,6 +166,8 @@ final class NativeCommandApiTest extends TestCase{
 		$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
 		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
 		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+		// Real sessions initialize their own logger in the constructor; mocks must as well.
+		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
 		$session->method("getProtocolId")->willReturn(589);$packets = [];
 		$session->method("sendDataPacket")->willReturnCallback(function($packet) use (&$packets) : bool{$packets[] = $packet;return true;});
 		$session->syncAvailableCommands();
@@ -194,6 +196,8 @@ final class NativeCommandApiTest extends TestCase{
 			$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
 			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
 			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+		// Real sessions initialize their own logger in the constructor; mocks must as well.
+		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
 			$session->method("getProtocolId")->willReturn($protocol);
 			$packet = null;
 			$session->method("sendDataPacket")->willReturnCallback(static function($sent) use (&$packet) : bool{
