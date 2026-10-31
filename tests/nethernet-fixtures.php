@@ -6,8 +6,8 @@ final class NetherNetFixtures{
     public \OpenSSLAsymmetricKey $client;
     public array $jwk;
     public string $clientDer;
-    public function __construct(){
-        $rsa = getenv('RYZE_TEST_RSA_PEM'); $ec = getenv('RYZE_TEST_EC_PEM');
+    public function __construct(bool $readEnvironment = true){
+        $rsa = $readEnvironment ? getenv('RYZE_TEST_RSA_PEM') : false; $ec = $readEnvironment ? getenv('RYZE_TEST_EC_PEM') : false;
         $this->authority = $rsa !== false ? openssl_pkey_get_private(file_get_contents($rsa)) : openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA,'private_key_bits'=>2048,'config'=>'/etc/ssl/openssl.cnf']);
         $this->client = $ec !== false ? openssl_pkey_get_private(file_get_contents($ec)) : openssl_pkey_new(['ec'=>['curve_name'=>'secp384r1']]);
         $details = openssl_pkey_get_details($this->authority);

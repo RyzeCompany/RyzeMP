@@ -22,7 +22,7 @@ foreach([
 $reject(str_replace($fp,str_replace('AB','CD',$fp),$valid));
 $reject(str_replace('a=identity:','a=unknown:',$valid));
 $reject($valid."a=identity:AAAA\r\n");
-$other=new NetherNetFixtures();
+$other=new NetherNetFixtures(false);
 try{Verifier::fromOfficialJwks($other->jwks())->validate($valid);throw new RuntimeException('Accepted untrusted authority');}catch(InvalidArgumentException){}
 $directory=sys_get_temp_dir().'/ryze-identity-'.bin2hex(random_bytes(6));
 mkdir($directory,0700);
