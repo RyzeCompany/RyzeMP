@@ -6,6 +6,8 @@ on:
       - src/network/mcpe/nethernet/NetherNetSignalingProbeInterface.php
       - src/Server.php
       - tests/nethernet-tcp-probe.php
+      - tests/nethernet-identity-verifier.php
+      - src/network/mcpe/nethernet/NetherNetIdentityAssertionVerifier.php
       - .github/workflows/ci-nethernet-tcp-diagnostics.yml
   workflow_dispatch:
 permissions:
@@ -28,6 +30,8 @@ jobs:
           php -l src/Server.php
           php -l tests/nethernet-tcp-probe.php
           php tests/nethernet-tcp-probe.php
+          php -l src/network/mcpe/nethernet/NetherNetIdentityAssertionVerifier.php
+          php tests/nethernet-identity-verifier.php
           grep -Fq 'NetherNetSignalingProbeInterface' src/Server.php
           if grep -Eq 'nethernet-enabled=|nethernet-ice-port=19134' src/Server.php; then
             echo 'Unexpected additional NetherNet config introduced'
