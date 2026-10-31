@@ -35,6 +35,15 @@ The existing pure-PHP staging pieces include `NetherNetEndpoint`, `NetherNetFram
 - Once the backend is feature-complete and ABI/runtime tests pass, publish a **versioned, checksummed release in RyzeCompany/RyzeRTC**. Only then update the Pterodactyl Egg to download that official release and its shared library dependencies to a private persistent directory. Pin integrity hashes; fail closed if the binary is incompatible or absent.
 - Do not deploy the earlier external RTC release or confuse that binary with `ryzertc.so`. The two are not interchangeable.
 
+
+## TCP diagnostics and signed-offer verification (new WIP)
+
+- The staging RyzeMP now binds a **nonblocking, bounded HTTP diagnostic listener on TCP `server-ip:server-port`**, without touching RakLib's UDP binding. `GET /v1/join` returns 404 (consistent with *not serving NetherNet yet*); `POST /v1/join/{id}` returns 503. The listener refuses to accept SDP until production authentication exists. Incoming probe and refused offer counts are logged, with no SDP, JWT, identity assertion or sensitive headers. This helps distinguish missing Pterodactyl TCP publication from incomplete application-level signaling.
+- `NetherNetIdentityAssertionVerifier` validates the Minecraft authorization JWT signature against **keys supplied only from the official Minecraft HTTPS JWKS**, enforces issuer/audience/expiry, and verifies the **detached ES384 signature over the SDP DTLS fingerprints** using its `cpk` key. It has no client-accepted self-signed bypass and is not wired into a public join endpoint yet.
+- [Standalone same-port HTTP test](../../tests/nethernet-tcp-probe.php) asserts UDP co-existence, 404/503, header limits, safe logs, and cleanup. [Synthetic cryptographic verifier test](../../tests/nethernet-identity-verifier.php) asserts valid chain and rejects modified signatures, expiry, duplicate assertions. Synthetic keys are test-only and never deployed as trust anchors.
+- The still-missing **production** steps are fetching/refreshing official JWKS securely outside the tick loop, server P-384 identity generation and persistent storage, SDP signing, native ICE/DTLS/SCTP ↔ authenticated session integration, public shared-port UDP relay, and actual Bedrock client verification. The PHAR must not advertise NetherNet as enabled before these are complete.
+- Keep the same Pterodactyl game port published for **TCP and UDP**. A TCP socket listening *inside* the container does not guarantee Wings/proxy exposed the TCP port on the public address. Never log or accept raw unverified SDP merely to make Terracotta disappear.
+
 ## Blocking implementation and verification work
 
 1. **Native RyzeRTC:** bounded async event queue, reliable and unreliable SCTP DataChannels, incoming channel notifications, backpressure and safe multithreaded cleanup. Validate native ICE/DTLS and fingerprint binding, especially multiple peers sharing a private ICE mux.
