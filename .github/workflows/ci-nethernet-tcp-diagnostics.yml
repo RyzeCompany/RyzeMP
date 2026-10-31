@@ -31,7 +31,9 @@ jobs:
           php -l tests/nethernet-tcp-probe.php
           php tests/nethernet-tcp-probe.php
           php -l src/network/mcpe/nethernet/NetherNetIdentityAssertionVerifier.php
-          php tests/nethernet-identity-verifier.php
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ryze-nethernet-test-rsa.pem 2>/dev/null
+          openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp384r1 -out /tmp/ryze-nethernet-test-ec.pem 2>/dev/null
+          RYZE_TEST_RSA_PEM=/tmp/ryze-nethernet-test-rsa.pem RYZE_TEST_EC_PEM=/tmp/ryze-nethernet-test-ec.pem php tests/nethernet-identity-verifier.php
           grep -Fq 'NetherNetSignalingProbeInterface' src/Server.php
           if grep -Eq 'nethernet-enabled=|nethernet-ice-port=19134' src/Server.php; then
             echo 'Unexpected additional NetherNet config introduced'
