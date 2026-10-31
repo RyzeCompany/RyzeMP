@@ -62,6 +62,7 @@ use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
+use pocketmine\network\mcpe\nethernet\NetherNetSignalingProbeInterface;
 use pocketmine\network\mcpe\raklib\RakLibInterface;
 use pocketmine\network\mcpe\StandardEntityEventBroadcaster;
 use pocketmine\network\mcpe\StandardPacketBroadcaster;
@@ -1306,16 +1307,27 @@ class Server{
 		$prettyIp = $ipV6 ? "[$ip]" : $ip;
 		try{
 			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
-			// Protocol 2225 needs an authenticated WebRTC transport. The first-party
-			// RyzeRTC native extension has not completed DataChannels / signaling yet.
-			// Do not activate the retired external transport or advertise a live
-			// NetherNet listener. Preserve RakNet on the original server IP/port.
+			// UDP gameplay stays owned by RakLib until the authenticated WebRTC
+			// backend can safely share its socket. Do not allow unauthenticated SDP.
 			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= 2225){
 				$this->logger->warning(extension_loaded("ryzertc")
-					? "NetherNet UNAVAILABLE: RyzeRTC native transport is experimental; DataChannels, signaling and Minecraft identity binding are not integrated. Legacy RakNet stays available."
-					: "NetherNet UNAVAILABLE: PHP native extension 'ryzertc' is not loaded, and first-party WebRTC transport is not ready. Legacy RakNet stays available.");
+					? "NetherNet UNAVAILABLE: RyzeRTC loaded but official signaling, identity and shared UDP sessions are not connected. Legacy RakNet stays available."
+					: "NetherNet UNAVAILABLE: PHP native extension 'ryzertc' not loaded; authenticated WebRTC sessions are unavailable. Legacy RakNet stays available.");
 			}
 			$rakLibRegistered = $this->network->registerInterface($raklib);
+			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= 2225){
+				// TCP and UDP share exactly server-ip/server-port, like retail NetherNet.
+				// Until auth is integrated, this bound, rate-limited listener only
+				// records client probes and rejects join offers (404/503).
+				try{
+					$this->network->registerInterface(new NetherNetSignalingProbeInterface(
+						$ip, $port, fn(string $message) => $this->logger->info($message)
+					));
+				}catch(NetworkInterfaceStartException $e){
+					// Do not prevent legacy RakNet from starting if TCP is unavailable.
+					$this->logger->warning("NetherNet TCP diagnostics cannot bind on original game port: " . $e->getMessage());
+				}
+			}
 		}catch(\Throwable $e){
 			$this->logger->emergency($this->language->translate(KnownTranslationFactory::pocketmine_server_networkStartFailed(
 				$ip,
