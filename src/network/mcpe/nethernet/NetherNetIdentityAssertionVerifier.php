@@ -196,7 +196,10 @@ final class NetherNetIdentityAssertionVerifier{
     }
 
     private static function derLen(int $n) : string{
-        return $n < 128 ? chr($n) : "\x81" . chr($n);
+        if($n < 128){return chr($n);}
+        if($n <= 255){return "\x81" . chr($n);}
+        if($n <= 65535){return "\x82" . pack('n', $n);}
+        throw new \InvalidArgumentException('ASN.1 length out of range');
     }
     private static function tlv(int $tag, string $body) : string{
         return chr($tag) . self::derLen(strlen($body)) . $body;
