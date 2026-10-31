@@ -52,7 +52,14 @@ jobs:
               echo "$tag already published; its assets are preserved."
               exit 0
             fi
-            test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')" = "$GITHUB_SHA"
+            draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$tag\") | .id")"
+            [[ "$draft_id" =~ ^[0-9]+$ ]]
+            draft_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.target_commitish')"
+            if [[ "$draft_target" != "$GITHUB_SHA" ]]; then
+              # An empty draft can be resumed after a publishing-only correction.
+              test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.assets | length')" = 0
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
+            fi
           else
             test -s "docs/releases/$version.md"
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" \
@@ -62,10 +69,11 @@ jobs:
           mv package/RyzeMP.phar "package/RyzeMP_${tag}.phar"
           (cd package && sha256sum "RyzeMP_${tag}.phar" > SHA256SUMS.txt)
           cp LICENSE package/LICENSE
+          cp COPYING package/COPYING
           python3 tools/release-manifest.py --release "$tag" --channel "$channel" \
             --phar "package/RyzeMP_${tag}.phar" --out package/ryzemp-update.json
           # Publish the manifest last; keep the release hidden until all files are ready.
-          for name in "RyzeMP_${tag}.phar" SHA256SUMS.txt LICENSE native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
+          for name in "RyzeMP_${tag}.phar" SHA256SUMS.txt LICENSE COPYING native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
             mkdir -p existing
             if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir existing; then
               cmp "package/$name" "existing/$name"

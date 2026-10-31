@@ -59,6 +59,7 @@ jobs:
           php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
           test -s RyzeMP.phar
           php -r '$p=new Phar("RyzeMP.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
+          php -r '$p=new Phar("RyzeMP.phar"); foreach(["LICENSE", "COPYING"] as $name){if(!isset($p[$name]) || $p[$name]->getContent() !== file_get_contents($name)) throw new RuntimeException("Missing or altered license: " . $name);}'
           php RyzeMP.phar --version
           sha256sum RyzeMP.phar > SHA256SUMS.txt
       - name: Boot real PHAR with live Minecraft keys, HTTP signaling, RakNet UDP and persistent identity
