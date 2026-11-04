@@ -204,8 +204,6 @@ class InGamePacketHandler extends PacketHandler{
 			return false;
 		}
 
-		$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
-
 		$this->impulseValidator->observe($this->player, $antiCheatSession, $this->session->getPing());
 
 		$rawPos = $packet->getPosition();
@@ -234,17 +232,21 @@ class InGamePacketHandler extends PacketHandler{
 		$hasMoved = $this->lastPlayerAuthInputPosition === null || !$this->lastPlayerAuthInputPosition->equals($rawPos);
 		$newPos = $rawPos->subtract(0, 1.62, 0)->round(4);
 
+		// Movement packets awaiting a server teleport ACK are not trustworthy telemetry.
+		$ignoreMovementTelemetry = $this->forceMoveSync;
 		if($this->forceMoveSync && $hasMoved){
 			$curPos = $this->player->getLocation();
 
 			if($newPos->distanceSquared($curPos) > 1){  //Tolerate up to 1 block to avoid problems with client-sided physics when spawning in blocks
 				$this->session->getLogger()->debug("Got outdated pre-teleport movement, received " . $newPos . ", expected " . $curPos);
-				//Still getting movements from before teleport, ignore them
+				// Still getting movements from before teleport: clear the samples recorded by the protocol guard.
+				$antiCheatSession->resetMovementState();
 				return true;
 			}
 
-			// Once we get a movement within a reasonable distance, treat it as a teleport ACK and remove position lock
+			// First accepted position is a teleport ACK, not movement to score.
 			$this->forceMoveSync = false;
+			$antiCheatSession->resetMovementState();
 		}
 
 		$inputFlags = $packet->getInputFlags();
@@ -283,6 +285,10 @@ class InGamePacketHandler extends PacketHandler{
 			$this->lastPlayerAuthInputPosition = $rawPos;
 			//TODO: this packet has WAYYYYY more useful information that we're not using
 			$this->player->handleMovement($newPos);
+		}
+
+		if(!$ignoreMovementTelemetry){
+			$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
 		}
 
 		$packetHandled = true;
