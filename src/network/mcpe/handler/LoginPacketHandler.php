@@ -377,6 +377,9 @@ class LoginPacketHandler extends PacketHandler{
 			throw PacketHandlingException::wrap($e);
 		}
 
+		// The signature is verified against the original JWT later in the login flow.
+		// Only omit skin-unrelated claims from the mapping to the protocol ClientData DTO.
+		$clientDataClaims = ClientDataClaimsFilter::forSkinMapping($clientDataClaims);
 		$mapper = $this->defaultJsonMapper("ClientData JWT body");
 		try{
 			$clientData = $mapper->map($clientDataClaims, new ClientData());
