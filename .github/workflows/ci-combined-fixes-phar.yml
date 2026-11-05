@@ -1,0 +1,147 @@
+name: Combined inventory and login fixes PHAR
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  combined-phar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out RyzeMP with CommandMetadata login fix (PR 55)
+        uses: actions/checkout@v4
+      - name: Set up RyzeMP-compatible PHP 8.4 runtime
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked RyzeMP dependencies and regression tooling
+        run: composer install --no-interaction --no-progress
+
+      - name: Check out exact tested BedrockProtocol inventory fix (PR 17)
+        uses: actions/checkout@v4
+        with:
+          repository: RyzeCompany/BedrockProtocol
+          ref: a3e35386fdb1f79cde6eb83e22f08c0c14372fd4
+          path: .patched-bedrock-protocol
+          persist-credentials: false
+
+      - name: Load reviewed inventory fix in the isolated CI vendor tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .patched-bedrock-protocol rev-parse HEAD)" = a3e35386fdb1f79cde6eb83e22f08c0c14372fd4
+          test -f .patched-bedrock-protocol/src/types/inventory/stackrequest/ItemStackRequest.php
+          rm -rf vendor/ryzemcbe/bedrock-protocol/src
+          cp -a .patched-bedrock-protocol/src vendor/ryzemcbe/bedrock-protocol/src
+          composer dump-autoload --no-interaction --optimize --classmap-authoritative
+          php -r 'require "vendor/autoload.php"; $t=\pocketmine\network\mcpe\protocol\types\inventory\stackrequest\ItemStackRequestActionType::class; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 || count($t::WIRE_TYPES_1_26_60) !== 19 || $t::WIRE_TYPES_1_26_60[18] !== 20 || $t::WIRE_TYPES_1_26_40[17] !== 17) throw new RuntimeException("Wrong inventory codec loaded"); echo "Inventory codec 2168-2225 verified\n";'
+          php -r 'if(!str_contains(file_get_contents("src/command/CommandMetadata.php"), "$parameters === [] ? null : reset($parameters)")) exit(1);'
+
+      - name: Verify BedrockProtocol patch directly (all advertised versions)
+        shell: bash
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning .patched-bedrock-protocol/tests/phpunit/ItemStackRequestActionVersionTest.php
+
+      - name: Verify no-argument commands, all RyzeMP regressions and native network integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/command/NativeCommandApiTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/network/mcpe/nethernet
+
+      - name: Build one PHAR with both reviewed fixes (not an official release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+          # Reapply tested protocol code because Composer's committed lockfile
+          # deliberately still points to the last officially published beta.
+          rm -rf vendor/ryzemcbe/bedrock-protocol/src
+          cp -a .patched-bedrock-protocol/src vendor/ryzemcbe/bedrock-protocol/src
+          composer dump-autoload --no-interaction --no-dev --optimize --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
+          test -s RyzeMP.phar
+          php RyzeMP.phar --version
+
+      - name: Inspect generated PHAR to prove BOTH fixes are embedded
+        shell: bash
+        run: |
+          set -euo pipefail
+          php <<'PHP'
+          <?php
+          $archive = new Phar("RyzeMP.phar");
+          $foundInventory = false;
+          $foundCommand = false;
+          foreach(new RecursiveIteratorIterator($archive) as $file){
+              $path = $file->getPathname();
+              if(str_ends_with($path, "/types/inventory/stackrequest/ItemStackRequest.php")){
+                  if(!str_contains($file->getContent(), "WIRE_TYPES_1_26_60") ||
+                     !str_contains($file->getContent(), "WIRE_TYPES_1_26_40")){
+                      throw new RuntimeException("PHAR inventory decoder is not patched: " . $path);
+                  }
+                  $foundInventory = true;
+              }
+              if(str_ends_with($path, "/src/command/CommandMetadata.php")){
+                  if(!str_contains($file->getContent(), 'if(!$first instanceof CommandParameter')){
+                      throw new RuntimeException("PHAR command metadata guard is missing: " . $path);
+                  }
+                  $foundCommand = true;
+              }
+              if(str_ends_with($path, ".so")){
+                  throw new RuntimeException("RyzeRTC must stay outside the PHAR");
+              }
+          }
+          if(!$foundInventory || !$foundCommand){
+              throw new RuntimeException("Missing one of the two fixes in PHAR: inventory=" . (int) $foundInventory . " command=" . (int) $foundCommand);
+          }
+          echo "PASS: built PHAR embeds inventory protocol fix AND CommandMetadata login fix\n";
+          PHP
+          sha256sum RyzeMP.phar > SHA256SUMS.txt
+          cat > FIXES.txt <<'EOF'
+          RyzeMP experimental combined-fix PHAR (NOT an official release)
+          RyzeMP command-login fix: release/1.0.0-beta.5-crate-trace
+          BedrockProtocol inventory fix: a3e35386fdb1f79cde6eb83e22f08c0c14372fd4 (PR #17)
+          Covers protocol 2225 outer 18 / inner 20 and versioned 2168-2193 actions.
+          Includes the CommandMetadata argumentless-overload guard and trace error handling.
+          Official composer.lock remains on beta.2 until a new protocol release is published.
+          Requires the existing RyzeRTC PHP native extension externally; never embedded.
+          EOF
+
+      - name: Prepare external verified RyzeRTC runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .rtc
+          curl -fsSL --retry 3 'https://github.com/RyzeCompany/RyzeRTC/releases/download/v0.1.0-dev.3/ryzertc-linux-x86_64-php84-zts.zip' -o .rtc/runtime.zip
+          echo '9ecea6cc9d239b8c583d042c91df0448432321ceaf128850fe5b27bcde234602  .rtc/runtime.zip' | sha256sum -c -
+          unzip -q .rtc/runtime.zip -d .rtc
+          (cd .rtc && sha256sum -c SHA256SUMS.txt)
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/.rtc/lib" >> "$GITHUB_ENV"
+      - name: Boot real combined-fix PHAR through native NetherNet / shared-port smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/nethernet-phar-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+          python3 tests/nethernet-prespawn-smoke.py "$(command -v php)" "$GITHUB_WORKSPACE/.rtc/ryzertc.so" RyzeMP.phar
+
+      - name: Upload single verified PHAR for manual Minecraft client tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-both-fixes-preview
+          path: |
+            RyzeMP.phar
+            SHA256SUMS.txt
+            FIXES.txt
+            native-phar-smoke.log
+            native-prespawn-smoke.log
+          retention-days: 3
+          if-no-files-found: error
