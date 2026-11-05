@@ -222,18 +222,18 @@ final class NativeCommandApiTest extends TestCase{
 	public function testCrateDiagnosticSkipsParameterlessOverloadsWithoutDisconnecting() : void{
 		$hard = static fn(array $values) : CommandParameter => CommandParameter::enum(
 			"subcommand",
-			new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandHardEnum("hcf:crate:action", $values),
+			new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum("hcf:crate:action", $values),
 			0
 		);
-		$command = new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandData(
+		$command = new \pocketmine\network\mcpe\protocol\types\command\CommandData(
 			"crate", "Crates", 0, 0, null, [
 				// A valid root /crate overload has zero arguments.
-				new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandOverload(false, []),
-				new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandOverload(false, [
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, []),
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
 					$hard(["edit"]),
 					CommandParameter::standard("crate", AvailableCommandsPacket::ARG_TYPE_STRING)
 				]),
-				new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandOverload(false, [
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
 					$hard(["remove"])
 				])
 			], []
@@ -245,23 +245,23 @@ final class NativeCommandApiTest extends TestCase{
 
 		// Test metadata and wire forms against every maintained command protocol family.
 		foreach([589, 649, 898, 2193, 2225] as $protocol){
-			$packet = \\pocketmine\\network\\mcpe\\protocol\\serializer\\AvailableCommandsPacketAssembler::assemble(
+			$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble(
 				CommandMetadata::canonicalizePacketEnums([$command]), [], []
 			);
-			$out = new \\pmmp\\encoding\\ByteBufferWriter();
+			$out = new \pmmp\encoding\ByteBufferWriter();
 			$packet->encode($out, $protocol);
 			$decoded = new AvailableCommandsPacket();
-			$decoded->decode(new \\pmmp\\encoding\\ByteBufferReader($out->getData()), $protocol);
-			$wireCommands = \\pocketmine\\network\\mcpe\\protocol\\serializer\\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($out->getData()), $protocol);
+			$wireCommands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
 			self::assertCount(2, CommandMetadata::describeCrateOverloads($wireCommands));
 		}
 	}
 
 	public function testCrateDiagnosticHandlesEmptyAndNonActionOverloads() : void{
-		$command = new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandData(
+		$command = new \pocketmine\network\mcpe\protocol\types\command\CommandData(
 			"crate", "Crates", 0, 0, null, [
-				new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandOverload(false, []),
-				new \\pocketmine\\network\\mcpe\\protocol\\types\\command\\CommandOverload(false, [
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, []),
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
 					CommandParameter::standard("value", AvailableCommandsPacket::ARG_TYPE_STRING)
 				])
 			], []
