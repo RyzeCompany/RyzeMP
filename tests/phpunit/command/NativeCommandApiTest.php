@@ -219,6 +219,38 @@ final class NativeCommandApiTest extends TestCase{
 		}
 	}
 
+	public function testCrateRootCommandCanSendAvailableCommandsOnAllSupportedProtocolFamilies() : void{
+		$command = new TestNativeCommand($this->plugin, static function(BaseCommand $cmd) : void{
+			$cmd->registerSubCommand(new TestNativeSubCommand("remove", [], null));
+		}, "crate");
+		$map = $this->createMock(SimpleCommandMap::class);
+		$map->method("getCommands")->willReturn(["crate" => $command]);
+		$server = $this->createMock(\pocketmine\Server::class);
+		$server->method("getCommandMap")->willReturn($map);
+		$player = $this->createMock(\pocketmine\player\Player::class);
+		(new \ReflectionProperty(\pocketmine\entity\Entity::class, "closed"))->setValue($player, true);
+		(new \ReflectionProperty(\pocketmine\player\Player::class, "logger"))->setValue($player, $this->createMock(\Logger::class));
+		$player->method("hasPermission")->willReturn(true);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
+			$session->method("getProtocolId")->willReturn($protocol);
+			$sent = null;
+			$session->method("sendDataPacket")->willReturnCallback(static function($packet) use (&$sent) : bool{
+				$sent = $packet;
+				return true;
+			});
+			$session->syncAvailableCommands();
+			self::assertInstanceOf(AvailableCommandsPacket::class, $sent);
+			$overloads = $sent->commandData[0]->getOverloads();
+			self::assertNotEmpty($overloads);
+			self::assertContains([], array_map(static fn($overload) : array => $overload->getParameters(), $overloads));
+		}
+	}
+
 	public function testCrateDiagnosticSkipsParameterlessOverloadsWithoutDisconnecting() : void{
 		$hard = static fn(array $values) : CommandParameter => CommandParameter::enum(
 			"subcommand",
@@ -402,7 +434,7 @@ final class NativeCommandApiTest extends TestCase{
 
 final class TestNativeCommand extends BaseCommand{
 	public array $calls = [];
-	public function __construct(Plugin $plugin, private Closure $setup){parent::__construct($plugin, "sample");}
+	public function __construct(Plugin $plugin, private Closure $setup, string $name = "sample"){parent::__construct($plugin, $name);}
 	protected function prepare() : void{$this->setPermission("tests.command.root");($this->setup)($this);}
 	public function onRun(CommandSender $sender, string $aliasUsed, array $args) : void{$this->calls[] = $args;}
 }
