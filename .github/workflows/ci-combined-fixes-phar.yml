@@ -42,7 +42,7 @@ jobs:
           cp -a .patched-bedrock-protocol/src vendor/ryzemcbe/bedrock-protocol/src
           composer dump-autoload --no-interaction --optimize --classmap-authoritative
           php -r 'require "vendor/autoload.php"; $t=\pocketmine\network\mcpe\protocol\types\inventory\stackrequest\ItemStackRequestActionType::class; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225 || count($t::WIRE_TYPES_1_26_60) !== 19 || $t::WIRE_TYPES_1_26_60[18] !== 20 || $t::WIRE_TYPES_1_26_40[17] !== 17) throw new RuntimeException("Wrong inventory codec loaded"); echo "Inventory codec 2168-2225 verified\n";'
-          php -r 'if(!str_contains(file_get_contents("src/command/CommandMetadata.php"), "$parameters === [] ? null : reset($parameters)")) exit(1);'
+          grep -Fq 'if(!$first instanceof CommandParameter' src/command/CommandMetadata.php
 
       - name: Verify BedrockProtocol patch directly (all advertised versions)
         shell: bash
