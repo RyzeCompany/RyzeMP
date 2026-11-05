@@ -112,7 +112,15 @@ final class CommandMetadata{
 			if($name !== "crate" && !str_ends_with($name, ":crate")){continue;}
 			foreach($command->getOverloads() as $index => $overload){
 				$parameters = $overload->getParameters();
-				$action = $parameters[0]->enum?->getValues() ?? [];
+				// /crate may advertise a valid root overload with no parameters.
+				// Do not let an optional trace crash a client's login.
+				$first = $parameters === [] ? null : reset($parameters);
+				if(!$first instanceof CommandParameter || $first->enum === null){continue;}
+				$action = array_map(
+					static fn(string|ConstrainedEnumValue $value) : string =>
+						$value instanceof ConstrainedEnumValue ? $value->getValue() : $value,
+					$first->enum->getValues()
+				);
 				if(!in_array("edit", $action, true) && !in_array("remove", $action, true)){continue;}
 				$arguments = [];
 				foreach($parameters as $parameter){
