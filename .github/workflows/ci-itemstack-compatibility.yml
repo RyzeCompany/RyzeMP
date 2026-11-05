@@ -1,0 +1,69 @@
+name: Verify multiversion inventory fix against RyzeMP PHAR
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out RyzeMP
+        uses: actions/checkout@v4
+      - name: Set up PHP runtime
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install RyzeMP published dependencies
+        run: composer install --no-interaction --no-progress
+      - name: Check out reviewed BedrockProtocol candidate (PR 17)
+        uses: actions/checkout@v4
+        with:
+          repository: RyzeCompany/BedrockProtocol
+          ref: d37a683d968d4cc727c9b01d2820b46b5de1e5b4
+          path: .patched-bedrock-protocol
+          persist-credentials: false
+      - name: Apply protocol candidate to the isolated CI vendor tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf vendor/ryzemcbe/bedrock-protocol/src
+          cp -a .patched-bedrock-protocol/src vendor/ryzemcbe/bedrock-protocol/src
+          composer dump-autoload --no-interaction --optimize --classmap-authoritative
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225) exit(1); if(count(\pocketmine\network\mcpe\protocol\types\inventory\stackrequest\ItemStackRequestActionType::WIRE_TYPES_1_26_60) !== 19) exit(2); echo "Patched inventory codec for 2168/2169/2193/2225 is loaded\n";'
+      - name: Run RyzeMP integration and inventory tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/network/mcpe/cache
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit/network/mcpe/nethernet
+      - name: Prepare production vendor tree and build corrected PHAR for manual verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+          rm -rf vendor/ryzemcbe/bedrock-protocol/src
+          cp -a .patched-bedrock-protocol/src vendor/ryzemcbe/bedrock-protocol/src
+          composer dump-autoload --no-interaction --no-dev --optimize --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
+          test -s RyzeMP.phar
+          php RyzeMP.phar --version
+          php -r '$p=new Phar("RyzeMP.phar"); $found=false; foreach(new RecursiveIteratorIterator($p) as $file){if(str_ends_with($file->getPathname(), "/types/inventory/stackrequest/ItemStackRequest.php")){if(!str_contains($file->getContent(), "WIRE_TYPES_1_26_60")) throw new RuntimeException("PHAR contains old protocol codec"); $found=true;}} if(!$found) throw new RuntimeException("Protocol source not found in PHAR");'
+          sha256sum RyzeMP.phar > SHA256SUMS.txt
+      - name: Upload experimental corrected PHAR (requires separate official RyzeRTC runtime)
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-itemstack-compatibility-preview
+          path: |
+            RyzeMP.phar
+            SHA256SUMS.txt
+          retention-days: 2
+          if-no-files-found: error
