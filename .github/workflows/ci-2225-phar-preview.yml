@@ -56,11 +56,33 @@ jobs:
         run: |
           set -euo pipefail
           composer install --no-interaction --no-progress --no-dev --classmap-authoritative
+          # Fail the release if the published dependency is not present in the real vendor tree.
+          php -r 'require "vendor/autoload.php"; $t=\pocketmine\network\mcpe\protocol\types\inventory\stackrequest\ItemStackRequestActionType::class; if(\Composer\InstalledVersions::getPrettyVersion("ryzemcbe/bedrock-protocol") !== "v1.0.0-beta.3" || $t::WIRE_TYPES_1_26_60[18] !== 20) throw new RuntimeException("Published BedrockProtocol beta.3 inventory fix was not installed");'
           php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
           test -s RyzeMP.phar
           php -r '$p=new Phar("RyzeMP.phar"); echo "PHAR entries: ".$p->count().PHP_EOL;'
           php -r '$p=new Phar("RyzeMP.phar"); foreach(["LICENSE", "COPYING"] as $name){if(!isset($p[$name]) || $p[$name]->getContent() !== file_get_contents($name)) throw new RuntimeException("Missing or altered license: " . $name);}'
           php RyzeMP.phar --version
+          php <<'PHP'
+          <?php
+          // Examine the archive published by this exact build, not an isolated CI vendor substitution.
+          $archive = new Phar("RyzeMP.phar");
+          $inventory = false;
+          $command = false;
+          foreach(new RecursiveIteratorIterator($archive) as $file){
+              $path = $file->getPathname();
+              if(str_ends_with($path, "/types/inventory/stackrequest/ItemStackRequest.php")){
+                  $inventory = str_contains($file->getContent(), "WIRE_TYPES_1_26_60");
+              }
+              if(str_ends_with($path, "/src/command/CommandMetadata.php")){
+                  $command = str_contains($file->getContent(), 'if(!$first instanceof CommandParameter');
+              }
+          }
+          if(!$inventory || !$command){
+              throw new RuntimeException("Official release PHAR lacks one or both verified fixes");
+          }
+          echo "Published PHAR verified: BedrockProtocol beta.3 inventory + CommandMetadata login guard\n";
+          PHP
           sha256sum RyzeMP.phar > SHA256SUMS.txt
       - name: Boot real PHAR with live Minecraft keys, HTTP signaling, RakNet UDP and persistent identity
         shell: bash
