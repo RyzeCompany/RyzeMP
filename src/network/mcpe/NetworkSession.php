@@ -1389,9 +1389,14 @@ class NetworkSession{
 		// Temporary diagnostic, automatically logged once per session.
 		// Only crate edit/remove arguments are included; never raw packet bytes.
 		if(!$this->crateCommandTraceCompleted){
-			$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
-			foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
-				$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
+			try{
+				$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
+				foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
+					$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
+				}
+			}catch(\Throwable $e){
+				// Temporary diagnostics are never allowed to interrupt the login flow.
+				$this->logger->warning("[CrateCommandTrace] stage=metadata_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
 			}
 		}
 
