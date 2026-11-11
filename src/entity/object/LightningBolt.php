@@ -188,7 +188,9 @@ class LightningBolt extends Entity implements NeverSavedWithChunkEntity{
 			return;
 		}
 		/** @var CopperMaterial&Block $target */
-		BlockEventHelper::form($target, $target->setOxidation(CopperOxidation::NONE), $target);
+		$clean = clone $target;
+		$clean->setOxidation(CopperOxidation::NONE);
+		BlockEventHelper::form($target, $clean, $target);
 		for($walks = mt_rand(3, 5); $walks > 0; --$walks){
 			$current = $target->getPosition();
 			for($steps = mt_rand(1, 8); $steps > 0; --$steps){
@@ -220,7 +222,9 @@ class LightningBolt extends Entity implements NeverSavedWithChunkEntity{
 			/** @var CopperMaterial&Block $block */
 			$previous = $block->getOxidation()->getPrevious();
 			if($previous !== null){
-				BlockEventHelper::form($block, $block->setOxidation($previous), $block);
+				$clean = clone $block;
+				$clean->setOxidation($previous);
+				BlockEventHelper::form($block, $clean, $block);
 			}
 			return new Vector3($x, $y, $z);
 		}

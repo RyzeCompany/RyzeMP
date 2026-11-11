@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Cauldron as TileCauldron;
+use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\DyeColor;
 use pocketmine\color\Color;
 use pocketmine\entity\Entity;
@@ -111,7 +112,9 @@ final class WaterCauldron extends FillableCauldron{
 		if($precipitation === Precipitation::RAIN && $this->customWaterColor === null &&
 			$this->getFillLevel() < self::MAX_FILL_LEVEL && Utils::getRandomFloat() < 0.05
 		){
-			$this->position->getWorld()->setBlock($this->position, $this->setFillLevel($this->getFillLevel() + 1));
+			$next = clone $this;
+			$next->setFillLevel($this->getFillLevel() + 1);
+			BlockEventHelper::form($this, $next, $this);
 		}
 	}
 

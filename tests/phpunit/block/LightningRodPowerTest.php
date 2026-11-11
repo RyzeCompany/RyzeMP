@@ -6,6 +6,9 @@ namespace pocketmine\block;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\Server;
+use pocketmine\utils\ReversePriorityQueue;
 use pocketmine\world\World;
 
 final class LightningRodPowerTest extends TestCase{
@@ -20,6 +23,36 @@ final class LightningRodPowerTest extends TestCase{
 			self::assertSame($face === Facing::DOWN ? 15 : 0, $rod->getStrongPower($face));
 		}
 		self::assertSame($rod->getStateId(), RuntimeBlockStateRegistry::getInstance()->fromStateId($rod->getStateId())->getStateId());
+	}
+
+	public function testRepeatStrikeRestartsPulseWithoutRewritingAlreadyPoweredState() : void{
+		$world = $this->createMock(World::class);
+		$rod = VanillaBlocks::LIGHTNING_ROD();
+		$rod->position($world, 5, 70, 8);
+		$world->expects(self::once())->method("setBlock");
+		$world->expects(self::exactly(2))->method("scheduleDelayedBlockUpdate")
+			->with($rod->getPosition(), LightningRod::STRUCK_POWER_TICKS, true);
+		$rod->onLightningStrike();
+		$rod->onLightningStrike();
+		self::assertTrue($rod->isPowered());
+	}
+
+	public function testScheduledTickCanBeReplacedAtAbsoluteDeadline() : void{
+		$world = (new \ReflectionClass(World::class))->newInstanceWithoutConstructor();
+		$server = $this->createMock(Server::class);
+		$server->method("getTick")->willReturnOnConsecutiveCalls(100, 105);
+		$queue = new ReversePriorityQueue();
+		$queue->setExtractFlags(\SplPriorityQueue::EXTR_BOTH);
+		foreach(["server" => $server, "minY" => -64, "maxY" => 320, "scheduledBlockUpdateQueue" => $queue] as $name => $value){
+			(new \ReflectionProperty(World::class, $name))->setValue($world, $value);
+		}
+		$pos = new Vector3(0, 64, 0);
+		$world->scheduleDelayedBlockUpdate($pos, 8, true);
+		$world->scheduleDelayedBlockUpdate($pos, 8, true);
+		$index = (new \ReflectionProperty(World::class, "scheduledBlockUpdateQueueIndex"))->getValue($world);
+		self::assertSame(113, $index[World::blockHash(0, 64, 0)]);
+		self::assertSame(2, $queue->count());
+		self::assertTrue($world->isBlockUpdateScheduled($pos));
 	}
 
 	public function testLightningPulseAndExpirationNotifyNeighbors() : void{
