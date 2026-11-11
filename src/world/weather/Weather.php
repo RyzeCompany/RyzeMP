@@ -22,6 +22,8 @@ use pocketmine\block\VanillaBlocks;
 use pocketmine\block\Water;
 use pocketmine\math\Facing;
 use pocketmine\world\format\Chunk;
+use pocketmine\world\format\SubChunk;
+use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\event\world\LightningStrikeEvent;
 use pocketmine\event\world\WeatherChangeEvent;
 use pocketmine\entity\Living;
@@ -70,6 +72,9 @@ class Weather{
 
 	private const MIN_INTENSITY = 10000 / 65535;
 	private const MAX_INTENSITY = 60000 / 65535;
+
+	/** @var array<int, true>|null Cached internal lightning rod states. */
+	private static ?array $lightningRodStates = null;
 
 	private int $precipitationSamplesThisTick = 0;
 	private int $lightningAttemptsThisTick = 0;
@@ -443,38 +448,70 @@ class Weather{
 	}
 
 	/**
-	 * Scans only loaded columns for the top-most lightning rods in the 64-block horizontal radius.
-	 * Called on attempted strikes, never on every tick. Does not generate or load terrain.
+	 * @phpstan-return array<int, true>
+	 */
+	private static function getLightningRodStates() : array{
+		if(self::$lightningRodStates === null){
+			self::$lightningRodStates = [];
+			foreach(RuntimeBlockStateRegistry::getInstance()->getAllKnownStates() as $stateId => $state){
+				if($state->getTypeId() === BlockTypeIds::LIGHTNING_ROD){
+					self::$lightningRodStates[$stateId] = true;
+				}
+			}
+		}
+		return self::$lightningRodStates;
+	}
+
+	/**
+	 * Efficiently returns the nearest lightning rod within {@link Weather::LIGHTNING_ROD_RANGE} blocks that is the top block of
+	 * its column, or null. Only the sub-chunks whose palette has a lightning rod are searched.
 	 */
 	public function findLightningRod(int $x, int $y, int $z) : ?Vector3{
+		$rodStates = self::getLightningRodStates();
 		$range = self::LIGHTNING_ROD_RANGE;
-		$bestDistance = PHP_INT_MAX;
 		$best = null;
-		for($cx = ($x - $range) >> Chunk::COORD_BIT_SIZE; $cx <= (($x + $range) >> Chunk::COORD_BIT_SIZE); ++$cx){
-			for($cz = ($z - $range) >> Chunk::COORD_BIT_SIZE; $cz <= (($z + $range) >> Chunk::COORD_BIT_SIZE); ++$cz){
+		$bestDistance = PHP_INT_MAX;
+		for($cx = ($x - $range) >> Chunk::COORD_BIT_SIZE; $cx <= ($x + $range) >> Chunk::COORD_BIT_SIZE; ++$cx){
+			for($cz = ($z - $range) >> Chunk::COORD_BIT_SIZE; $cz <= ($z + $range) >> Chunk::COORD_BIT_SIZE; ++$cz){
 				$chunk = $this->world->getChunk($cx, $cz);
 				if($chunk === null){
 					continue;
 				}
-				for($bx = 0; $bx < Chunk::EDGE_LENGTH; ++$bx){
-					$wx = ($cx << Chunk::COORD_BIT_SIZE) + $bx;
-					for($bz = 0; $bz < Chunk::EDGE_LENGTH; ++$bz){
-						$wz = ($cz << Chunk::COORD_BIT_SIZE) + $bz;
-						$horizontalSq = ($wx - $x) ** 2 + ($wz - $z) ** 2;
-						if($horizontalSq > $range ** 2){
-							continue;
+				foreach($chunk->getSubChunks() as $subY => $subChunk){
+					if($subChunk->isEmptyFast()){
+						continue;
+					}
+					$layers = $subChunk->getBlockLayers();
+					if(count($layers) === 0){
+						continue;
+					}
+					$hasRod = false;
+					foreach($layers[0]->getPalette() as $stateId){
+						if(isset($rodStates[$stateId])){
+							$hasRod = true;
+							break;
 						}
-						$wy = $chunk->getHighestBlockAt($bx, $bz);
-						if($wy === null){
-							continue;
-						}
-						$distance = $horizontalSq + ($wy - $y) ** 2;
-						if($distance >= $bestDistance){
-							continue;
-						}
-						if($this->world->getBlockAt($wx, $wy, $wz) instanceof LightningRod){
-							$bestDistance = $distance;
-							$best = new Vector3($wx, $wy, $wz);
+					}
+					if(!$hasRod){
+						continue;
+					}
+					for($bx = 0; $bx < SubChunk::EDGE_LENGTH; ++$bx){
+						for($bz = 0; $bz < SubChunk::EDGE_LENGTH; ++$bz){
+							for($by = 0; $by < SubChunk::EDGE_LENGTH; ++$by){
+								if(!isset($rodStates[$layers[0]->get($bx, $by, $bz)])){
+									continue;
+								}
+								$wx = ($cx << Chunk::COORD_BIT_SIZE) + $bx;
+								$wy = ($subY << SubChunk::COORD_BIT_SIZE) + $by;
+								$wz = ($cz << Chunk::COORD_BIT_SIZE) + $bz;
+								$distance = ($wx - $x) ** 2 + ($wy - $y) ** 2 + ($wz - $z) ** 2;
+								if($distance < $bestDistance && ($wx - $x) ** 2 + ($wz - $z) ** 2 <= $range ** 2 &&
+									$chunk->getHighestBlockAt($bx, $bz) === $wy
+								){
+									$bestDistance = $distance;
+									$best = new Vector3($wx, $wy, $wz);
+								}
+							}
 						}
 					}
 				}
