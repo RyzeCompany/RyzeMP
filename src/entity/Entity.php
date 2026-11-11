@@ -671,6 +671,13 @@ abstract class Entity{
 			$hasUpdate = true;
 		}
 
+		if($this->isOnFire() && $this->getWorld()->getWeather()->isRainingAt(
+			$this->location->getFloorX(), $this->location->getFloorY(), $this->location->getFloorZ()
+		)){
+			$this->extinguish(EntityExtinguishEvent::CAUSE_RAIN);
+			$hasUpdate = true;
+		}
+
 		if($this->isOnFire() && $this->doOnFireTick($tickDiff)){
 			$hasUpdate = true;
 		}

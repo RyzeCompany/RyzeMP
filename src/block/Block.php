@@ -54,6 +54,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
+use pocketmine\world\weather\Precipitation;
 use pocketmine\world\World;
 use function count;
 use function get_class;
@@ -510,6 +511,11 @@ class Block{
 	 * WARNING: This will not be called if {@link Block::ticksRandomly()} does not return true!
 	 */
 	public function onRandomTick() : void{
+
+	}
+
+	/** Called for an exposed block by the world weather random tick. */
+	public function onPrecipitation(Precipitation $precipitation) : void{
 
 	}
 

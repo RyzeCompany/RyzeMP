@@ -35,6 +35,8 @@ use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\utils\Utils;
+use pocketmine\world\weather\Precipitation;
 use function assert;
 
 final class Cauldron extends Transparent{
@@ -91,6 +93,13 @@ final class Cauldron extends Transparent{
 		}
 
 		return true;
+	}
+
+	/** Rain can fill a previously empty cauldron. Powder-snow cauldrons are not yet supported. */
+	public function onPrecipitation(Precipitation $precipitation) : void{
+		if($precipitation === Precipitation::RAIN && Utils::getRandomFloat() < 0.05){
+			$this->position->getWorld()->setBlock($this->position, VanillaBlocks::WATER_CAULDRON()->setFillLevel(1));
+		}
 	}
 
 	public function onNearbyBlockChange() : void{

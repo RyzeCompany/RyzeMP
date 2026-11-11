@@ -39,6 +39,8 @@ use pocketmine\item\SplashPotion;
 use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\utils\Utils;
+use pocketmine\world\weather\Precipitation;
 use pocketmine\world\sound\CauldronAddDyeSound;
 use pocketmine\world\sound\CauldronCleanItemSound;
 use pocketmine\world\sound\CauldronDyeItemSound;
@@ -102,6 +104,15 @@ final class WaterCauldron extends FillableCauldron{
 
 	public function getFillSound() : Sound{
 		return new CauldronFillWaterSound();
+	}
+
+	/** Random precipitation fills ordinary, uncoloured water cauldrons. */
+	public function onPrecipitation(Precipitation $precipitation) : void{
+		if($precipitation === Precipitation::RAIN && $this->customWaterColor === null &&
+			$this->getFillLevel() < self::MAX_FILL_LEVEL && Utils::getRandomFloat() < 0.05
+		){
+			$this->position->getWorld()->setBlock($this->position, $this->setFillLevel($this->getFillLevel() + 1));
+		}
 	}
 
 	public function getEmptySound() : Sound{
