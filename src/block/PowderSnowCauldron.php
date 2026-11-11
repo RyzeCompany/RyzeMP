@@ -18,8 +18,8 @@ use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\Utils;
-use pocketmine\world\sound\CauldronEmptyWaterSound;
-use pocketmine\world\sound\CauldronFillWaterSound;
+use pocketmine\world\sound\CauldronEmptyPowderSnowSound;
+use pocketmine\world\sound\CauldronFillPowderSnowSound;
 use pocketmine\world\sound\Sound;
 use pocketmine\world\weather\Precipitation;
 use function assert;
@@ -36,9 +36,9 @@ final class PowderSnowCauldron extends FillableCauldron{
 		$tile->setPotionItem(null);
 	}
 
-	/** Safe audio fallback until a dedicated multi-protocol powder snow sound is registered. */
-	public function getFillSound() : Sound{ return new CauldronFillWaterSound(); }
-	public function getEmptySound() : Sound{ return new CauldronEmptyWaterSound(); }
+	/** Uses vanilla Bedrock level events with per-client session serialization. */
+	public function getFillSound() : Sound{ return new CauldronFillPowderSnowSound(); }
+	public function getEmptySound() : Sound{ return new CauldronEmptyPowderSnowSound(); }
 
 	public function onPrecipitation(Precipitation $precipitation) : void{
 		if($precipitation !== Precipitation::SNOW || $this->getFillLevel() >= self::MAX_FILL_LEVEL ||
