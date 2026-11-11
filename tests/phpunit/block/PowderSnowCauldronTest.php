@@ -7,14 +7,29 @@ namespace pocketmine\block;
 use PHPUnit\Framework\TestCase;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\World;
+use pocketmine\item\VanillaItems;
+use pocketmine\math\Vector3;
 
 final class PowderSnowCauldronTest extends TestCase{
-	public function testExtinguishingKeepsPowderSnowInsteadOfTurningItIntoWater() : void{
+	public function testExtinguishingMeltsPowderSnowIntoWater() : void{
 		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
 		$next = $cauldron->getStateAfterExtinguishing();
-		self::assertInstanceOf(PowderSnowCauldron::class, $next);
+		self::assertInstanceOf(WaterCauldron::class, $next);
 		self::assertSame(2, $next->getFillLevel());
 		self::assertInstanceOf(Cauldron::class, VanillaBlocks::POWDER_SNOW_CAULDRON()->getStateAfterExtinguishing());
+	}
+
+	public function testPowderSnowBucketDoesNotTopUpPartialCauldron() : void{
+		$world = $this->createMock(World::class);
+		$world->expects(self::never())->method("setBlock");
+		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
+		$cauldron->position($world, 0, 64, 0);
+		$bucket = VanillaItems::POWDER_SNOW_BUCKET();
+		$returnedItems = [];
+		self::assertFalse($cauldron->onInteract($bucket, 1, new Vector3(0, 0, 0), null, $returnedItems));
+		self::assertSame(3, $cauldron->getFillLevel());
+		self::assertSame(1, $bucket->getCount());
+		self::assertSame([], $returnedItems);
 	}
 
 	public function testBlockStateIsRegisteredAndPreservesFillLevel() : void{

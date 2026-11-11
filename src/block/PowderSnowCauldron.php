@@ -59,11 +59,11 @@ final class PowderSnowCauldron extends FillableCauldron{
 		BlockEventHelper::form($this, $next, $this);
 	}
 
-	/** The consumed contents remain powder snow, never turn into water. */
+	/** Extinguishing an entity melts the remaining powder snow into water, per vanilla. */
 	public function getStateAfterExtinguishing(int $amount = 1) : Block{
 		$remaining = $this->getFillLevel() - $amount;
 		return $remaining > 0 ?
-			VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel($remaining) :
+			VanillaBlocks::WATER_CAULDRON()->setFillLevel($remaining) :
 			VanillaBlocks::CAULDRON();
 	}
 
@@ -80,6 +80,10 @@ final class PowderSnowCauldron extends FillableCauldron{
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		//Partly filled powder snow cauldrons cannot be topped up by a bucket in vanilla.
+		if($item->getTypeId() === ItemTypeIds::POWDER_SNOW_BUCKET && $this->getFillLevel() < self::MAX_FILL_LEVEL){
+			return false;
+		}
 		match($item->getTypeId()){
 			ItemTypeIds::BUCKET => $this->removeFillLevels(self::MAX_FILL_LEVEL, $item, VanillaItems::POWDER_SNOW_BUCKET(), $returnedItems),
 			ItemTypeIds::POWDER_SNOW_BUCKET => $this->addFillLevels(self::MAX_FILL_LEVEL, $item, VanillaItems::BUCKET(), $returnedItems),
