@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Cauldron as TileCauldron;
+use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\SupportType;
 use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
@@ -83,7 +84,7 @@ final class Cauldron extends Transparent{
 		}elseif($item->getTypeId() === ItemTypeIds::LAVA_BUCKET){
 			$this->fill(FillableCauldron::MAX_FILL_LEVEL, VanillaBlocks::LAVA_CAULDRON(), $item, VanillaItems::BUCKET(), $returnedItems);
 		}elseif($item->getTypeId() === ItemTypeIds::POWDER_SNOW_BUCKET){
-			//TODO: powder snow cauldron
+			$this->fill(FillableCauldron::MAX_FILL_LEVEL, VanillaBlocks::POWDER_SNOW_CAULDRON(), $item, VanillaItems::BUCKET(), $returnedItems);
 		}elseif($item instanceof Potion || $item instanceof SplashPotion){
 			if($item->getType() === PotionType::WATER){
 				$this->fill(WaterCauldron::WATER_BOTTLE_FILL_AMOUNT, VanillaBlocks::WATER_CAULDRON(), $item, VanillaItems::GLASS_BOTTLE(), $returnedItems);
@@ -95,10 +96,15 @@ final class Cauldron extends Transparent{
 		return true;
 	}
 
-	/** Rain can fill a previously empty cauldron. Powder-snow cauldrons are not yet supported. */
+	/** Vanilla empty-cauldron precipitation: rain 5%, snow 10% per weather sample. */
 	public function onPrecipitation(Precipitation $precipitation) : void{
-		if($precipitation === Precipitation::RAIN && Utils::getRandomFloat() < 0.05){
-			$this->position->getWorld()->setBlock($this->position, VanillaBlocks::WATER_CAULDRON()->setFillLevel(1));
+		$result = match($precipitation){
+			Precipitation::RAIN => Utils::getRandomFloat() < 0.05 ? VanillaBlocks::WATER_CAULDRON() : null,
+			Precipitation::SNOW => Utils::getRandomFloat() < PowderSnowCauldron::SNOW_FILL_CHANCE ? VanillaBlocks::POWDER_SNOW_CAULDRON() : null,
+			Precipitation::NONE => null
+		};
+		if($result !== null){
+			BlockEventHelper::form($this, $result->setFillLevel(1), $this);
 		}
 	}
 

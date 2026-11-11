@@ -660,6 +660,7 @@ final class VanillaBlocks{
 	private static Flower $_mPOPPY;
 	private static Potato $_mPOTATOES;
 	private static PotionCauldron $_mPOTION_CAULDRON;
+	private static PowderSnowCauldron $_mPOWDER_SNOW_CAULDRON;
 	private static PoweredRail $_mPOWERED_RAIL;
 	private static Opaque $_mPRISMARINE;
 	private static Opaque $_mPRISMARINE_BRICKS;
@@ -1494,6 +1495,7 @@ final class VanillaBlocks{
 			"poppy" => fn(Flower $v) => self::$_mPOPPY = $v,
 			"potatoes" => fn(Potato $v) => self::$_mPOTATOES = $v,
 			"potion_cauldron" => fn(PotionCauldron $v) => self::$_mPOTION_CAULDRON = $v,
+			"powder_snow_cauldron" => fn(PowderSnowCauldron $v) => self::$_mPOWDER_SNOW_CAULDRON = $v,
 			"powered_rail" => fn(PoweredRail $v) => self::$_mPOWERED_RAIL = $v,
 			"prismarine" => fn(Opaque $v) => self::$_mPRISMARINE = $v,
 			"prismarine_bricks" => fn(Opaque $v) => self::$_mPRISMARINE_BRICKS = $v,
@@ -4818,6 +4820,11 @@ final class VanillaBlocks{
 	public static function POTION_CAULDRON() : PotionCauldron{
 		if(!isset(self::$_mPOTION_CAULDRON)){ self::init(); }
 		return clone self::$_mPOTION_CAULDRON;
+	}
+
+	public static function POWDER_SNOW_CAULDRON() : PowderSnowCauldron{
+		if(!isset(self::$_mPOWDER_SNOW_CAULDRON)){ self::init(); }
+		return clone self::$_mPOWDER_SNOW_CAULDRON;
 	}
 
 	public static function POWERED_RAIL() : PoweredRail{
