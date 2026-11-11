@@ -119,6 +119,7 @@ use pocketmine\world\sound\BlockSound;
 use pocketmine\world\sound\ProtocolSound;
 use pocketmine\world\sound\Sound;
 use pocketmine\world\utils\SubChunkExplorer;
+use pocketmine\world\weather\Weather;
 use pocketmine\YmlServerProperties;
 use function abs;
 use function array_filter;
@@ -397,6 +398,8 @@ class World implements ChunkManager{
 
 	private RuntimeBlockStateRegistry $blockStateRegistry;
 
+	private Weather $weather;
+
 	/**
 	 * @phpstan-return ChunkPosHash
 	 */
@@ -512,6 +515,7 @@ class World implements ChunkManager{
 			$defaultCoordinates = $tag instanceof ByteTag && $tag->getValue() !== 0;
 		}
 		$this->gameRules = new GameRules($provider->getPath() . "/gamerules.yml", $defaultCoordinates);
+		$this->weather = new Weather($this, $data);
 		$this->worldId = self::$worldIdCounter++;
 
 		$this->displayName = $this->provider->getWorldData()->getName();
@@ -1041,6 +1045,7 @@ class World implements ChunkManager{
 			}
 		}
 
+		$this->weather->tick();
 		$this->sunAnglePercentage = $this->computeSunAnglePercentage(); //Sun angle depends on the current time
 		$this->skyLightReduction = $this->computeSkyLightReduction(); //Sky light reduction depends on the sun angle
 
@@ -1185,6 +1190,7 @@ class World implements ChunkManager{
 
 			if($time >= World::TIME_NIGHT && $time < World::TIME_SUNRISE){
 				$this->setTime($this->getTime() + World::TIME_FULL - $time);
+				$this->weather->resetCycle();
 
 				foreach($this->getPlayers() as $p){
 					$p->stopSleep();
@@ -1549,6 +1555,7 @@ class World implements ChunkManager{
 		$timings->startTiming();
 
 		$this->provider->getWorldData()->setTime($this->time);
+		$this->weather->save($this->provider->getWorldData());
 		$this->saveChunks();
 		$this->provider->getWorldData()->save();
 
@@ -3464,6 +3471,11 @@ class World implements ChunkManager{
 	 */
 	public function getDamageY() : int{
 		return $this->damageY;
+	}
+
+	/** Rain and thunder for this world; Nether and End always report clear. */
+	public function getWeather() : Weather{
+		return $this->weather;
 	}
 
 	public function getDifficulty() : int{

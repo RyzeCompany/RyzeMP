@@ -65,6 +65,7 @@ use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\event\player\PlayerDimensionChangeEvent;
 use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
+use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\DataPacket;
@@ -106,6 +107,7 @@ use pocketmine\network\mcpe\protocol\types\command\CommandParameter;
 use pocketmine\network\mcpe\protocol\types\command\CommandPermissions;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\network\mcpe\protocol\types\LevelEvent;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
@@ -1561,6 +1563,8 @@ class NetworkSession{
 		$this->syncGameRules($world);
 		$this->syncWorldDifficulty($world->getDifficulty());
 		$this->syncWorldSpawnPoint($world->getSpawnLocation());
+		$weather = $world->getWeather();
+		$this->syncWorldWeather($weather->getRainLevel(), $weather->getLightningLevel());
 		if($started !== null && $this->dimensionTransition === $started){
 			(new PlayerDimensionChangeEvent($this->player, $started, PlayerDimensionChangeEvent::STARTED))->call();
 		}
@@ -1690,6 +1694,12 @@ class NetworkSession{
 
 	public function syncWorldTime(int $worldTime) : void{
 		$this->sendDataPacket(SetTimePacket::create($worldTime));
+	}
+
+	/** Vanilla rain and thunder levels, encoded separately for each session protocol. */
+	public function syncWorldWeather(float $rainLevel, float $lightningLevel) : void{
+		$this->sendDataPacket(LevelEventPacket::create($rainLevel > 0 ? LevelEvent::START_RAIN : LevelEvent::STOP_RAIN, (int) ($rainLevel * 65535), null));
+		$this->sendDataPacket(LevelEventPacket::create($lightningLevel > 0 ? LevelEvent::START_THUNDER : LevelEvent::STOP_THUNDER, (int) ($lightningLevel * 65535), null));
 	}
 
 	public function syncWorldDifficulty(int $worldDifficulty) : void{

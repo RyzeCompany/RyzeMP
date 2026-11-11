@@ -44,6 +44,7 @@ final class NativeCommandDefinitions{
 			"version" => [[$t("plugin", true)]],
 			"xp" => [[new A("amount", "xp"), $p(optional: true)]],
 			"gc", "list", "plugins", "save-all", "save-off", "save-on", "seed", "status", "stop" => [[]],
+			"weather" => [[$e("action", ["clear", "rain", "thunder"]), $i("duration", true)], [$e("action", ["query"])]],
 			"time", "whitelist" => [], // Each branch has its own permission below.
 			default => throw new \LogicException("Missing native command signature: " . $command->getName())
 		};

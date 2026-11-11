@@ -75,6 +75,7 @@ abstract class DefaultPermissions{
 
 		self::registerNoArgsDesc(Names::COMMAND_DUMPMEMORY, [$consoleRoot]);
 		self::registerPermission(new Permission(Names::COMMAND_GAMERULE, "Change implemented world game rules"), [$operatorRoot]);
+		self::registerPermission(new Permission(Names::COMMAND_WEATHER, "Change world weather"), [$operatorRoot]);
 
 		self::registerPermission(new Permission(Names::ANTICHEAT_LOG, "Receives anti-cheat detection alerts"), [$operatorRoot]);
 
