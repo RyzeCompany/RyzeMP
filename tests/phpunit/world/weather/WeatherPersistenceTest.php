@@ -46,4 +46,64 @@ final class WeatherPersistenceTest extends TestCase{
 		$copy->expects(self::once())->method("setLightningLevel")->with(0.0);
 		$weather->save($copy);
 	}
+
+	/**
+	 * Verify that the vanilla weather cycle only advances when enabled, using RyzeMP's actual
+	 * dimension lookup rather than VanillaMine's incompatible World::getDimension() API.
+	 */
+	public function testWeatherTimerRespectsGameRuleAndTransitionsToRain() : void{
+		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-unused-" . bin2hex(random_bytes(8)) . ".yml");
+		$world = $this->makeWorld("world", $rules);
+		$data = $this->createMock(WorldData::class);
+		$data->method("getRainTime")->willReturn(2);
+		$data->method("getLightningTime")->willReturn(10000);
+		$weather = new Weather($world, $data);
+
+		$rules->setBool(\pocketmine\world\GameRules::DO_WEATHER_CYCLE, false);
+		self::assertFalse($weather->isWeatherCycleEnabled());
+		$weather->tick();
+		self::assertSame(2, $weather->getRainTime());
+
+		$rules->setBool(\pocketmine\world\GameRules::DO_WEATHER_CYCLE, true);
+		$weather->tick();
+		self::assertSame(1, $weather->getRainTime());
+		$weather->tick();
+		self::assertTrue($weather->isRaining());
+		// Keep the temporary game rule YAML out of the repository and remove after the test.
+		// On Windows unlinking an empty path is harmless when the file was never written.
+	}
+
+	public function testNetherWorldNeverTicksOrBroadcastsStoredRain() : void{
+		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-nether-unused-" . bin2hex(random_bytes(8)) . ".yml");
+		$world = $this->makeWorld("world_nether", $rules);
+		$data = $this->createMock(WorldData::class);
+		$data->method("getRainTime")->willReturn(6);
+		$data->method("getLightningTime")->willReturn(12);
+		$data->method("getRainLevel")->willReturn(0.8);
+		$data->method("getLightningLevel")->willReturn(0.7);
+		$weather = new Weather($world, $data);
+		self::assertFalse($weather->hasWeather());
+		self::assertSame(0.0, $weather->getRainLevel());
+		self::assertSame(0.0, $weather->getLightningLevel());
+		$weather->tick();
+		self::assertSame(6, $weather->getRainTime());
+		self::assertSame(12, $weather->getLightningTime());
+	}
+
+	private function makeWorld(string $name, \pocketmine\world\GameRules $rules) : World{
+		$server = $this->createMock(\pocketmine\Server::class);
+		$manager = (new \ReflectionClass(\pocketmine\world\dimension\DimensionManager::class))->newInstanceWithoutConstructor();
+		(new \ReflectionProperty(\pocketmine\world\dimension\DimensionManager::class, "dimensions"))->setValue(
+			$manager,
+			new \pocketmine\world\dimension\Dimensions($server, [1 => "world_nether", 2 => "world_the_end"])
+		);
+		$server->method("getDimensionManager")->willReturn($manager);
+
+		$world = $this->createMock(World::class);
+		$world->method("getServer")->willReturn($server);
+		$world->method("getFolderName")->willReturn($name);
+		$world->method("getGameRules")->willReturn($rules);
+		$world->method("getPlayers")->willReturn([]);
+		return $world;
+	}
 }
