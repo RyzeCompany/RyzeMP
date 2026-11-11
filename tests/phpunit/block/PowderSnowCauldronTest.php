@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use PHPUnit\Framework\TestCase;
-use pocketmine\data\bedrock\block\GlobalBlockStateHandlers;
-use pocketmine\world\weather\Precipitation;
+use pocketmine\world\format\io\GlobalBlockStateHandlers;
+use pocketmine\world\World;
 
 final class PowderSnowCauldronTest extends TestCase{
 	public function testBlockStateIsRegisteredAndPreservesFillLevel() : void{
@@ -20,10 +20,22 @@ final class PowderSnowCauldronTest extends TestCase{
 		self::assertSame($block->getStateId(), $decoded);
 	}
 
-	public function testSnowCauldronOnlyAcceptsSnowAndHasSixLevels() : void{
-		$block = VanillaBlocks::POWDER_SNOW_CAULDRON();
-		self::assertSame(1, $block->getFillLevel());
-		self::assertSame(6, $block->setFillLevel(6)->getFillLevel());
-		self::assertSame(Precipitation::SNOW, Precipitation::SNOW);
+	public function testAllFillLevelsAreRegistered() : void{
+		for($level = 1; $level <= 6; ++$level){
+			$block = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel($level);
+			self::assertTrue(RuntimeBlockStateRegistry::getInstance()->hasStateId($block->getStateId()));
+		}
+	}
+
+	public function testDeterministicSnowfallIncrementsCauldron() : void{
+		$world = $this->createMock(World::class);
+		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
+		$cauldron->position($world, 10, 64, 20);
+		$world->expects(self::once())->method("setBlock")->with(
+			$cauldron->getPosition(),
+			self::callback(static fn(Block $b) : bool => $b instanceof PowderSnowCauldron && $b->getFillLevel() === 4)
+		);
+		$cauldron->fillByPrecipitation();
+		self::assertSame(3, $cauldron->getFillLevel());
 	}
 }

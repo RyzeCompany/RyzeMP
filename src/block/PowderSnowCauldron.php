@@ -46,6 +46,14 @@ final class PowderSnowCauldron extends FillableCauldron{
 		){
 			return;
 		}
+		$this->fillByPrecipitation();
+	}
+
+	/** Deterministic entry point for gameplay tests, respecting cancellable block formation. */
+	public function fillByPrecipitation() : void{
+		if($this->getFillLevel() >= self::MAX_FILL_LEVEL){
+			return;
+		}
 		$next = clone $this;
 		$next->setFillLevel($this->getFillLevel() + 1);
 		BlockEventHelper::form($this, $next, $this);
