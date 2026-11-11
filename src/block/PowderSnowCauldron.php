@@ -59,15 +59,21 @@ final class PowderSnowCauldron extends FillableCauldron{
 		BlockEventHelper::form($this, $next, $this);
 	}
 
+	/** The consumed contents remain powder snow, never turn into water. */
+	public function getStateAfterExtinguishing(int $amount = 1) : Block{
+		$remaining = $this->getFillLevel() - $amount;
+		return $remaining > 0 ?
+			VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel($remaining) :
+			VanillaBlocks::CAULDRON();
+	}
+
 	public function hasEntityCollision() : bool{ return true; }
 
 	public function onEntityInside(Entity $entity) : bool{
 		if($entity->isOnFire()){
 			$entity->extinguish(EntityExtinguishEvent::CAUSE_POWDER_SNOW);
-			$level = $this->getFillLevel() - WaterCauldron::ENTITY_EXTINGUISH_USE_AMOUNT;
-			$this->position->getWorld()->setBlock($this->position, $level <= 0 ?
-				VanillaBlocks::CAULDRON() :
-				VanillaBlocks::WATER_CAULDRON()->setFillLevel($level));
+			$this->position->getWorld()->setBlock($this->position,
+				$this->getStateAfterExtinguishing(WaterCauldron::ENTITY_EXTINGUISH_USE_AMOUNT));
 			return false;
 		}
 		return true;

@@ -9,6 +9,14 @@ use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\World;
 
 final class PowderSnowCauldronTest extends TestCase{
+	public function testExtinguishingKeepsPowderSnowInsteadOfTurningItIntoWater() : void{
+		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
+		$next = $cauldron->getStateAfterExtinguishing();
+		self::assertInstanceOf(PowderSnowCauldron::class, $next);
+		self::assertSame(2, $next->getFillLevel());
+		self::assertInstanceOf(Cauldron::class, VanillaBlocks::POWDER_SNOW_CAULDRON()->getStateAfterExtinguishing());
+	}
+
 	public function testBlockStateIsRegisteredAndPreservesFillLevel() : void{
 		$block = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
 		self::assertSame(BlockTypeIds::POWDER_SNOW_CAULDRON, $block->getTypeId());
