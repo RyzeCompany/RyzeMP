@@ -41,6 +41,6 @@ with tempfile.TemporaryDirectory(prefix='ryze-commandapi-') as directory:
             output = log.read()
             print(output)
     assert process.returncode == 0, process.returncode
-    assert 'COMMAND_API_PUBLIC_OK native=42 protocols=3 plugin-alias-typed-dispatch=ok' in output
+    assert 'COMMAND_API_PUBLIC_OK native=43 protocols=3 plugin-alias-typed-dispatch=ok' in output
     assert not any(value in output for value in ('COMMAND_API_PUBLIC_FAILED', 'Fatal error', 'Uncaught', 'CRITICAL', 'EMERGENCY'))
-print('PASS: actual PHAR public plugin API, 42 native commands, metadata for 589/2193/2225, aliases and typed dispatch. Private HCF integration is separate.')
+print('PASS: actual PHAR public plugin API, 43 native commands, metadata for 589/2193/2225, aliases and typed dispatch. Private HCF integration is separate.')
