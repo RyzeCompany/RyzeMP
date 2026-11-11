@@ -323,9 +323,9 @@ class Weather{
 			return;
 		}
 		$below = $this->world->getBlockAt($x, $belowY, $z);
-		if(BiomeClimate::isCold($biome, $belowY) &&
-			$below instanceof Water && $below->isSource() &&
-			$this->world->getBlockLightAt($x, $belowY, $z) < 10
+		if($below instanceof Water &&
+			self::canFreezeSourceWater($below, $biome, $belowY, $this->world->getBlockLightAt($x, $belowY, $z)) &&
+			$this->hasFreezingEdge($x, $belowY, $z)
 		){
 			BlockEventHelper::form($below, VanillaBlocks::ICE(), $below);
 			return;
@@ -342,6 +342,26 @@ class Weather{
 			$this->world->getBlockAt($x, $top, $z)->onPrecipitation($fall);
 			$below->onPrecipitation($fall);
 		}
+	}
+
+	/** Vanilla freezes only cold, exposed source water with low block light and an edge. */
+	public static function canFreezeSourceWater(Water $water, int $biome, int $y, int $blockLight) : bool{
+		return $water->isSource() && BiomeClimate::isCold($biome, $y) && $blockLight < 10;
+	}
+
+	private function hasFreezingEdge(int $x, int $y, int $z) : bool{
+		foreach(Facing::HORIZONTAL as $face){
+			[$dx, $dy, $dz] = Facing::OFFSET[$face];
+			$nx = $x + $dx;
+			$nz = $z + $dz;
+			if(!$this->world->isChunkLoaded($nx >> Chunk::COORD_BIT_SIZE, $nz >> Chunk::COORD_BIT_SIZE)){
+				continue;
+			}
+			if(!($this->world->getBlockAt($nx, $y, $nz) instanceof Water)){
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private function accumulateSnow(int $x, int $top, int $z, Block $below, int $biome) : void{
