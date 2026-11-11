@@ -19,7 +19,7 @@ Target: `RyzeCompany/RyzeMP`, base `aa6d91b8070eef31b756c8332acd6848760c5ee7` (b
 | Subsystem | Status | Next technical gate |
 | --- | --- | --- |
 | Weather cycle and per-world state | First slice in this branch | Verify real-client rain/thunder packets, command, save/restart and dimension switch |
-| Physical weather | Not ported | Precipitation, biome climate, lightning rods, snow/ice and lightning entity |
+| Physical weather | Partially ported: biome-aware rain/snow, freezing, snow layers, fire extinguishing and water cauldrons | Lightning, rod power and remaining entity/block interactions need further work and validation |
 | Vanilla terrain & structures | Not ported | Generator adapters, chunk formats, native Go helper and seed parity |
 | Mob AI and natural spawning | Not ported | Entity registries, AI tick budgets, per-version actor data |
 | Redstone | Not ported | World tick integration, block registry, network state translation |
@@ -47,3 +47,9 @@ The changes are intentionally isolated from the RyzeMP network protocol registry
 - [ ] Nether/End do not receive weather effects
 - [ ] PM5 plugin event cancellation
 - [ ] Existing worlds remain unchanged unless explicitly saved
+
+## Physical weather integration — incremental work, not yet verified on clients
+
+The `vanilla-content` weather climate and precipitation types were adapted under LGPL-3.0-or-later. RyzeMP continues to read the existing Bedrock biome JSON and legacy biome mapping. No new numeric biome IDs or world formats are introduced; unmapped biome IDs do not invent precipitation. The engine selects one column at 1/16 chance only from chunks already eligible for world simulation, never loading a chunk for weather. Snow and freezing use the native cancellable `BlockFormEvent`; ordinary water cauldrons fill at a low probability; burning entities exposed to real rain are extinguished using `EntityExtinguishEvent`.
+
+**Still pending:** complete ray and lightning-rod physics, Endermen behaviour, wet farmland and hydration, unsupported powder snow cauldrons, tests with real Bedrock clients and live mixed-protocol sessions, staging-level LevelDB persistence and performance measurements. Existing PR #58 checks represent automated CI only; no real Bedrock client tests were claimed.

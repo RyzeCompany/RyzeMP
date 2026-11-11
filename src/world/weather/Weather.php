@@ -302,6 +302,8 @@ class Weather{
 		}
 		$fall = BiomeClimate::getPrecipitation($biome, $belowY);
 		if($fall !== Precipitation::NONE){
+			//The uppermost pass-through block (e.g. an open cauldron) also receives rain.
+			$this->world->getBlockAt($x, $top, $z)->onPrecipitation($fall);
 			$below->onPrecipitation($fall);
 		}
 	}
