@@ -75,8 +75,9 @@ final class LightningRodPowerTest extends TestCase{
 		$world->scheduleDelayedBlockUpdate($pos, 8, true);
 		$world->scheduleDelayedBlockUpdate($pos, 8, true);
 		$index = (new \ReflectionProperty(World::class, "scheduledBlockUpdateQueueIndex"))->getValue($world);
+		self::assertIsArray($index);
 		self::assertSame(113, $index[World::blockHash(0, 64, 0)]);
-		self::assertSame(2, $queue->count());
+		self::assertCount(2, $queue);
 		self::assertTrue($world->isBlockUpdateScheduled($pos));
 	}
 

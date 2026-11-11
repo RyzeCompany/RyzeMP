@@ -1610,7 +1610,7 @@ class World implements ChunkManager{
 
 	/** Whether this location has a live delayed update (not a stale replaced entry). */
 	public function isBlockUpdateScheduled(Vector3 $pos) : bool{
-		return isset($this->scheduledBlockUpdateQueueIndex[World::blockHash($pos->x, $pos->y, $pos->z)]);
+		return isset($this->scheduledBlockUpdateQueueIndex[World::blockHash($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())]);
 	}
 
 	private function tryAddToNeighbourUpdateQueue(int $x, int $y, int $z) : void{
