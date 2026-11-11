@@ -17,6 +17,8 @@ use pocketmine\event\world\LightningStrikeEvent;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\player\Player;
+use pocketmine\world\sound\ExplodeSound;
+use pocketmine\world\sound\ThunderSound;
 
 /**
  * Short-lived Bedrock lightning actor. Does not persist or use custom protocol data.
@@ -66,6 +68,10 @@ class LightningBolt extends Entity implements NeverSavedWithChunkEntity{
 		$changed = parent::entityBaseTick($tickDiff);
 		if($this->isClosed() || $this->isFlaggedForDespawn()){
 			return $changed;
+		}
+		if($this->life === 2){
+			$this->broadcastSound(new ThunderSound());
+			$this->broadcastSound(new ExplodeSound());
 		}
 		if($this->life > 0 && !$this->visualOnly){
 			$this->strikeEntities();
