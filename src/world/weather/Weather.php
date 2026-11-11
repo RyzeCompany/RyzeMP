@@ -13,6 +13,7 @@ namespace pocketmine\world\weather;
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\block\Leaves;
+use pocketmine\block\LightningRod;
 use pocketmine\block\Liquid;
 use pocketmine\block\SnowLayer;
 use pocketmine\block\utils\BlockEventHelper;
@@ -21,7 +22,13 @@ use pocketmine\block\VanillaBlocks;
 use pocketmine\block\Water;
 use pocketmine\math\Facing;
 use pocketmine\world\format\Chunk;
+use pocketmine\event\world\LightningStrikeEvent;
 use pocketmine\event\world\WeatherChangeEvent;
+use pocketmine\entity\Living;
+use pocketmine\entity\Location;
+use pocketmine\entity\object\LightningBolt;
+use pocketmine\math\AxisAlignedBB;
+use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
 use pocketmine\utils\Utils;
@@ -32,6 +39,7 @@ use function count;
 use function max;
 use function min;
 use function mt_rand;
+use const PHP_INT_MAX;
 
 /**
  * Vanilla-style weather timers, biome-aware precipitation and snow/ice.
@@ -51,6 +59,10 @@ class Weather{
 
 	/** One column in 16 per simulated chunk tick; never loads chunks. */
 	public const PRECIPITATION_CHANCE = 16;
+	/** Natural strike probability per simulated chunk tick during a thunderstorm. */
+	public const LIGHTNING_CHANCE = 100000;
+	/** Vanilla rod attraction radius in horizontal blocks. */
+	public const LIGHTNING_ROD_RANGE = 64;
 
 	private const MIN_INTENSITY = 10000 / 65535;
 	private const MAX_INTENSITY = 60000 / 65535;
@@ -260,8 +272,17 @@ class Weather{
 
 	/** @internal Called by World only for an already simulated chunk. */
 	public function tickChunk(int $chunkX, int $chunkZ) : void{
-		if($this->hasWeather() && mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0){
+		if(!$this->hasWeather()){
+			return;
+		}
+		if(mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0){
 			$this->tickPrecipitationInChunk($chunkX, $chunkZ);
+		}
+		if($this->isThundering() && mt_rand(0, self::LIGHTNING_CHANCE - 1) === 0){
+			$this->tryNaturalStrike(
+				($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
+				($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
+			);
 		}
 	}
 
@@ -337,6 +358,94 @@ class Weather{
 			return;
 		}
 		BlockEventHelper::form($current, VanillaBlocks::SNOW_LAYER()->setLayers($layers), $current);
+	}
+
+
+	/** Spawn a cancellable, short-lived lightning actor from a plugin or server system. */
+	public function strike(Vector3 $position, bool $visualOnly = false, int $cause = LightningStrikeEvent::CAUSE_CUSTOM) : ?LightningBolt{
+		return LightningBolt::strike(Location::fromObject($position, $this->world), $visualOnly, $cause);
+	}
+
+	/** Attempts a natural strike in a previously loaded, simulated chunk. */
+	public function tryNaturalStrike(int $x, int $z) : ?LightningBolt{
+		if(!$this->isThundering()){
+			return null;
+		}
+		$target = $this->findLightningTarget($x, $z);
+		if($target === null || !$this->isExposedToSky($target->getFloorX(), $target->getFloorY(), $target->getFloorZ()) ||
+			$this->getPrecipitationAt($target->getFloorX(), $target->getFloorY(), $target->getFloorZ()) === Precipitation::NONE
+		){
+			return null;
+		}
+		return $this->strike($target->add(0.5, 0.0, 0.5), false, LightningStrikeEvent::CAUSE_WEATHER);
+	}
+
+	/** A lightning rod has priority over exposed living entities or the surface of the original column. */
+	public function findLightningTarget(int $x, int $z) : ?Vector3{
+		$top = $this->getPrecipitationHeight($x, $z);
+		if($top === null){
+			return null;
+		}
+		$rod = $this->findLightningRod($x, $top, $z);
+		if($rod !== null){
+			return $rod->up();
+		}
+		$box = new AxisAlignedBB($x - 3, $top - 3, $z - 3, $x + 4, $this->world->getMaxY() + 3, $z + 4);
+		$entities = [];
+		foreach($this->world->getNearbyEntities($box) as $entity){
+			if($entity instanceof Living && $entity->isAlive()){
+				$pos = $entity->getPosition();
+				if($this->isExposedToSky($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())){
+					$entities[] = $pos;
+				}
+			}
+		}
+		if(count($entities) > 0){
+			$pos = $entities[mt_rand(0, count($entities) - 1)];
+			return new Vector3($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+		}
+		return new Vector3($x, $top, $z);
+	}
+
+	/**
+	 * Scans only loaded columns for the top-most lightning rods in the 64-block horizontal radius.
+	 * Called on attempted strikes, never on every tick. Does not generate or load terrain.
+	 */
+	public function findLightningRod(int $x, int $y, int $z) : ?Vector3{
+		$range = self::LIGHTNING_ROD_RANGE;
+		$bestDistance = PHP_INT_MAX;
+		$best = null;
+		for($cx = ($x - $range) >> Chunk::COORD_BIT_SIZE; $cx <= (($x + $range) >> Chunk::COORD_BIT_SIZE); ++$cx){
+			for($cz = ($z - $range) >> Chunk::COORD_BIT_SIZE; $cz <= (($z + $range) >> Chunk::COORD_BIT_SIZE); ++$cz){
+				$chunk = $this->world->getChunk($cx, $cz);
+				if($chunk === null){
+					continue;
+				}
+				for($bx = 0; $bx < Chunk::EDGE_LENGTH; ++$bx){
+					$wx = ($cx << Chunk::COORD_BIT_SIZE) + $bx;
+					for($bz = 0; $bz < Chunk::EDGE_LENGTH; ++$bz){
+						$wz = ($cz << Chunk::COORD_BIT_SIZE) + $bz;
+						$horizontalSq = ($wx - $x) ** 2 + ($wz - $z) ** 2;
+						if($horizontalSq > $range ** 2){
+							continue;
+						}
+						$wy = $chunk->getHighestBlockAt($bx, $bz);
+						if($wy === null){
+							continue;
+						}
+						$distance = $horizontalSq + ($wy - $y) ** 2;
+						if($distance >= $bestDistance){
+							continue;
+						}
+						if($this->world->getBlockAt($wx, $wy, $wz) instanceof LightningRod){
+							$bestDistance = $distance;
+							$best = new Vector3($wx, $wy, $wz);
+						}
+					}
+				}
+			}
+		}
+		return $best;
 	}
 
 	/** Broadcast through each player's own version-aware Bedrock session. */
