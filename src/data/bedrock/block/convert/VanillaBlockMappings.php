@@ -689,7 +689,7 @@ final class VanillaBlockMappings{
 			->idComponents([...$commonProperties->copperIdPrefixes, "lightning_rod"])
 			->properties([
 				$commonProperties->anyFacingClassic,
-				new DummyProperty(StateNames::POWERED_BIT, false) //TODO
+				new BoolProperty(StateNames::POWERED_BIT, fn(PoweredByRedstone $b) => $b->isPowered(), fn(PoweredByRedstone $b, bool $v) => $b->setPowered($v))
 			])
 		);
 	}

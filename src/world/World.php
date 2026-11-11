@@ -1063,9 +1063,15 @@ class World implements ChunkManager{
 		$this->timings->scheduledBlockUpdates->startTiming();
 		//Delayed updates
 		while($this->scheduledBlockUpdateQueue->count() > 0 && $this->scheduledBlockUpdateQueue->current()["priority"] <= $currentTick){
-			/** @var Vector3 $vec */
-			$vec = $this->scheduledBlockUpdateQueue->extract()["data"];
-			unset($this->scheduledBlockUpdateQueueIndex[World::blockHash($vec->x, $vec->y, $vec->z)]);
+			/** @var array{data: Vector3, priority: int} $entry */
+			$entry = $this->scheduledBlockUpdateQueue->extract();
+			$vec = $entry["data"];
+			$index = World::blockHash($vec->x, $vec->y, $vec->z);
+			//Ignore a previously scheduled tick replaced by a later lightning strike.
+			if(($this->scheduledBlockUpdateQueueIndex[$index] ?? null) !== $entry["priority"]){
+				continue;
+			}
+			unset($this->scheduledBlockUpdateQueueIndex[$index]);
 			if(!$this->isInLoadedTerrain($vec)){
 				continue;
 			}
@@ -1589,15 +1595,22 @@ class World implements ChunkManager{
 	 * Schedules a block update to be executed after the specified number of ticks.
 	 * Blocks will be updated with the scheduled update type.
 	 */
-	public function scheduleDelayedBlockUpdate(Vector3 $pos, int $delay) : void{
-		if(
-			!$this->isInWorld($pos->x, $pos->y, $pos->z) ||
-			(isset($this->scheduledBlockUpdateQueueIndex[$index = World::blockHash($pos->x, $pos->y, $pos->z)]) && $this->scheduledBlockUpdateQueueIndex[$index] <= $delay)
-		){
+	public function scheduleDelayedBlockUpdate(Vector3 $pos, int $delay, bool $replaceExisting = false) : void{
+		if(!$this->isInWorld($pos->x, $pos->y, $pos->z)){
 			return;
 		}
-		$this->scheduledBlockUpdateQueueIndex[$index] = $delay;
-		$this->scheduledBlockUpdateQueue->insert(new Vector3((int) $pos->x, (int) $pos->y, (int) $pos->z), $delay + $this->server->getTick());
+		$index = World::blockHash($pos->x, $pos->y, $pos->z);
+		$dueTick = $this->server->getTick() + max(1, $delay);
+		if(!$replaceExisting && isset($this->scheduledBlockUpdateQueueIndex[$index]) && $this->scheduledBlockUpdateQueueIndex[$index] <= $dueTick){
+			return;
+		}
+		$this->scheduledBlockUpdateQueueIndex[$index] = $dueTick;
+		$this->scheduledBlockUpdateQueue->insert(new Vector3((int) $pos->x, (int) $pos->y, (int) $pos->z), $dueTick);
+	}
+
+	/** Whether this location has a live delayed update (not a stale replaced entry). */
+	public function isBlockUpdateScheduled(Vector3 $pos) : bool{
+		return isset($this->scheduledBlockUpdateQueueIndex[World::blockHash($pos->x, $pos->y, $pos->z)]);
 	}
 
 	private function tryAddToNeighbourUpdateQueue(int $x, int $y, int $z) : void{

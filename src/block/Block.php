@@ -526,6 +526,15 @@ class Block{
 
 	}
 
+	/** Minimal native redstone power API; other blocks may override the defaults. */
+	public function isRedstoneSource() : bool{ return false; }
+
+	/** @return int 0..15 */
+	public function getWeakPower(int $face) : int{ return 0; }
+
+	/** @return int 0..15 */
+	public function getStrongPower(int $face) : int{ return 0; }
+
 	/**
 	 * Do actions when interacted by Item. Returns if it has done anything
 	 *
