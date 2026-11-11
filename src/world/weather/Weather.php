@@ -27,7 +27,7 @@ use function mt_rand;
  * client synchronization. Physical lightning, precipitation and snow accumulation are deliberately
  * not yet enabled; they will be ported separately after block/mob integration.
  */
-final class Weather{
+class Weather{
 	public const CLEAR_MIN_TICKS = 12000;
 	public const CLEAR_MAX_TICKS = 180000;
 	public const RAIN_MIN_TICKS = 12000;
