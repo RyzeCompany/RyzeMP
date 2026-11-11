@@ -21,6 +21,7 @@ final class PowderSnowCauldronTest extends TestCase{
 
 	public function testPowderSnowBucketDoesNotTopUpPartialCauldron() : void{
 		$world = $this->createMock(World::class);
+		$world->method("isLoaded")->willReturn(true);
 		$world->expects(self::never())->method("setBlock");
 		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
 		$cauldron->position($world, 0, 64, 0);
@@ -52,6 +53,7 @@ final class PowderSnowCauldronTest extends TestCase{
 
 	public function testDeterministicSnowfallIncrementsCauldron() : void{
 		$world = $this->createMock(World::class);
+		$world->method("isLoaded")->willReturn(true);
 		$cauldron = VanillaBlocks::POWDER_SNOW_CAULDRON()->setFillLevel(3);
 		$cauldron->position($world, 10, 64, 20);
 		$world->expects(self::once())->method("setBlock")->with(

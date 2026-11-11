@@ -42,6 +42,7 @@ final class LightningRodPowerTest extends TestCase{
 
 	public function testReloadedPoweredRodRearmsTransientShutdownTick() : void{
 		$world = $this->createMock(World::class);
+		$world->method("isLoaded")->willReturn(true);
 		$rod = VanillaBlocks::LIGHTNING_ROD()->setPowered(true);
 		$rod->position($world, 5, 70, 8);
 		$world->method("isBlockUpdateScheduled")->willReturn(false);
@@ -52,6 +53,7 @@ final class LightningRodPowerTest extends TestCase{
 
 	public function testRepeatStrikeRestartsPulseWithoutRewritingAlreadyPoweredState() : void{
 		$world = $this->createMock(World::class);
+		$world->method("isLoaded")->willReturn(true);
 		$rod = VanillaBlocks::LIGHTNING_ROD();
 		$rod->position($world, 5, 70, 8);
 		$world->expects(self::once())->method("setBlock");
@@ -83,6 +85,7 @@ final class LightningRodPowerTest extends TestCase{
 
 	public function testLightningPulseAndExpirationNotifyNeighbors() : void{
 		$world = $this->createMock(World::class);
+		$world->method("isLoaded")->willReturn(true);
 		$rod = VanillaBlocks::LIGHTNING_ROD()->setFacing(Facing::NORTH);
 		$rod->position($world, 5, 70, 8);
 		$world->expects(self::exactly(2))->method("setBlock");
