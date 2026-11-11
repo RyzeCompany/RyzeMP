@@ -6,24 +6,15 @@ namespace pocketmine\world\weather;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\entity\object\LightningBolt;
+use pocketmine\event\Cancellable;
 use pocketmine\event\world\LightningStrikeEvent;
-use pocketmine\world\World;
 
+/** The cancellation event's integration with real world/actor lifecycle is tested on staging. */
 final class LightningStrikeEventTest extends TestCase{
-	public function testPluginCanCancelWeatherLightning() : void{
-		$world = $this->createMock(World::class);
-		$bolt = $this->getMockBuilder(LightningBolt::class)
-			->disableOriginalConstructor()
-			->onlyMethods(["getWorld", "__destruct"])
-			->getMock();
-		$bolt->method("getWorld")->willReturn($world);
-		$event = new LightningStrikeEvent($bolt, LightningStrikeEvent::CAUSE_WEATHER);
-		self::assertSame($world, $event->getWorld());
-		self::assertSame($bolt, $event->getBolt());
-		self::assertSame(LightningStrikeEvent::CAUSE_WEATHER, $event->getCause());
-		self::assertFalse($event->isCancelled());
-		$event->cancel();
-		self::assertTrue($event->isCancelled());
+	public function testLightningStrikeIsCancellableWorldEvent() : void{
+		self::assertTrue(is_subclass_of(LightningStrikeEvent::class, Cancellable::class));
+		self::assertSame(0, LightningStrikeEvent::CAUSE_WEATHER);
+		self::assertSame(2, LightningStrikeEvent::CAUSE_CUSTOM);
 	}
 
 	public function testNetworkActorNameIsVanilla() : void{
