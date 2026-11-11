@@ -65,6 +65,8 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 	public const CAUSE_CUSTOM = 14;
 	public const CAUSE_STARVATION = 15;
 	public const CAUSE_FALLING_BLOCK = 16;
+	/** Damage produced by a lightning bolt. */
+	public const CAUSE_LIGHTNING = 17;
 
 	private float $baseDamage;
 	private float $originalBase;
