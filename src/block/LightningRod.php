@@ -84,6 +84,21 @@ final class LightningRod extends Transparent implements AnyFacing, CopperMateria
 		}
 	}
 
+	/**
+	 * WorldData persists the powered blockstate, but not delayed block ticks.
+	 * Reading a powered rod after world reload re-arms its pending unpower tick.
+	 */
+	public function readStateFromWorld() : Block{
+		$block = parent::readStateFromWorld();
+		if($block === $this && $this->powered){
+			$world = $this->position->getWorld();
+			if(!$world->isBlockUpdateScheduled($this->position)){
+				$world->scheduleDelayedBlockUpdate($this->position, self::STRUCK_POWER_TICKS);
+			}
+		}
+		return $block;
+	}
+
 	public function onNearbyBlockChange() : void{
 		//If the powered state was restored from LevelDB, the transient tick queue is empty.
 		$world = $this->position->getWorld();

@@ -40,6 +40,16 @@ final class LightningRodPowerTest extends TestCase{
 		self::assertSame($rod->getStateId(), RuntimeBlockStateRegistry::getInstance()->fromStateId($rod->getStateId())->getStateId());
 	}
 
+	public function testReloadedPoweredRodRearmsTransientShutdownTick() : void{
+		$world = $this->createMock(World::class);
+		$rod = VanillaBlocks::LIGHTNING_ROD()->setPowered(true);
+		$rod->position($world, 5, 70, 8);
+		$world->method("isBlockUpdateScheduled")->willReturn(false);
+		$world->expects(self::once())->method("scheduleDelayedBlockUpdate")
+			->with($rod->getPosition(), LightningRod::STRUCK_POWER_TICKS);
+		self::assertSame($rod, $rod->readStateFromWorld());
+	}
+
 	public function testRepeatStrikeRestartsPulseWithoutRewritingAlreadyPoweredState() : void{
 		$world = $this->createMock(World::class);
 		$rod = VanillaBlocks::LIGHTNING_ROD();
