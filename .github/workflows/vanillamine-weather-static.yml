@@ -1,0 +1,43 @@
+name: VanillaMine weather static analysis
+on:
+  pull_request:
+    paths:
+      - 'src/world/weather/**'
+      - 'src/entity/object/LightningBolt.php'
+      - 'src/event/world/LightningStrikeEvent.php'
+      - 'src/entity/Entity.php'
+      - 'src/block/**'
+      - 'tests/phpunit/world/weather/**'
+      - '.github/workflows/vanillamine-weather-static.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phpstan-weather:
+    name: PHPStan level 9 - weather integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked development dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Analyze weather and integration contracts
+        run: |
+          php -d memory_limit=2G vendor/bin/phpstan analyse --configuration=phpstan.neon.dist --memory-limit=2G --no-progress \
+            src/world/weather \
+            src/entity/object/LightningBolt.php \
+            src/event/world/LightningStrikeEvent.php \
+            src/event/entity/EntityDamageEvent.php \
+            src/entity/Entity.php \
+            src/world/World.php \
+            src/block/Block.php \
+            src/block/Cauldron.php \
+            src/block/WaterCauldron.php \
+            tests/phpunit/world/weather
