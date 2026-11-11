@@ -7,7 +7,14 @@ on:
       - 'src/event/world/LightningStrikeEvent.php'
       - 'src/entity/Entity.php'
       - 'src/block/**'
+      - 'src/world/GameRules.php'
+      - 'src/data/bedrock/block/convert/VanillaBlockMappings.php'
+      - 'src/item/PowderSnowBucket.php'
+      - 'src/item/VanillaItemsInputs.php'
+      - 'src/world/sound/Cauldron*PowderSnowSound.php'
       - 'tests/phpunit/world/weather/**'
+      - 'tests/phpunit/block/LightningRodPowerTest.php'
+      - 'tests/phpunit/block/PowderSnowCauldronTest.php'
       - '.github/workflows/vanillamine-weather-static.yml'
   workflow_dispatch:
 
@@ -42,4 +49,14 @@ jobs:
             src/block/Block.php \
             src/block/Cauldron.php \
             src/block/WaterCauldron.php \
+            src/block/LightningRod.php \
+            src/block/PowderSnowCauldron.php \
+            src/world/GameRules.php \
+            src/data/bedrock/block/convert/VanillaBlockMappings.php \
+            src/item/PowderSnowBucket.php \
+            src/item/VanillaItemsInputs.php \
+            src/world/sound/CauldronFillPowderSnowSound.php \
+            src/world/sound/CauldronEmptyPowderSnowSound.php \
+            tests/phpunit/block/LightningRodPowerTest.php \
+            tests/phpunit/block/PowderSnowCauldronTest.php \
             tests/phpunit/world/weather
