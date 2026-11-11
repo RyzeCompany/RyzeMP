@@ -12,7 +12,10 @@ use pocketmine\world\World;
 final class LightningStrikeEventTest extends TestCase{
 	public function testPluginCanCancelWeatherLightning() : void{
 		$world = $this->createMock(World::class);
-		$bolt = $this->createMock(LightningBolt::class);
+		$bolt = $this->getMockBuilder(LightningBolt::class)
+			->disableOriginalConstructor()
+			->onlyMethods(["getWorld", "__destruct"])
+			->getMock();
 		$bolt->method("getWorld")->willReturn($world);
 		$event = new LightningStrikeEvent($bolt, LightningStrikeEvent::CAUSE_WEATHER);
 		self::assertSame($world, $event->getWorld());
