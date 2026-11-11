@@ -699,8 +699,9 @@ abstract class Entity{
 	 * when the corresponding entity types are ported.
 	 */
 	public function onStruckByLightning(\pocketmine\entity\object\LightningBolt $bolt) : void{
-		$this->attack(new EntityDamageEvent($this, EntityDamageEvent::CAUSE_LIGHTNING, 5.0));
-		if($this->isAlive()){
+		$event = new EntityDamageEvent($this, EntityDamageEvent::CAUSE_LIGHTNING, 5.0);
+		$this->attack($event);
+		if(!$event->isCancelled() && $this->isAlive()){
 			$this->setOnFire(8);
 		}
 	}
