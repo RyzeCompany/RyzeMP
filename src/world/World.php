@@ -1190,7 +1190,9 @@ class World implements ChunkManager{
 
 			if($time >= World::TIME_NIGHT && $time < World::TIME_SUNRISE){
 				$this->setTime($this->getTime() + World::TIME_FULL - $time);
-				$this->weather->resetCycle();
+				if($this->weather->isWeatherCycleEnabled()){
+					$this->weather->resetCycle();
+				}
 
 				foreach($this->getPlayers() as $p){
 					$p->stopSleep();
