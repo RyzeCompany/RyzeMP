@@ -12,6 +12,21 @@ use pocketmine\utils\ReversePriorityQueue;
 use pocketmine\world\World;
 
 final class LightningRodPowerTest extends TestCase{
+	public function testNeighborsCanReadRealPowerFromWorld() : void{
+		$world = $this->getMockBuilder(World::class)->disableOriginalConstructor()
+			->onlyMethods(["getBlockAt", "isChunkLoaded", "isInWorld"])->getMock();
+		$world->method("isInWorld")->willReturn(true);
+		$world->method("isChunkLoaded")->willReturn(true);
+		$rod = VanillaBlocks::LIGHTNING_ROD()->setFacing(Facing::UP)->setPowered(true);
+		$world->method("getBlockAt")->willReturnCallback(
+			static fn(int $x, int $y, int $z) : Block => $x === 0 && $y === 65 && $z === 0 ?
+				$rod : VanillaBlocks::AIR()
+		);
+		self::assertSame(15, $world->getRedstonePowerAt(0, 64, 0));
+		$rod->setPowered(false);
+		self::assertSame(0, $world->getRedstonePowerAt(0, 64, 0));
+	}
+
 	public function testPowerAndDirection() : void{
 		$rod = VanillaBlocks::LIGHTNING_ROD()->setFacing(Facing::UP);
 		self::assertTrue($rod->isRedstoneSource());

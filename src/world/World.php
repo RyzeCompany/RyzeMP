@@ -1648,6 +1648,33 @@ class World implements ChunkManager{
 	}
 
 	/**
+	 * Returns the strongest vanilla-style power emitted into the specified block by
+	 * directly adjacent sources. This interface is available to native blocks and plugins.
+	 * Unloaded neighboring chunks are never loaded by a power query.
+	 */
+	public function getRedstonePowerAt(int $x, int $y, int $z) : int{
+		$power = 0;
+		foreach(Facing::ALL as $side){
+			[$dx, $dy, $dz] = Facing::OFFSET[$side];
+			$nx = $x + $dx;
+			$ny = $y + $dy;
+			$nz = $z + $dz;
+			if(!$this->isInWorld($nx, $ny, $nz) ||
+				!$this->isChunkLoaded($nx >> Chunk::COORD_BIT_SIZE, $nz >> Chunk::COORD_BIT_SIZE)
+			){
+				continue;
+			}
+			$neighbor = $this->getBlockAt($nx, $ny, $nz);
+			$sourceFace = Facing::opposite($side);
+			$power = max($power, $neighbor->getWeakPower($sourceFace), $neighbor->getStrongPower($sourceFace));
+			if($power >= 15){
+				return 15;
+			}
+		}
+		return $power;
+	}
+
+	/**
 	 * @return Block[]
 	 * @phpstan-return list<Block>
 	 */
