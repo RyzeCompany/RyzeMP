@@ -90,6 +90,32 @@ final class WeatherPersistenceTest extends TestCase{
 		self::assertSame(12, $weather->getLightningTime());
 	}
 
+	public function testIndependentWorldsKeepIndependentWeatherStates() : void{
+		$rulesA = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-a-" . bin2hex(random_bytes(8)) . ".yml");
+		$rulesB = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-b-" . bin2hex(random_bytes(8)) . ".yml");
+		$weatherA = new Weather($this->makeWorld("overworld_a", $rulesA), $this->createMock(WorldData::class));
+		$weatherB = new Weather($this->makeWorld("overworld_b", $rulesB), $this->createMock(WorldData::class));
+
+		self::assertTrue($weatherA->setThunder(120));
+		self::assertTrue($weatherA->isThundering());
+		self::assertTrue($weatherB->isClear());
+		self::assertSame(120, $weatherA->getRainTime());
+		self::assertSame(0, $weatherB->getRainTime());
+	}
+
+	public function testEndDimensionIgnoresStoredStorm() : void{
+		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-end-" . bin2hex(random_bytes(8)) . ".yml");
+		$world = $this->makeWorld("world_the_end", $rules);
+		$data = $this->createMock(WorldData::class);
+		$data->method("getRainLevel")->willReturn(0.7);
+		$data->method("getLightningLevel")->willReturn(0.9);
+		$weather = new Weather($world, $data);
+		self::assertFalse($weather->hasWeather());
+		self::assertTrue($weather->isClear());
+		self::assertSame(0.0, $weather->getLightningLevel());
+		self::assertSame(0.0, $weather->getRainLevel());
+	}
+
 	private function makeWorld(string $name, \pocketmine\world\GameRules $rules) : World{
 		$server = $this->createMock(\pocketmine\Server::class);
 		$manager = (new \ReflectionClass(\pocketmine\world\dimension\DimensionManager::class))->newInstanceWithoutConstructor();

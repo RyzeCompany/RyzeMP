@@ -59,6 +59,10 @@ class Weather{
 
 	/** One column in 16 per simulated chunk tick; never loads chunks. */
 	public const PRECIPITATION_CHANCE = 16;
+	/** Hard cap for precipitation work on a world tick, regardless of simulation distance. */
+	public const MAX_PRECIPITATION_SAMPLES_PER_TICK = 32;
+	/** Hard cap on expensive 64-block lightning-rod scans per tick. */
+	public const MAX_LIGHTNING_ATTEMPTS_PER_TICK = 1;
 	/** Natural strike probability per simulated chunk tick during a thunderstorm. */
 	public const LIGHTNING_CHANCE = 100000;
 	/** Vanilla rod attraction radius in horizontal blocks. */
@@ -66,6 +70,9 @@ class Weather{
 
 	private const MIN_INTENSITY = 10000 / 65535;
 	private const MAX_INTENSITY = 60000 / 65535;
+
+	private int $precipitationSamplesThisTick = 0;
+	private int $lightningAttemptsThisTick = 0;
 
 	private int $rainTime;
 	private float $rainLevel;
@@ -201,6 +208,8 @@ class Weather{
 
 	/** Tick the two independent Vanilla-style weather timers. */
 	public function tick() : void{
+		$this->precipitationSamplesThisTick = 0;
+		$this->lightningAttemptsThisTick = 0;
 		if(!$this->hasWeather() || !$this->isWeatherCycleEnabled()){
 			return;
 		}
@@ -275,10 +284,16 @@ class Weather{
 		if(!$this->hasWeather()){
 			return;
 		}
-		if(mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0){
+		if($this->precipitationSamplesThisTick < self::MAX_PRECIPITATION_SAMPLES_PER_TICK &&
+			mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0
+		){
+			++$this->precipitationSamplesThisTick;
 			$this->tickPrecipitationInChunk($chunkX, $chunkZ);
 		}
-		if($this->isThundering() && mt_rand(0, self::LIGHTNING_CHANCE - 1) === 0){
+		if($this->lightningAttemptsThisTick < self::MAX_LIGHTNING_ATTEMPTS_PER_TICK &&
+			$this->isThundering() && mt_rand(0, self::LIGHTNING_CHANCE - 1) === 0
+		){
+			++$this->lightningAttemptsThisTick;
 			$this->tryNaturalStrike(
 				($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
 				($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
