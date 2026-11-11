@@ -1508,6 +1508,7 @@ class World implements ChunkManager{
 			//the chunk may have been unloaded during a previous chunk's update (e.g. during BlockGrowEvent)
 			return;
 		}
+		$this->weather->tickChunk($chunkX, $chunkZ);
 		foreach($this->getChunkEntities($chunkX, $chunkZ) as $entity){
 			$entity->onRandomUpdate();
 		}

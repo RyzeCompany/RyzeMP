@@ -10,6 +10,17 @@ declare(strict_types=1);
 
 namespace pocketmine\world\weather;
 
+use pocketmine\block\Block;
+use pocketmine\block\BlockTypeIds;
+use pocketmine\block\Leaves;
+use pocketmine\block\Liquid;
+use pocketmine\block\SnowLayer;
+use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\SupportType;
+use pocketmine\block\VanillaBlocks;
+use pocketmine\block\Water;
+use pocketmine\math\Facing;
+use pocketmine\world\format\Chunk;
 use pocketmine\event\world\WeatherChangeEvent;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
@@ -23,9 +34,8 @@ use function min;
 use function mt_rand;
 
 /**
- * First VanillaMine weather slice: independent per-world rain/thunder timers, persistence and
- * client synchronization. Physical lightning, precipitation and snow accumulation are deliberately
- * not yet enabled; they will be ported separately after block/mob integration.
+ * Vanilla-style weather timers, biome-aware precipitation and snow/ice.
+ * Lightning actor mechanics require separate multiversion validation.
  */
 class Weather{
 	public const CLEAR_MIN_TICKS = 12000;
@@ -38,6 +48,9 @@ class Weather{
 	public const THUNDER_MAX_TICKS = 15600;
 	public const COMMAND_MIN_TICKS = 6000;
 	public const COMMAND_MAX_TICKS = 18000;
+
+	/** One column in 16 per simulated chunk tick; never loads chunks. */
+	public const PRECIPITATION_CHANCE = 16;
 
 	private const MIN_INTENSITY = 10000 / 65535;
 	private const MAX_INTENSITY = 60000 / 65535;
@@ -201,6 +214,127 @@ class Weather{
 		if($raining !== ($this->rainLevel > 0.0) || $thundering !== ($this->lightningLevel > 0.0)){
 			$this->change($raining, $thundering);
 		}
+	}
+
+
+	/**
+	 * Lowest height reached by precipitation in an already loaded column.
+	 * Scans at most 8 pass-through blocks without loading or generating chunks.
+	 */
+	public function getPrecipitationHeight(int $x, int $z) : ?int{
+		$chunk = $this->world->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE);
+		if($chunk === null){
+			return null;
+		}
+		$highest = $chunk->getHighestBlockAt($x & Chunk::COORD_MASK, $z & Chunk::COORD_MASK);
+		if($highest === null){
+			return $this->world->getMinY();
+		}
+		$y = $highest;
+		for($i = 0; $y >= $this->world->getMinY() && $i < 8; --$y, ++$i){
+			$block = $this->world->getBlockAt($x, $y, $z);
+			if($block->isSolid() || $block instanceof Liquid){
+				return $y + 1;
+			}
+		}
+		return $y + 1;
+	}
+
+	public function isExposedToSky(int $x, int $y, int $z) : bool{
+		$top = $this->getPrecipitationHeight($x, $z);
+		return $top !== null && $y >= $top;
+	}
+
+	public function getPrecipitationAt(int $x, int $y, int $z) : Precipitation{
+		if(!$this->hasWeather() || !$this->world->isInWorld($x, $y, $z)){
+			return Precipitation::NONE;
+		}
+		return BiomeClimate::getPrecipitation($this->world->getBiomeId($x, $y, $z), $y);
+	}
+
+	public function isRainingAt(int $x, int $y, int $z) : bool{
+		return $this->isRaining() &&
+			$this->isExposedToSky($x, $y, $z) &&
+			$this->getPrecipitationAt($x, $y, $z) === Precipitation::RAIN;
+	}
+
+	/** @internal Called by World only for an already simulated chunk. */
+	public function tickChunk(int $chunkX, int $chunkZ) : void{
+		if($this->hasWeather() && mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0){
+			$this->tickPrecipitationInChunk($chunkX, $chunkZ);
+		}
+	}
+
+	public function tickPrecipitationInChunk(int $chunkX, int $chunkZ) : void{
+		$this->tickPrecipitation(
+			($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
+			($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
+		);
+	}
+
+	/** Ice formation is independent of rainfall; snow layers require rain state. */
+	public function tickPrecipitation(int $x, int $z) : void{
+		if(!$this->hasWeather()){
+			return;
+		}
+		$top = $this->getPrecipitationHeight($x, $z);
+		if($top === null || $top <= $this->world->getMinY() || $top >= $this->world->getMaxY()){
+			return;
+		}
+		$belowY = $top - 1;
+		$biome = $this->world->getBiomeId($x, $belowY, $z);
+		if(!BiomeClimate::hasPrecipitation($biome)){
+			return;
+		}
+		$below = $this->world->getBlockAt($x, $belowY, $z);
+		if(BiomeClimate::isCold($biome, $belowY) &&
+			$below instanceof Water && $below->isSource() &&
+			$this->world->getBlockLightAt($x, $belowY, $z) < 10
+		){
+			BlockEventHelper::form($below, VanillaBlocks::ICE(), $below);
+			return;
+		}
+		if(!$this->isRaining()){
+			return;
+		}
+		if(BiomeClimate::getPrecipitation($biome, $top) === Precipitation::SNOW){
+			$this->accumulateSnow($x, $top, $z, $below, $biome);
+		}
+		$fall = BiomeClimate::getPrecipitation($biome, $belowY);
+		if($fall !== Precipitation::NONE){
+			$below->onPrecipitation($fall);
+		}
+	}
+
+	private function accumulateSnow(int $x, int $top, int $z, Block $below, int $biome) : void{
+		$y = $top;
+		$current = $this->world->getBlockAt($x, $y, $z);
+		$depth = 0;
+		if($current instanceof SnowLayer && $current->getLayers() === SnowLayer::MAX_LAYERS){
+			$depth = SnowLayer::MAX_LAYERS;
+			if(++$y >= $this->world->getMaxY()){
+				return;
+			}
+			$current = $this->world->getBlockAt($x, $y, $z);
+		}
+		if($current instanceof SnowLayer){
+			$layers = $current->getLayers() + 1;
+			if($layers > SnowLayer::MAX_LAYERS){
+				return;
+			}
+		}elseif($current->getTypeId() === BlockTypeIds::AIR &&
+			($depth > 0 || $below instanceof Leaves || $below->getSupportType(Facing::UP) === SupportType::FULL)
+		){
+			$layers = 1;
+		}else{
+			return;
+		}
+		if($depth + $layers > BiomeClimate::getSnowAccumulationLayers($biome) ||
+			$this->world->getBlockLightAt($x, $y, $z) >= 10
+		){
+			return;
+		}
+		BlockEventHelper::form($current, VanillaBlocks::SNOW_LAYER()->setLayers($layers), $current);
 	}
 
 	/** Broadcast through each player's own version-aware Bedrock session. */
