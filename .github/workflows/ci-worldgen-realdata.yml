@@ -17,8 +17,6 @@ jobs:
     name: Rebuild verified source data and compare Java references
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      POCKETMINE_VANILLA_WORLDGEN_DATA: ${{ runner.temp }}/ryzemp-worldgen-java-263
     steps:
       - uses: actions/checkout@v4
       - uses: pmmp/setup-php-action@3.2.0
@@ -26,6 +24,8 @@ jobs:
           php-version: '8.4'
           install-path: ./bin
           pm-version-major: 5
+      - name: Set temporary data directory (runner context is unavailable at job env evaluation)
+        run: echo "POCKETMINE_VANILLA_WORLDGEN_DATA=$RUNNER_TEMP/ryzemp-worldgen-java-263" >> "$GITHUB_ENV"
       - name: Install locked dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
       - name: Prepare official Java 26.3 cache using VanillaMine verified bootstrap
