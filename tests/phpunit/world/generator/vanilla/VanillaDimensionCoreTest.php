@@ -7,6 +7,7 @@ namespace pocketmine\world\generator\vanilla;
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\data\bedrock\BiomeIds;
+use pocketmine\utils\Utils;
 use pocketmine\world\dimension\generator\VanillaGenerators;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\GeneratorManager;
@@ -83,7 +84,7 @@ final class VanillaDimensionCoreTest extends TestCase{
 		$reference = json_decode($referenceRaw, true, 512, JSON_THROW_ON_ERROR);
 		self::assertIsArray($reference);
 		self::assertIsArray($reference['spikes'] ?? null);
-		foreach($reference['spikes'] as $seed => $expected){
+		foreach(Utils::stringifyKeys($reference['spikes']) as $seed => $expected){
 			$spikes = EndSpikes::forSeed((int) $seed);
 			self::assertCount(10, $spikes);
 			$actual = array_map(static fn(EndSpike $spike) : array => [
