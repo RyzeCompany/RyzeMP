@@ -40,10 +40,6 @@ final class VanillaDensityChunkWriter{
 	private array $biomes;
 
 	private int $air;
-	private int $stone;
-	private int $deepslate;
-	private int $water;
-	private int $lava;
 	private int $bedrock;
 
 	public function __construct(int $seed, string $dataDir){
@@ -57,10 +53,6 @@ final class VanillaDensityChunkWriter{
 		$this->terrain = new InterpretedTerrainFiller($router, $tree);
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed);
 		$this->air = VanillaBlocks::AIR()->getStateId();
-		$this->stone = VanillaBlocks::STONE()->getStateId();
-		$this->deepslate = VanillaBlocks::DEEPSLATE()->getStateId();
-		$this->water = VanillaBlocks::WATER()->getStillForm()->getStateId();
-		$this->lava = VanillaBlocks::LAVA()->getStillForm()->getStateId();
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 	}
 
