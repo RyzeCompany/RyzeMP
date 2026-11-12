@@ -168,7 +168,7 @@ final class WorldgenData{
 	 * @return mixed[]|null
 	 */
 	public function biomeTree() : ?array{
-		return file_exists($this->root . "/" . "multi_noise_biome_tree.json") ? $this->readUncachedObject(VanillaDataFetcher::BIOME_TREE_FILE) : null;
+		return file_exists($this->root . "/" . "multi_noise_biome_tree.json") ? $this->readUncachedObject("multi_noise_biome_tree.json") : null;
 	}
 
 	/** @return mixed[] */
