@@ -23,6 +23,7 @@ final class RyzeOverworldGenerator extends Generator{
 	private const SEA_LEVEL = 62;
 
 	private OverworldTerrainSampler $sampler;
+	private ?VanillaDensityChunkWriter $vanillaCore;
 	private int $bedrock;
 	private int $stone;
 	private int $dirt;
@@ -33,9 +34,12 @@ final class RyzeOverworldGenerator extends Generator{
 	/** @throws InvalidGeneratorOptionsException */
 	public function __construct(int $seed, string $preset){
 		if($preset !== ""){
-			throw new InvalidGeneratorOptionsException("The experimental Ryze Overworld generator does not support presets yet");
+			$dataDir = VanillaDensityChunkWriter::validatePreset($preset);
+		}else{
+			$dataDir = null; // Frozen legacy experimental algorithm; never silently upgrade existing worlds.
 		}
 		parent::__construct($seed, $preset);
+		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter($seed, $dataDir) : null;
 		$this->sampler = new OverworldTerrainSampler($seed);
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 		$this->stone = VanillaBlocks::STONE()->getStateId();
@@ -49,6 +53,13 @@ final class RyzeOverworldGenerator extends Generator{
 		$chunk = $world->getChunk($chunkX, $chunkZ) ?? throw new \InvalidArgumentException("Chunk $chunkX $chunkZ does not yet exist");
 		if($chunk->isPopulated()){
 			//Extra defense for accidental direct calls. Standard PopulationUtils only generates missing chunks.
+			return;
+		}
+		if($this->vanillaCore !== null){
+			if($world->getMinY() !== -64 || $world->getMaxY() !== 320){
+				throw new \InvalidArgumentException('VanillaMine core-v1 Overworld requires world bounds -64..319');
+			}
+			$this->vanillaCore->fill($chunk, $chunkX, $chunkZ);
 			return;
 		}
 		$minY = max($world->getMinY(), Chunk::MIN_SUBCHUNK_INDEX * 16);
