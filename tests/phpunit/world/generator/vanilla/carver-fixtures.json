@@ -1,0 +1,93 @@
+{
+    "_comment": "Carver stage. mask: md5 of the sorted carving mask indexes (((x << 4) | z) * 384 + y + 64), computed by an independent implementation of vanilla's carver geometry (Node, native float32); blocks: md5 of the block ids (Java names) of the whole chunk after the carvers, from the PHP implementation (regression check). Numbers only, no Mojang data",
+    "seeds": {
+        "13579": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "maskSize": 635,
+                "blocks": "b59d588ea10ef27fbcb0cc528044263f",
+                "mask": "bf004cd11d75907711b50cb80bab6fd1"
+            },
+            {
+                "cx": 3,
+                "cz": 1,
+                "maskSize": 2184,
+                "blocks": "7e1aa9ce409be556e7dfb2556520ffff",
+                "mask": "bf360497e03b6dba46d50919ecf395b9"
+            },
+            {
+                "cx": -234,
+                "cz": 135,
+                "maskSize": 12,
+                "blocks": "202ea8887f148de8d41e9c8cfac346d7",
+                "mask": "0403d616640730eeeea2b657962cc843"
+            },
+            {
+                "cx": 126,
+                "cz": -18,
+                "maskSize": 4010,
+                "blocks": "5a2ae654f4716805f24ab388b7ce2100",
+                "mask": "b5335897a73ec3ebdd12689c7925bef4"
+            },
+            {
+                "cx": -180,
+                "cz": -270,
+                "maskSize": 1543,
+                "blocks": "c3cd894b3db7d2814ee291d44f3c482b",
+                "mask": "e586ad616b95d2e07593e1fac01de4a5"
+            },
+            {
+                "cx": 5000,
+                "cz": -3000,
+                "maskSize": 0,
+                "blocks": "7bb705c7f2861db65d40709de8a13bf3",
+                "mask": "d41d8cd98f00b204e9800998ecf8427e"
+            }
+        ],
+        "-4172144997902289642": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "maskSize": 1129,
+                "blocks": "c8b2c372a66f83e31f3db085f71ca85d",
+                "mask": "f793fe080a2e54d6f23709c572801d93"
+            },
+            {
+                "cx": -1,
+                "cz": 2,
+                "maskSize": 1254,
+                "blocks": "77444287e08c7f0735f4a75cd6a6ecc6",
+                "mask": "5a1fe1046ab224943614f4ca32f5d88f"
+            },
+            {
+                "cx": 225,
+                "cz": -45,
+                "maskSize": 1315,
+                "blocks": "31ca099ade0545328b1f8191f89ee6bc",
+                "mask": "909a26ef48cc590358aab1287225ecd8"
+            },
+            {
+                "cx": -270,
+                "cz": -117,
+                "maskSize": 73,
+                "blocks": "b6d2729c1c83f1809c9d15936e331f02",
+                "mask": "baab0bd43aabbd2b5c5c3c1ec7e1dedd"
+            },
+            {
+                "cx": -20000,
+                "cz": 7000,
+                "maskSize": 635,
+                "blocks": "9f0e135a06bdb65e4ab13740fa6d9f13",
+                "mask": "029c2bcded2d85a37ab9cd7414cb2f22"
+            },
+            {
+                "cx": 61,
+                "cz": 61,
+                "maskSize": 417,
+                "blocks": "9dd271fac237e6ba17314b6a1eb6e285",
+                "mask": "31d44b469e25cec2ea581ab83c85fb94"
+            }
+        ]
+    }
+}
