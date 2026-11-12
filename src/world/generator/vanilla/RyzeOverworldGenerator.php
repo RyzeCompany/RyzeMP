@@ -39,7 +39,7 @@ final class RyzeOverworldGenerator extends Generator{
 			$dataDir = null; // Frozen legacy experimental algorithm; never silently upgrade existing worlds.
 		}
 		parent::__construct($seed, $preset);
-		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter($seed, $dataDir) : null;
+		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter($seed, $dataDir, "overworld", VanillaDataIdentity::expectedHash($preset)) : null;
 		$this->sampler = new OverworldTerrainSampler($seed);
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 		$this->stone = VanillaBlocks::STONE()->getStateId();
