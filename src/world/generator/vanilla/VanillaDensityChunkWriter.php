@@ -43,10 +43,15 @@ final class VanillaDensityChunkWriter{
 	/** @var list<int> */
 	private array $biomes;
 
+	private string $terrainDataDir;
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld"){
+	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null){
+		$this->terrainDataDir = $dataDir;
+		if($this->pinnedHash !== null){
+			VanillaDataIdentity::assertMatches($dataDir, $this->pinnedHash);
+		}
 		$data = new WorldgenData($dataDir);
 		$router = new NoiseRouter($data, $seed, $dimension);
 		$expectedMinY = $dimension === "overworld" ? -64 : 0;
@@ -72,12 +77,20 @@ final class VanillaDensityChunkWriter{
 		if(!in_array($dimension, ["overworld", "nether", "end"], true)){
 			throw new InvalidGeneratorOptionsException("Unsupported VanillaMine dimension: $dimension");
 		}
-		if(!str_starts_with($preset, self::PRESET_PREFIX)){
-			throw new InvalidGeneratorOptionsException("Expected core-v1;data=<absolute path> (or empty legacy preset)");
-		}
-		$dir = substr($preset, strlen(self::PRESET_PREFIX));
-		if($dir === "" || str_contains($dir, ";") || str_contains($dir, "\0") || !Path::isAbsolute($dir)){
-			throw new InvalidGeneratorOptionsException("core-v1 requires a single absolute data directory");
+		if(str_starts_with($preset, VanillaDataIdentity::PRESET_PREFIX)){
+			$pinned = VanillaDataIdentity::parse($preset);
+			$dir = $pinned["directory"];
+			VanillaDataIdentity::assertMatches($dir, $pinned["hash"]);
+		}else{
+			// Preserve the old unpinned core-v1 preset verbatim for existing
+			// experimental worlds; never upgrade their algorithm silently.
+			if(!str_starts_with($preset, self::PRESET_PREFIX)){
+				throw new InvalidGeneratorOptionsException("Expected core-v1 or pinned core-v2 preset");
+			}
+			$dir = substr($preset, strlen(self::PRESET_PREFIX));
+			if($dir === "" || str_contains($dir, ";") || str_contains($dir, "\0") || !Path::isAbsolute($dir)){
+				throw new InvalidGeneratorOptionsException("core-v1 requires a single absolute data directory");
+			}
 		}
 		$stampFile = $dir . "/version.json";
 		if(!is_file($stampFile)){
@@ -128,6 +141,12 @@ final class VanillaDensityChunkWriter{
 	public function fill(Chunk $chunk, int $chunkX, int $chunkZ) : void{
 		if($chunk->isPopulated()){
 			return;
+		}
+		// Fail before ANY biome/block write if the external cache was replaced
+		// after server startup. This rehashes the complete source cache per
+		// newly generated chunk; optimize only after a proven safe cache guard.
+		if($this->pinnedHash !== null){
+			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
 		}
 		$terrain = $this->terrain->fill($chunkX, $chunkZ);
 		$terrain->unpackBiomes();
