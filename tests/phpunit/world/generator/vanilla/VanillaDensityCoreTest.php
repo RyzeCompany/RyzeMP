@@ -194,7 +194,10 @@ final class VanillaDensityCoreTest extends TestCase{
 		self::assertNotFalse($json);
 		$settings = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
 		self::assertIsArray($settings);
-		$settings['noise_router']['final_density'] = -1.0; // open water/air cells
+		$router = $settings['noise_router'] ?? null;
+		self::assertIsArray($router);
+		$router['final_density'] = -1.0; // open water/air cells
+		$settings['noise_router'] = $router;
 		$settings['aquifers'] = [
 			'barrier' => 0.0,
 			'fluid_level_floodedness' => 0.0,
