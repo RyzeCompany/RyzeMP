@@ -37,6 +37,7 @@ use pocketmine\utils\Utils;
 use pocketmine\world\format\io\WorldData;
 use pocketmine\world\GameRules;
 use pocketmine\world\World;
+use function array_keys;
 use function count;
 use function max;
 use function min;
@@ -63,10 +64,10 @@ class Weather{
 	public const PRECIPITATION_CHANCE = 16;
 	/** Hard cap for precipitation work on a world tick, regardless of simulation distance. */
 	public const MAX_PRECIPITATION_SAMPLES_PER_TICK = 32;
-	/** Hard cap on expensive 64-block lightning-rod scans per tick. */
-	public const MAX_LIGHTNING_ATTEMPTS_PER_TICK = 1;
-	/** Natural strike probability per simulated chunk tick during a thunderstorm. */
+	/** One natural lightning selection per world tick, with an independent 1/N chance per nearby loaded chunk. */
 	public const LIGHTNING_CHANCE = 100000;
+	/** Vanilla's horizontal radius for natural lightning near a player. */
+	public const LIGHTNING_RANGE = 128;
 	/** Vanilla rod attraction radius in horizontal blocks. */
 	public const LIGHTNING_ROD_RANGE = 64;
 
@@ -77,7 +78,6 @@ class Weather{
 	private static ?array $lightningRodStates = null;
 
 	private int $precipitationSamplesThisTick = 0;
-	private int $lightningAttemptsThisTick = 0;
 
 	private int $rainTime;
 	private float $rainLevel;
@@ -144,10 +144,15 @@ class Weather{
 	}
 
 	/** Returns false when a plugin cancels the pending transition. */
-	private function change(bool $raining, bool $thundering) : bool{
+	private function change(bool $raining, bool $thundering, bool $forceFullRain = false) : bool{
 		$wasRaining = $this->rainLevel > 0.0;
 		$wasThundering = $this->lightningLevel > 0.0;
 		if($wasRaining === $raining && $wasThundering === $thundering){
+			//Commands must also resend an already-active rain state to recover client visuals.
+			if($forceFullRain && $raining){
+				$this->rainLevel = 1.0;
+				$this->broadcast();
+			}
 			return true;
 		}
 
@@ -164,8 +169,8 @@ class Weather{
 			return false;
 		}
 
-		if($raining !== $wasRaining){
-			$this->rainLevel = $raining ? self::randomIntensity() : 0.0;
+		if($raining !== $wasRaining || ($forceFullRain && $raining)){
+			$this->rainLevel = $raining ? ($forceFullRain ? 1.0 : self::randomIntensity()) : 0.0;
 		}
 		if($thundering !== $wasThundering){
 			$this->lightningLevel = $thundering ? self::randomIntensity() : 0.0;
@@ -186,7 +191,7 @@ class Weather{
 
 	public function setRain(?int $duration = null) : bool{
 		$duration ??= mt_rand(self::COMMAND_MIN_TICKS, self::COMMAND_MAX_TICKS);
-		if(!$this->change(true, false)){
+		if(!$this->change(true, false, true)){
 			return false;
 		}
 		$this->rainTime = max(1, $duration);
@@ -196,7 +201,7 @@ class Weather{
 
 	public function setThunder(?int $duration = null) : bool{
 		$duration ??= mt_rand(self::COMMAND_MIN_TICKS, self::COMMAND_MAX_TICKS);
-		if(!$this->change(true, true)){
+		if(!$this->change(true, true, true)){
 			return false;
 		}
 		$this->rainTime = max(1, $duration);
@@ -211,37 +216,103 @@ class Weather{
 		}
 	}
 
-	/** Tick the two independent Vanilla-style weather timers. */
+	/** Tick the two independent weather timers and natural lightning even when weather cycle is disabled. */
 	public function tick() : void{
 		$this->precipitationSamplesThisTick = 0;
-		$this->lightningAttemptsThisTick = 0;
-		if(!$this->hasWeather() || !$this->isWeatherCycleEnabled()){
+		if(!$this->hasWeather()){
 			return;
 		}
 
-		$raining = $this->rainLevel > 0.0;
-		$thundering = $this->lightningLevel > 0.0;
-		if($this->lightningTime <= 0){
-			$this->lightningTime = $thundering ?
-				mt_rand(self::THUNDER_MIN_TICKS, self::THUNDER_MAX_TICKS) :
-				mt_rand(self::NO_THUNDER_MIN_TICKS, self::NO_THUNDER_MAX_TICKS);
-		}elseif(--$this->lightningTime <= 0){
-			$thundering = !$thundering;
-		}
+		if($this->isWeatherCycleEnabled()){
+			$raining = $this->rainLevel > 0.0;
+			$thundering = $this->lightningLevel > 0.0;
+			if($this->lightningTime <= 0){
+				$this->lightningTime = $thundering ?
+					mt_rand(self::THUNDER_MIN_TICKS, self::THUNDER_MAX_TICKS) :
+					mt_rand(self::NO_THUNDER_MIN_TICKS, self::NO_THUNDER_MAX_TICKS);
+			}elseif(--$this->lightningTime <= 0){
+				$thundering = !$thundering;
+			}
 
-		if($this->rainTime <= 0){
-			$this->rainTime = $raining ?
-				mt_rand(self::RAIN_MIN_TICKS, self::RAIN_MAX_TICKS) :
-				mt_rand(self::CLEAR_MIN_TICKS, self::CLEAR_MAX_TICKS);
-		}elseif(--$this->rainTime <= 0){
-			$raining = !$raining;
-		}
+			if($this->rainTime <= 0){
+				$this->rainTime = $raining ?
+					mt_rand(self::RAIN_MIN_TICKS, self::RAIN_MAX_TICKS) :
+					mt_rand(self::CLEAR_MIN_TICKS, self::CLEAR_MAX_TICKS);
+			}elseif(--$this->rainTime <= 0){
+				$raining = !$raining;
+			}
 
-		if($raining !== ($this->rainLevel > 0.0) || $thundering !== ($this->lightningLevel > 0.0)){
-			$this->change($raining, $thundering);
+			if($raining !== ($this->rainLevel > 0.0) || $thundering !== ($this->lightningLevel > 0.0)){
+				$this->change($raining, $thundering);
+			}
+		}
+		if($this->isThundering()){
+			$this->tickLightning();
 		}
 	}
 
+	/**
+	 * A thunderstorm selects at most one strike each tick.
+	 *
+	 * Each already loaded chunk in a 128-block radius around a non-spectating player
+	 * has exactly a 1/LIGHTNING_CHANCE chance of being selected. An upper-bound
+	 * rejection avoids examining hundreds of chunks on almost every tick.
+	 */
+	private function tickLightning() : void{
+		$radius = self::LIGHTNING_RANGE >> Chunk::COORD_BIT_SIZE;
+		$centers = [];
+		foreach($this->world->getPlayers() as $player){
+			if($player->isSpectator()){
+				continue;
+			}
+			$pos = $player->getPosition();
+			$centers[] = [
+				$pos->getFloorX() >> Chunk::COORD_BIT_SIZE,
+				$pos->getFloorZ() >> Chunk::COORD_BIT_SIZE
+			];
+		}
+		if(count($centers) === 0){
+			return;
+		}
+
+		$roll = mt_rand(0, self::LIGHTNING_CHANCE - 1);
+		//A square containing the circle is a conservative upper bound. Rejecting
+		//before the expensive scan does not change the final probability.
+		if($roll >= count($centers) * (2 * $radius + 1) ** 2){
+			return;
+		}
+
+		$chunks = [];
+		foreach($centers as [$centerX, $centerZ]){
+			for($dx = -$radius; $dx <= $radius; ++$dx){
+				for($dz = -$radius; $dz <= $radius; ++$dz){
+					if($dx * $dx + $dz * $dz > $radius * $radius){
+						continue;
+					}
+					$cx = $centerX + $dx;
+					$cz = $centerZ + $dz;
+					if($this->world->isChunkLoaded($cx, $cz)){
+						$chunks[World::chunkHash($cx, $cz)] = true;
+					}
+				}
+			}
+		}
+
+		if(!self::isSuccessfulLightningRoll($roll, count($chunks))){
+			return;
+		}
+		$hashes = array_keys($chunks);
+		World::getXZ($hashes[mt_rand(0, count($hashes) - 1)], $chunkX, $chunkZ);
+		$this->tryNaturalStrike(
+			($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
+			($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
+		);
+	}
+
+	/** @internal A given roll succeeds only when it is below the number of eligible loaded chunks. */
+	public static function isSuccessfulLightningRoll(int $roll, int $loadedChunkCount) : bool{
+		return $loadedChunkCount > 0 && $roll >= 0 && $roll < $loadedChunkCount;
+	}
 
 	/**
 	 * Lowest height reached by precipitation in an already loaded column.
@@ -295,15 +366,7 @@ class Weather{
 			++$this->precipitationSamplesThisTick;
 			$this->tickPrecipitationInChunk($chunkX, $chunkZ);
 		}
-		if($this->lightningAttemptsThisTick < self::MAX_LIGHTNING_ATTEMPTS_PER_TICK &&
-			$this->isThundering() && mt_rand(0, self::LIGHTNING_CHANCE - 1) === 0
-		){
-			++$this->lightningAttemptsThisTick;
-			$this->tryNaturalStrike(
-				($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
-				($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
-			);
-		}
+
 	}
 
 	public function tickPrecipitationInChunk(int $chunkX, int $chunkZ) : void{

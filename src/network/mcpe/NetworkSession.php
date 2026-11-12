@@ -1698,8 +1698,17 @@ class NetworkSession{
 
 	/** Vanilla rain and thunder levels, encoded separately for each session protocol. */
 	public function syncWorldWeather(float $rainLevel, float $lightningLevel) : void{
-		$this->sendDataPacket(LevelEventPacket::create($rainLevel > 0 ? LevelEvent::START_RAIN : LevelEvent::STOP_RAIN, (int) ($rainLevel * 65535), null));
-		$this->sendDataPacket(LevelEventPacket::create($lightningLevel > 0 ? LevelEvent::START_THUNDER : LevelEvent::STOP_THUNDER, (int) ($lightningLevel * 65535), null));
+		$rainPacket = LevelEventPacket::create($rainLevel > 0 ? LevelEvent::START_RAIN : LevelEvent::STOP_RAIN, (int) ($rainLevel * 65535), null);
+		$thunderPacket = LevelEventPacket::create($lightningLevel > 0 ? LevelEvent::START_THUNDER : LevelEvent::STOP_THUNDER, (int) ($lightningLevel * 65535), null);
+		//Some Bedrock clients may drop the visual rain state when STOP_THUNDER
+		//arrives after START_RAIN. Send the active weather state last.
+		if($lightningLevel <= 0.0){
+			$this->sendDataPacket($thunderPacket);
+			$this->sendDataPacket($rainPacket);
+		}else{
+			$this->sendDataPacket($rainPacket);
+			$this->sendDataPacket($thunderPacket);
+		}
 	}
 
 	public function syncWorldDifficulty(int $worldDifficulty) : void{

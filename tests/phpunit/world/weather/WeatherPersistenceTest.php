@@ -73,6 +73,30 @@ final class WeatherPersistenceTest extends TestCase{
 		// On Windows unlinking an empty path is harmless when the file was never written.
 	}
 
+	public function testWeatherCommandRainIsVisiblyStrongWithoutThunder() : void{
+		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-visible-" . bin2hex(random_bytes(8)) . ".yml");
+		$world = $this->makeWorld("world", $rules);
+		$weather = new Weather($world, $this->createMock(WorldData::class));
+		self::assertTrue($weather->setRain(600));
+		self::assertSame(1.0, $weather->getRainLevel());
+		self::assertSame(0.0, $weather->getLightningLevel());
+		//Repeating the command must resync the client and keep rain fully visible.
+		self::assertTrue($weather->setRain(600));
+		self::assertSame(1.0, $weather->getRainLevel());
+	}
+
+	public function testThunderWeatherRemainsActiveWhenWeatherCycleIsDisabled() : void{
+		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-thunder-cycle-" . bin2hex(random_bytes(8)) . ".yml");
+		$world = $this->makeWorld("world", $rules);
+		$weather = new Weather($world, $this->createMock(WorldData::class));
+		$weather->setThunder(600);
+		$rules->setBool(\pocketmine\world\GameRules::DO_WEATHER_CYCLE, false);
+		$weather->tick();
+		self::assertTrue($weather->isThundering());
+		self::assertSame(600, $weather->getRainTime());
+		self::assertSame(600, $weather->getLightningTime());
+	}
+
 	public function testNetherWorldNeverTicksOrBroadcastsStoredRain() : void{
 		$rules = new \pocketmine\world\GameRules(sys_get_temp_dir() . "/ryze-weather-nether-unused-" . bin2hex(random_bytes(8)) . ".yml");
 		$world = $this->makeWorld("world_nether", $rules);
