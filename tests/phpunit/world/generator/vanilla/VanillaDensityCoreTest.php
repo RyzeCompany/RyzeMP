@@ -38,6 +38,7 @@ final class VanillaDensityCoreTest extends TestCase{
 			'sea_level' => 63,
 			'default_block' => 'minecraft:stone',
 			'default_fluid' => 'minecraft:water',
+			'material_rule' => ['type' => 'minecraft:block', 'result_state' => ['Name' => 'minecraft:grass_block']],
 			'noise' => ['min_y' => -64, 'height' => 384],
 			'noise_router' => [
 				'temperature' => 0,
@@ -59,6 +60,9 @@ final class VanillaDensityCoreTest extends TestCase{
 			'weirdness' => 0,
 			'offset' => 0
 		];
+		foreach(['surface', 'surface_secondary', 'badlands_pillar', 'badlands_pillar_roof', 'badlands_surface', 'iceberg_pillar', 'iceberg_pillar_roof', 'iceberg_surface'] as $noise){
+			$this->put('data/minecraft/worldgen/noise/' . $noise . '.json', []);
+		}
 		$this->put('reports/biome_parameters/minecraft/overworld.json', [
 			'biomes' => [
 				['biome' => 'minecraft:plains', 'parameters' => $parameter(-0.75)],
@@ -98,7 +102,7 @@ final class VanillaDensityCoreTest extends TestCase{
 		$gen->generateChunk($world, -1, 2);
 
 		self::assertSame(VanillaBlocks::BEDROCK()->getStateId(), $chunk->getBlockStateId(3, -64, 4));
-		self::assertSame(VanillaBlocks::STONE()->getStateId(), $chunk->getBlockStateId(3, 80, 4));
+		self::assertSame(VanillaBlocks::GRASS()->getStateId(), $chunk->getBlockStateId(3, 80, 4));
 		self::assertSame(VanillaBlocks::AIR()->getStateId(), $chunk->getBlockStateId(3, 230, 4));
 		self::assertSame(BiomeIds::PLAINS, $chunk->getBiomeId(3, -48, 4));
 		self::assertSame(BiomeIds::FOREST, $chunk->getBiomeId(3, 270, 4));
