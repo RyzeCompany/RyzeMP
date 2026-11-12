@@ -26,6 +26,37 @@ use const JSON_THROW_ON_ERROR;
  */
 final class VanillaRealDataReferenceTest extends TestCase{
 
+	public function testCompiledPhpMatchesInterpretedCoreWithRealAquifers() : void{
+		$directory = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
+		if($directory === false || !is_dir($directory . "/data/minecraft/worldgen/noise_settings")){
+			self::markTestSkipped("Authentic VanillaMine Java 26.3 data cache is required");
+		}
+		$data = new WorldgenData($directory);
+		$router = new NoiseRouter($data, 12345);
+		$tree = ClimateBiomeTree::fromData($data);
+		$interpreted = new InterpretedTerrainFiller($router, $tree);
+		$cache = sys_get_temp_dir() . "/ryzemp-compiled-java-263-" . bin2hex(random_bytes(8));
+		try{
+			$compiled = new CompiledTerrainFiller($router, $tree, $cache);
+			foreach([[0, 0], [-2, 3]] as [$x, $z]){
+				$start = hrtime(true);
+				$reference = $interpreted->fill($x, $z);
+				$interpretedMs = (hrtime(true) - $start) / 1000000.0;
+				$start = hrtime(true);
+				$fast = $compiled->fill($x, $z);
+				$compiledMs = (hrtime(true) - $start) / 1000000.0;
+				fwrite(STDERR, sprintf(
+					"\n[VanillaMine 26.3 REAL data] chunk %d,%d interpreted %.2f ms / compiled %.2f ms (PHP without native Go)\n",
+					$x, $z, $interpretedMs, $compiledMs
+				));
+				self::assertSame($reference->materials, $fast->materials, "PHP compiled terrain material equivalence at $x,$z");
+				self::assertSame($reference->biomes, $fast->biomes, "PHP compiled 3D biome equivalence at $x,$z");
+			}
+		}finally{
+			(new \Symfony\Component\Filesystem\Filesystem())->remove($cache);
+		}
+	}
+
 	public function testNetherAndEndMaterialAndBiomeHashesAgainstVanillaMine() : void{
 		$directory = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
 		if($directory === false || !is_dir($directory . "/data/minecraft/worldgen/feature")){
