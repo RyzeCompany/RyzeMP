@@ -188,6 +188,38 @@ final class VanillaDensityCoreTest extends TestCase{
 	 * The fixture is intentionally simplistic: these values are NOT a
 	 * Minecraft worldgen TPS or production performance benchmark.
 	 */
+	public function testAquiferStageDeterministicallyRunsOnSeededNoiseData() : void{
+		$settingsPath = 'data/minecraft/worldgen/noise_settings/overworld.json';
+		$json = file_get_contents($this->dir . '/' . $settingsPath);
+		self::assertNotFalse($json);
+		$settings = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($settings);
+		$settings['noise_router']['final_density'] = -1.0; // open water/air cells
+		$settings['aquifers'] = [
+			'barrier' => 0.0,
+			'fluid_level_floodedness' => 0.0,
+			'fluid_level_spread' => 0.0,
+			'lava' => 0.0,
+			'exclusion' => 0.0,
+			'surface_level' => 0.0
+		];
+		$this->put($settingsPath, $settings);
+		$preset = 'core-v1;data=' . $this->dir;
+		$leftWorld = new SimpleChunkManager(-64, 320);
+		$rightWorld = new SimpleChunkManager(-64, 320);
+		$left = new Chunk([], false);
+		$right = new Chunk([], false);
+		$leftWorld->setChunk(-2, 3, $left);
+		$rightWorld->setChunk(-2, 3, $right);
+		(new RyzeOverworldGenerator(8791, $preset))->generateChunk($leftWorld, -2, 3);
+		(new RyzeOverworldGenerator(8791, $preset))->generateChunk($rightWorld, -2, 3);
+		foreach([[-64, 8, 8], [-30, 5, 7], [0, 7, 1], [40, 4, 3], [100, 12, 12]] as [$y, $x, $z]){
+			self::assertSame($left->getBlockStateId($x, $y, $z), $right->getBlockStateId($x, $y, $z));
+			self::assertSame($left->getBiomeId($x, $y, $z), $right->getBiomeId($x, $y, $z));
+		}
+		self::assertSame(VanillaBlocks::BEDROCK()->getStateId(), $left->getBlockStateId(8, -64, 8));
+	}
+
 	public function testSyntheticDensityChunkPerformanceBaseline() : void{
 		$preset = 'core-v1;data=' . $this->dir;
 		$generator = new RyzeOverworldGenerator(12345, $preset);
