@@ -22,7 +22,7 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 	public function __construct(int $seed, string $preset){
 		$path = VanillaDensityChunkWriter::validatePreset($preset, static::DIMENSION);
 		parent::__construct($seed, $preset);
-		$this->writer = new VanillaDensityChunkWriter($seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset));
+		$this->writer = new VanillaDensityChunkWriter($seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset), VanillaDataIdentity::hasPlacedFeatures($preset));
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
@@ -37,9 +37,11 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 	}
 
 	public function populateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
-		if(static::DIMENSION === "end"){
-			// Native VanillaMine seed selection and End pillar geometry. This is one
-			// partial feature, not the complete End structures or decoration system.
+		if($this->writer->hasPlacedFeatures()){
+			$this->writer->populate($world, $chunkX, $chunkZ);
+		}elseif(static::DIMENSION === "end"){
+			// Core-v1/v2 keep the original isolated End spike implementation.
+			// Core-v3 includes spikes among the upstream placed features.
 			VanillaEndSpikePopulator::populate($world, $chunkX, $chunkZ, $this->seed);
 		}
 	}
