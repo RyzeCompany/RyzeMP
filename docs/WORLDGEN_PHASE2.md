@@ -35,11 +35,13 @@ For a fresh **test world only**, select `ryze_vanilla_overworld` through the exi
 | Chunk creation, negative-height bedrock, biomes in subchunks | PHPUnit tests added; CI confirmation pending |
 | Terrain serialization round-trip | PHPUnit test added; **not** a full LevelDB persistence test |
 | Protection of populated chunk in direct invocation | PHPUnit test added; needs world lifecycle integration tests |
-| Actual LevelDB save/reload, restart, old-world integrity | Not tested; required |
+| LevelDB chunk save/reopen, metadata, blocks, biomes and NBT | PHPUnit integration test added; CI confirmation pending |
+| Full server restart and existing legacy-world integrity | Not tested; required |
 | Bedrock clients old/new and biome downgrade | Not tested; required |
 | Real game visual validation / TPS / memory / PHAR startup | Not tested; required |
 | Nether / End integration | Existing RyzeMP generators preserved; VanillaMine port not started |
 | Vanilla multi-noise terrain/caves/aquifers/features/structures | Not implemented |
 | Native Go helper build/platform checks / fallback | Not implemented |
+| PHPStan level 9, isolated Worldgen scope | Dedicated CI job added; results must be checked on final HEAD |
 
 **Follow-on sequence:** port data loaders and state mappings with tests; implement multi-noise terrain/carvers in isolated generators; evaluate native helper protocol with version/seed/chunk fixtures and bounded failure handling; integrate decoration, ores, structures and dimensions; then LevelDB, multiversion, PHAR, CI and real-client acceptance. Remain Draft until every approved acceptance criterion is evidenced.
