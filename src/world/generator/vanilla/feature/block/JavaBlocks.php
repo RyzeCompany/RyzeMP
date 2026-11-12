@@ -24,14 +24,9 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\vanilla\feature\block;
 
 use pocketmine\block\Block;
-use pocketmine\block\ChorusPlant;
-use pocketmine\block\Fire;
-use pocketmine\block\RedstoneWire;
 use pocketmine\block\RuntimeBlockStateRegistry;
-use pocketmine\block\utils\RedstoneWireConnection;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\data\bedrock\block\BlockStateData;
-use pocketmine\math\Facing;
 use pocketmine\nbt\BigEndianNbtSerializer;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
@@ -879,80 +874,17 @@ final class JavaBlocks{
 				$pm = $this->pmAir;
 			}
 		}
-		$pm = $this->withJavaShape($state, $pm);
 		$this->pmWater[$state] = ($this->fluid($state) & 15) === self::FLUID_WATER && $this->blockOf[$state] !== $this->waterBlock;
 		return $this->toPm[$state] = $pm;
 	}
 
 	/**
-	 * Since Bedrock 1.26.60 the shapes of chorus plants, fire and redstone dust are block states that the client no
-	 * longer works out. The Geyser mappings drop them, so they are copied from the Java state (same meaning).
+	 * IMPORTANT: RyzeMP's current ChorusPlant, Fire and RedstoneWire runtime
+	 * states do not expose VanillaMine's directional connection setters.
+	 * Their shape properties are lossy on this fork. Shape-aware client mapping
+	 * must be restored in the protocol translation layer before production.
 	 */
-	private function withJavaShape(int $state, int $pm) : int{
-		$block = RuntimeBlockStateRegistry::getInstance()->fromStateId($pm);
-		if($block instanceof ChorusPlant){
-			foreach(self::SHAPE_FACES as $property => $facing){
-				$block->setConnection($facing, $this->getBool($state, $property));
-			}
-		}elseif($block instanceof Fire){
-			foreach(self::SHAPE_FACES as $property => $facing){
-				if($facing !== Facing::DOWN){
-					$block->setConnection($facing, $this->getBool($state, $property));
-				}
-			}
-		}elseif($block instanceof RedstoneWire){
-			foreach(Facing::HORIZONTAL as $facing){
-				$block->setConnection($facing, match($this->getProperty($state, Facing::toString($facing))){
-					"side" => RedstoneWireConnection::SIDE,
-					"up" => RedstoneWireConnection::UP,
-					default => RedstoneWireConnection::NONE,
-				});
-			}
-		}else{
-			return $pm;
-		}
-		return $block->getStateId();
-	}
 
-	/**
-	 * Java shape property => face, see {@link withJavaShape()}.
-	 */
-	private const SHAPE_FACES = [
-		"down" => Facing::DOWN,
-		"up" => Facing::UP,
-		"north" => Facing::NORTH,
-		"east" => Facing::EAST,
-		"south" => Facing::SOUTH,
-		"west" => Facing::WEST,
-	];
-
-	/**
-	 * Whether the Bedrock block of this Java state keeps water in the liquid layer (waterlogged blocks, seagrass,
-	 * kelp...).
-	 */
-	public function pmNeedsWater(int $state) : bool{
-		if(!isset($this->pmWater[$state])){
-			$this->toPm($state);
-		}
-		return $this->pmWater[$state];
-	}
-
-	public function pmWaterState() : int{
-		return $this->pmWaterState;
-	}
-
-	public function pmAirState() : int{
-		return $this->pmAir;
-	}
-
-	public function toPmBlock(int $state) : Block{
-		return RuntimeBlockStateRegistry::getInstance()->fromStateId($this->toPm($state));
-	}
-
-	/**
-	 * Java state for a PocketMine state id (and whether the liquid layer has water). Several Java states can map to
-	 * the same Bedrock state (e.g. leaf distances, waterlogging): the Java default state of the block is preferred.
-	 */
 	public function fromPm(int $pmState, bool $wet = false) : int{
 		if($wet){
 			if(isset($this->fromPmWet[$pmState])){
