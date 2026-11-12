@@ -9,6 +9,7 @@ use pocketmine\world\dimension\generator\nether\NetherGenerator;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\RyzeOverworldGenerator;
+use pocketmine\world\generator\vanilla\VanillaDensityChunkWriter;
 
 /**
  * Registers the existing dimension generators and opt-in experimental Overworld.
@@ -33,7 +34,17 @@ final class VanillaGenerators{
 		$manager->addGenerator(
 			RyzeOverworldGenerator::class,
 			self::OVERWORLD_EXPERIMENTAL,
-			static fn(string $preset) : ?InvalidGeneratorOptionsException => $preset === '' ? null : new InvalidGeneratorOptionsException('The experimental Ryze Overworld generator does not support presets yet'),
+			static function(string $preset) : ?InvalidGeneratorOptionsException{
+				if($preset === ''){
+					return null; // Historical experimental algorithm preserved.
+				}
+				try{
+					VanillaDensityChunkWriter::validatePreset($preset);
+					return null;
+				}catch(InvalidGeneratorOptionsException $e){
+					return $e;
+				}
+			},
 			true
 		);
 	}
