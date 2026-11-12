@@ -49,6 +49,53 @@ final class VanillaRealDataFeatureSmokeTest extends TestCase{
 		self::assertNotSame($before, $after, "VanillaMine placed features must place actual blocks");
 	}
 
+	public function testCompiledCoreV4MatchesInterpretedCoreV3AfterRealDecoration() : void{
+		$directory = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
+		if($directory === false || !is_dir($directory . "/data/minecraft/worldgen/placed_feature")){
+			self::markTestSkipped("Authentic Minecraft 26.3 VanillaMine data required");
+		}
+		$hash = VanillaDataIdentity::fingerprint($directory);
+		$v3 = new RyzeOverworldGenerator(12345, "core-v3;data=" . $directory . ";sha256=" . $hash);
+		$v4 = new RyzeOverworldGenerator(12345, "core-v4;data=" . $directory . ";sha256=" . $hash);
+		$a = new SimpleChunkManager(-64, 320);
+		$b = new SimpleChunkManager(-64, 320);
+		$start = hrtime(true);
+		for($x = -1; $x <= 1; ++$x){
+			for($z = -1; $z <= 1; ++$z){
+				$a->setChunk($x, $z, new Chunk([], false));
+				$b->setChunk($x, $z, new Chunk([], false));
+				$v3->generateChunk($a, $x, $z);
+				$v4->generateChunk($b, $x, $z);
+			}
+		}
+		$v3->populateChunk($a, 0, 0);
+		$v4->populateChunk($b, 0, 0);
+		foreach([[-1,-1],[-1,0],[0,0],[0,1],[1,1]] as [$cx, $cz]){
+			$ca = $a->getChunk($cx, $cz);
+			$cb = $b->getChunk($cx, $cz);
+			self::assertNotNull($ca);
+			self::assertNotNull($cb);
+			for($x = 0; $x < 16; ++$x){
+				for($z = 0; $z < 16; ++$z){
+					for($y = -64; $y < 320; ++$y){
+						self::assertSame(
+							$ca->getBlockStateId($x, $y, $z),
+							$cb->getBlockStateId($x, $y, $z),
+							"Compiled core-v4 differs from interpreted core-v3 at chunk $cx,$cz block $x,$y,$z"
+						);
+					}
+					foreach([-48, 0, 64, 120, 256] as $by){
+						self::assertSame($ca->getBiomeId($x, $by, $z), $cb->getBiomeId($x, $by, $z));
+					}
+				}
+			}
+		}
+		fwrite(STDERR, sprintf(
+			"\n[Worldgen REAL Java 26.3] core-v3 versus compiled core-v4: 3x3 chunks + decorations and 5 full-chunk block/biome equivalence scans %.2f ms\n",
+			(hrtime(true) - $start) / 1000000.0
+		));
+	}
+
 	/** @return list<int> */
 	private static function snapshot(Chunk $chunk) : array{
 		$states = [];
