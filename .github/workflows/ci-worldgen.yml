@@ -33,4 +33,5 @@ jobs:
             src/world/generator/vanilla/OverworldTerrainSampler.php \
             src/world/generator/vanilla/RyzeOverworldGenerator.php \
             src/world/dimension/generator/VanillaGenerators.php \
-            tests/phpunit/world/generator/vanilla/RyzeOverworldGeneratorTest.php
+            tests/phpunit/world/generator/vanilla/RyzeOverworldGeneratorTest.php \
+            tests/phpunit/world/generator/vanilla/RyzeOverworldLevelDBTest.php
