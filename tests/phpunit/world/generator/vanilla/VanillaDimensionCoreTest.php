@@ -84,7 +84,9 @@ final class VanillaDimensionCoreTest extends TestCase{
 		$reference = json_decode($referenceRaw, true, 512, JSON_THROW_ON_ERROR);
 		self::assertIsArray($reference);
 		self::assertIsArray($reference['spikes'] ?? null);
-		foreach(Utils::stringifyKeys($reference['spikes']) as $seed => $expected){
+		/** @phpstan-var array<string, list<array{int, int, int, int, bool}>> $spikeFixtures */
+		$spikeFixtures = $reference['spikes'];
+		foreach(Utils::stringifyKeys($spikeFixtures) as $seed => $expected){
 			$spikes = EndSpikes::forSeed((int) $seed);
 			self::assertCount(10, $spikes);
 			$actual = array_map(static fn(EndSpike $spike) : array => [
