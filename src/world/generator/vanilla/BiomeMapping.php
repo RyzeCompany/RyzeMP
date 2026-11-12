@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla;
 
-use pocketmine\data\bedrock\BiomeDefinitionSupplement;
 use pocketmine\data\bedrock\BiomeIds;
 use function array_keys;
 use function str_starts_with;
@@ -102,7 +101,7 @@ final class BiomeMapping{
 		"end_barrens" => BiomeIds::THE_END,
 		"small_end_islands" => BiomeIds::THE_END,
 		//not in the BedrockData biome list shipped with this version yet (see BiomeDefinitionSupplement)
-		"dappled_forest" => BiomeDefinitionSupplement::DAPPLED_FOREST,
+		"dappled_forest" => BiomeIds::FOREST,
 	];
 
 	private function __construct(){
@@ -120,6 +119,6 @@ final class BiomeMapping{
 
 	public static function toBedrock(string $javaName) : int{
 		$name = str_starts_with($javaName, "minecraft:") ? substr($javaName, 10) : $javaName;
-		return self::MAP[$name] ?? BiomeIds::PLAINS;
+		return self::MAP[$name] ?? throw new \InvalidArgumentException("Unmapped Java biome: $name");
 	}
 }
