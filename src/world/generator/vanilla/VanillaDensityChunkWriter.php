@@ -38,7 +38,7 @@ final class VanillaDensityChunkWriter{
 	public const MINECRAFT_DATA_VERSION = "26.3";
 	public const DATA_FORMAT = 5;
 
-	private InterpretedTerrainFiller $terrain;
+	private TerrainFiller $terrain;
 	private MaterialSystem $materials;
 	private ?CarverSystem $carvers;
 	private ?TheEndBiomeSource $endBiomes = null;
@@ -50,7 +50,7 @@ final class VanillaDensityChunkWriter{
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false){
+	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false, bool $useCompiledTerrain = false){
 		$this->terrainDataDir = $dataDir;
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($dataDir, $this->pinnedHash);
@@ -68,7 +68,7 @@ final class VanillaDensityChunkWriter{
 		if($dimension === "end"){
 			$this->endBiomes = new TheEndBiomeSource($router->erosion);
 		}
-		$this->terrain = new InterpretedTerrainFiller($router, $tree);
+		$this->terrain = $useCompiledTerrain ? new CompiledTerrainFiller($router, $tree, $dataDir . "/compiled") : new InterpretedTerrainFiller($router, $tree);
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
 		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
 		if($enablePlacedFeatures){
@@ -110,7 +110,8 @@ final class VanillaDensityChunkWriter{
 			throw new InvalidGeneratorOptionsException("Unsupported VanillaMine dimension: $dimension");
 		}
 		if(str_starts_with($preset, VanillaDataIdentity::PRESET_PREFIX) ||
-			str_starts_with($preset, VanillaDataIdentity::FEATURES_PRESET_PREFIX)){
+			str_starts_with($preset, VanillaDataIdentity::FEATURES_PRESET_PREFIX) ||
+			str_starts_with($preset, VanillaDataIdentity::COMPILED_PRESET_PREFIX)){
 			$pinned = VanillaDataIdentity::parse($preset);
 			$dir = $pinned["directory"];
 			VanillaDataIdentity::assertMatches($dir, $pinned["hash"]);
