@@ -181,4 +181,37 @@ final class VanillaDensityCoreTest extends TestCase{
 			$provider->close();
 		}
 	}
+
+	/**
+	 * Throughput baseline for this synthetic density fixture only.
+	 *
+	 * The fixture is intentionally simplistic: these values are NOT a
+	 * Minecraft worldgen TPS or production performance benchmark.
+	 */
+	public function testSyntheticDensityChunkPerformanceBaseline() : void{
+		$preset = 'core-v1;data=' . $this->dir;
+		$generator = new RyzeOverworldGenerator(12345, $preset);
+		$world = new SimpleChunkManager(-64, 320);
+		$times = [];
+		$beforePeak = memory_get_peak_usage(true);
+		foreach([[0, 0], [1, 0], [0, 1], [-1, -1]] as [$x, $z]){
+			$world->setChunk($x, $z, new Chunk([], false));
+			$start = microtime(true);
+			$generator->generateChunk($world, $x, $z);
+			$times[] = (microtime(true) - $start) * 1000;
+			$chunk = $world->getChunk($x, $z);
+			self::assertNotNull($chunk);
+			self::assertSame(VanillaBlocks::BEDROCK()->getStateId(), $chunk->getBlockStateId(0, -64, 0));
+		}
+		sort($times, SORT_NUMERIC);
+		$avg = array_sum($times) / count($times);
+		$peakDelta = max(0, memory_get_peak_usage(true) - $beforePeak);
+		fwrite(STDERR, sprintf(
+			"\n[Worldgen synthetic density baseline] 4 chunks; avg=%.2fms; max=%.2fms; peak delta=%.2f MiB (NOT production TPS)\n",
+			$avg,
+			$times[3],
+			$peakDelta / 1048576
+		));
+		self::assertCount(4, $times);
+	}
 }
