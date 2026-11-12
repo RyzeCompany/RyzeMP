@@ -25,6 +25,8 @@ jobs:
           pm-version-major: 5
       - name: Install locked dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Prepare optional PHPStan exclusion directory
+        run: mkdir -p build/php
       - name: Analyze Phase 2 files with PHPStan level 9
         run: |
           php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
