@@ -37,6 +37,10 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 	}
 
 	public function populateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
-		// Not implemented: this would need the full VanillaMine feature/structure placement engine.
+		if(static::DIMENSION === "end"){
+			// Native VanillaMine seed selection and End pillar geometry. This is one
+			// partial feature, not the complete End structures or decoration system.
+			VanillaEndSpikePopulator::populate($world, $chunkX, $chunkZ, $this->seed);
+		}
 	}
 }
