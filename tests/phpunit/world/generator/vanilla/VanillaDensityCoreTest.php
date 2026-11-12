@@ -133,4 +133,51 @@ final class VanillaDensityCoreTest extends TestCase{
 			}
 		}
 	}
+
+	public function testCoreV1LevelDbRoundTripAndPresetPersistence() : void{
+		\pocketmine\world\dimension\generator\VanillaGenerators::register();
+		$preset = 'core-v1;data=' . $this->dir;
+		$path = $this->dir . '/new-world';
+		\pocketmine\world\format\io\leveldb\LevelDB::generate(
+			$path,
+			'new-world',
+			\pocketmine\world\WorldCreationOptions::create()
+				->setGeneratorClass(RyzeOverworldGenerator::class)
+				->setGeneratorOptions($preset)
+				->setSeed(77123)
+		);
+		$manager = new SimpleChunkManager(-64, 320);
+		$chunk = new Chunk([], false);
+		$manager->setChunk(-1, 2, $chunk);
+		(new RyzeOverworldGenerator(77123, $preset))->generateChunk($manager, -1, 2);
+		$chunk->setPopulated();
+		$provider = new \pocketmine\world\format\io\leveldb\LevelDB($path, $this->createMock(\Logger::class));
+		self::assertSame($preset, $provider->getWorldData()->getGeneratorOptions());
+		self::assertSame(77123, $provider->getWorldData()->getSeed());
+		$provider->saveChunk(-1, 2, new \pocketmine\world\format\io\ChunkData(
+			$chunk->getSubChunks(),
+			true,
+			[\pocketmine\nbt\tag\CompoundTag::create()->setString('marker', 'entity-original')],
+			[\pocketmine\nbt\tag\CompoundTag::create()->setString('marker', 'tile-original')]
+		), Chunk::DIRTY_FLAG_BLOCKS | Chunk::DIRTY_FLAG_BIOMES);
+		$provider->close();
+
+		$provider = new \pocketmine\world\format\io\leveldb\LevelDB($path, $this->createMock(\Logger::class));
+		try{
+			self::assertSame($preset, $provider->getWorldData()->getGeneratorOptions());
+			$saved = $provider->loadChunk(-1, 2)?->getData();
+			self::assertNotNull($saved);
+			self::assertTrue($saved->isPopulated());
+			self::assertSame('entity-original', $saved->getEntityNBT()[0]->getString('marker'));
+			self::assertSame('tile-original', $saved->getTileNBT()[0]->getString('marker'));
+			$loaded = new Chunk($saved->getSubChunks(), true);
+			self::assertSame(VanillaBlocks::GRASS()->getStateId(), $loaded->getBlockStateId(3, 80, 4));
+			self::assertSame(BiomeIds::FOREST, $loaded->getBiomeId(3, 270, 4));
+			// An existing chunk must not be rewritten by a new generator invocation.
+			(new RyzeOverworldGenerator(77123, $preset))->generateChunk($manager, -1, 2);
+			self::assertSame(VanillaBlocks::GRASS()->getStateId(), $loaded->getBlockStateId(3, 80, 4));
+		}finally{
+			$provider->close();
+		}
+	}
 }
