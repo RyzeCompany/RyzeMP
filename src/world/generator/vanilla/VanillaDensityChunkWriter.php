@@ -26,7 +26,7 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Adapter for VanillaMine's real multi-noise / density / aquifer terrain stage.
  *
- * IMPORTANT: MaterialSystem, carvers and feature/structure decoration are NOT yet adapted.
+ * IMPORTANT: Feature/structure decoration and beardifier adaptation are NOT yet ported.
  * This adapter is intentionally a distinct, version-pinned preset on the existing opt-in
  * generator. The empty preset continues to use the legacy experimental terrain unchanged.
  */
@@ -59,7 +59,7 @@ final class VanillaDensityChunkWriter{
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 	}
 
-	/** Returns the directory only after validating the entire preset and its data stamp. */
+	/** Checks the preset, data stamp and required baseline assets before world creation. */
 	public static function validatePreset(string $preset) : string{
 		if(!str_starts_with($preset, self::PRESET_PREFIX)){
 			throw new InvalidGeneratorOptionsException("Expected core-v1;data=<absolute path> (or empty legacy preset)");
@@ -84,17 +84,35 @@ final class VanillaDensityChunkWriter{
 		if(!is_array($stamp) || ($stamp["minecraft"] ?? null) !== self::MINECRAFT_DATA_VERSION || ($stamp["format"] ?? null) !== self::DATA_FORMAT){
 			throw new InvalidGeneratorOptionsException("VanillaMine worldgen cache must be Minecraft 26.3, format 5");
 		}
-		if(!is_file($dir . "/data/minecraft/worldgen/noise_settings/overworld.json") ||
+		$settingsFile = $dir . "/data/minecraft/worldgen/noise_settings/overworld.json";
+		if(!is_file($settingsFile) ||
 			(!is_file($dir . "/multi_noise_biome_tree.json") && !is_file($dir . "/reports/biome_parameters/minecraft/overworld.json"))){
 			throw new InvalidGeneratorOptionsException("VanillaMine worldgen cache is incomplete");
+		}
+		$settingsRaw = file_get_contents($settingsFile);
+		if($settingsRaw === false){
+			throw new InvalidGeneratorOptionsException("Cannot read VanillaMine Overworld noise settings");
+		}
+		try{
+			$settings = json_decode($settingsRaw, true, 512, JSON_THROW_ON_ERROR);
+		}catch(\JsonException $e){
+			throw new InvalidGeneratorOptionsException("Malformed VanillaMine Overworld noise settings", 0, $e);
+		}
+		if(!is_array($settings) || !isset($settings["material_rule"]) || !isset($settings["noise_router"])){
+			throw new InvalidGeneratorOptionsException("VanillaMine cache is missing Overworld material/density rules");
+		}
+		foreach(["surface", "surface_secondary", "badlands_pillar", "badlands_pillar_roof", "badlands_surface", "iceberg_pillar", "iceberg_pillar_roof", "iceberg_surface"] as $noise){
+			if(!is_file($dir . "/data/minecraft/worldgen/noise/" . $noise . ".json")){
+				throw new InvalidGeneratorOptionsException("VanillaMine cache is missing noise $noise");
+			}
 		}
 		return $dir;
 	}
 
 	/**
 	 * Applies the upstream VanillaMine density and climate stages to a RyzeMP chunk.
-	 * This is NOT a complete vanilla chunk: the material surface/carver/features stages
-	 * still need to be ported, so this cannot be used for production worlds.
+	 * This is NOT a complete vanilla chunk: decoration, structure adaptation and
+	 * full cross-version validation are still pending. Not for production worlds.
 	 */
 	public function fill(Chunk $chunk, int $chunkX, int $chunkZ) : void{
 		if($chunk->isPopulated()){
