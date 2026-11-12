@@ -1,0 +1,34 @@
+name: Worldgen PHPStan 9
+
+on:
+  pull_request:
+    paths:
+      - 'src/world/generator/vanilla/**'
+      - 'src/world/dimension/generator/VanillaGenerators.php'
+      - 'tests/phpunit/world/generator/vanilla/**'
+      - '.github/workflows/ci-worldgen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phpstan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Analyze Phase 2 files with PHPStan level 9
+        run: |
+          php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
+            src/world/generator/vanilla/OverworldTerrainSampler.php \
+            src/world/generator/vanilla/RyzeOverworldGenerator.php \
+            src/world/dimension/generator/VanillaGenerators.php \
+            tests/phpunit/world/generator/vanilla/RyzeOverworldGeneratorTest.php
