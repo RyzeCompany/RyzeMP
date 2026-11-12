@@ -23,15 +23,12 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla;
 
-use pocketmine\world\generator\vanilla\structure\Beardifier;
 
 /**
- * Fills the terrain (noise) stage of a chunk: stone/water/lava/air from the final density and aquifers, plus biomes.
+ * VanillaMine terrain density stage. Structure beardifier adaptation remains
+ * unavailable until the full structure subsystem is integrated.
  */
 interface TerrainFiller{
 
-	/**
-	 * @param Beardifier|null $beardifier density added around structure pieces (terrain adaptation), if any
-	 */
-	public function fill(int $chunkX, int $chunkZ, ?Beardifier $beardifier = null) : TerrainChunk;
+	public function fill(int $chunkX, int $chunkZ) : TerrainChunk;
 }
