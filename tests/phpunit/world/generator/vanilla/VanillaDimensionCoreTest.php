@@ -13,6 +13,9 @@ use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\SimpleChunkManager;
 use Symfony\Component\Filesystem\Filesystem;
 use const JSON_THROW_ON_ERROR;
+use function array_map;
+use function file_get_contents;
+use function json_decode;
 
 /**
  * Isolated synthetic data for both secondary dimensions. As with the
@@ -72,6 +75,36 @@ final class VanillaDimensionCoreTest extends TestCase{
 
 	protected function tearDown() : void{
 		(new Filesystem())->remove($this->dir);
+	}
+
+	public function testEndSpikeSeedMatchesVanillaMineReferenceAndPlacesObsidian() : void{
+		$referenceRaw = file_get_contents(__DIR__ . '/dimension-fixtures.json');
+		self::assertNotFalse($referenceRaw);
+		$reference = json_decode($referenceRaw, true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($reference);
+		self::assertIsArray($reference['spikes'] ?? null);
+		foreach($reference['spikes'] as $seed => $expected){
+			$spikes = EndSpikes::forSeed((int) $seed);
+			self::assertCount(10, $spikes);
+			$actual = array_map(static fn(EndSpike $spike) : array => [
+				$spike->centerX, $spike->centerZ, $spike->radius, $spike->height, $spike->guarded
+			], $spikes);
+			self::assertSame($expected, $actual, "End spike seed $seed");
+		}
+
+		$seed = 12345;
+		$spike = EndSpikes::forSeed($seed)[0];
+		$chunkX = $spike->centerX >> 4;
+		$chunkZ = $spike->centerZ >> 4;
+		$world = new SimpleChunkManager(-64, 320);
+		$chunk = new Chunk([], false);
+		$world->setChunk($chunkX, $chunkZ, $chunk);
+		VanillaEndSpikePopulator::populate($world, $chunkX, $chunkZ, $seed);
+		$x = $spike->centerX & Chunk::COORD_MASK;
+		$z = $spike->centerZ & Chunk::COORD_MASK;
+		self::assertSame(VanillaBlocks::OBSIDIAN()->getStateId(), $chunk->getBlockStateId($x, $spike->height - 1, $z));
+		self::assertSame(VanillaBlocks::BEDROCK()->getStateId(), $chunk->getBlockStateId($x, $spike->height, $z));
+		self::assertSame(VanillaBlocks::FIRE()->getStateId(), $chunk->getBlockStateId($x, $spike->height + 1, $z));
 	}
 
 	public function testOptInRegistryAndDimensionIsolation() : void{
