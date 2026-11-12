@@ -223,6 +223,72 @@ final class VanillaDensityCoreTest extends TestCase{
 		self::assertSame(VanillaBlocks::BEDROCK()->getStateId(), $left->getBlockStateId(8, -64, 8));
 	}
 
+
+	/**
+	 * New worlds pin every worldgen input byte in their saved generator options.
+	 * The legacy core-v1 profile still works without silently opting into v2.
+	 */
+	public function testCoreV2FingerprintPersistsInLevelDbMetadata() : void{
+		$hash = VanillaDataIdentity::fingerprint($this->dir);
+		self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/D', $hash);
+		$preset = 'core-v2;data=' . $this->dir . ';sha256=' . $hash;
+		self::assertSame($this->dir, VanillaDensityChunkWriter::validatePreset($preset));
+
+		$path = $this->dir . '/fingerprinted-world';
+		\pocketmine\world\format\io\leveldb\LevelDB::generate(
+			$path,
+			'fingerprinted-world',
+			\pocketmine\world\WorldCreationOptions::create()
+				->setGeneratorClass(RyzeOverworldGenerator::class)
+				->setGeneratorOptions($preset)
+				->setSeed(32779)
+		);
+		$provider = new \pocketmine\world\format\io\leveldb\LevelDB($path, $this->createMock(\Logger::class));
+		try{
+			self::assertSame($preset, $provider->getWorldData()->getGeneratorOptions());
+			self::assertSame(32779, $provider->getWorldData()->getSeed());
+		}finally{
+			$provider->close();
+		}
+		self::assertSame($hash, VanillaDataIdentity::fingerprint($this->dir)); // new-world folder is outside cache inputs
+	}
+
+	public function testCoreV2RefusesCacheMutationBeforeWritingNewChunk() : void{
+		$hash = VanillaDataIdentity::fingerprint($this->dir);
+		$preset = 'core-v2;data=' . $this->dir . ';sha256=' . $hash;
+		$world = new SimpleChunkManager(-64, 320);
+		$world->setChunk(0, 0, new Chunk([], false));
+		$generator = new RyzeOverworldGenerator(7001, $preset);
+		$generator->generateChunk($world, 0, 0);
+
+		$next = new Chunk([], false);
+		$world->setChunk(1, 0, $next);
+		// Keep JSON valid and replace only one input asset. The hash is over
+		// real bytes, not merely stamp format, file path, size or timestamp.
+		$noiseFile = $this->dir . '/data/minecraft/worldgen/noise/surface.json';
+		$before = filemtime($noiseFile);
+		$this->put('data/minecraft/worldgen/noise/surface.json', ['amplitude' => 1]);
+		if($before !== false){
+			touch($noiseFile, $before);
+		}
+		try{
+			$generator->generateChunk($world, 1, 0);
+			self::fail('Changed external VanillaMine cache must stop chunk generation');
+		}catch(InvalidGeneratorOptionsException $e){
+			self::assertStringContainsString('cache changed', $e->getMessage());
+		}
+		self::assertSame(VanillaBlocks::AIR()->getStateId(), $next->getBlockStateId(0, 50, 0));
+
+		// Also fail on world startup after a cache swap, before generator init.
+		$this->expectException(InvalidGeneratorOptionsException::class);
+		new RyzeOverworldGenerator(7001, $preset);
+	}
+
+	public function testCoreV2RejectsUnpinnedOrMalformedHash() : void{
+		$this->expectException(InvalidGeneratorOptionsException::class);
+		VanillaDensityChunkWriter::validatePreset('core-v2;data=' . $this->dir . ';sha256=' . str_repeat('0', 64));
+	}
+
 	public function testSyntheticDensityChunkPerformanceBaseline() : void{
 		$preset = 'core-v1;data=' . $this->dir;
 		$generator = new RyzeOverworldGenerator(12345, $preset);
