@@ -1,0 +1,46 @@
+name: Worldgen real VanillaMine Java 26.3 oracle
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci-worldgen-realdata.yml'
+      - 'src/world/generator/vanilla/**'
+      - 'tests/phpunit/world/generator/vanilla/**'
+      - 'tools/prepare-vanillamine-worldgen.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  java-263-realdata:
+    name: Rebuild verified source data and compare Java references
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      POCKETMINE_VANILLA_WORLDGEN_DATA: ${{ runner.temp }}/ryzemp-worldgen-java-263
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Prepare official Java 26.3 cache using VanillaMine verified bootstrap
+        timeout-minutes: 30
+        run: |
+          php -d memory_limit=2G tools/prepare-vanillamine-worldgen.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -s "$POCKETMINE_VANILLA_WORLDGEN_DATA/version.json"
+          php tools/worldgen-data-fingerprint.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Compare VanillaMine carvers and dimensions to independent Java reference
+        timeout-minutes: 12
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning \
+            tests/phpunit/world/generator/vanilla/CarverTest.php \
+            tests/phpunit/world/generator/vanilla/VanillaRealDataReferenceTest.php \
+            tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php
+      - name: Erase downloaded Minecraft data (never upload artifacts)
+        if: always()
+        run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"
