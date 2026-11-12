@@ -60,7 +60,7 @@ final class RyzeOverworldGeneratorTest extends TestCase{
 	public function testAlreadyPopulatedChunkIsUnchanged() : void{
 		$manager = new SimpleChunkManager(0, 256);
 		$chunk = new Chunk([], true);
-		$marker = VanillaBlocks::GOLD_BLOCK()->getStateId();
+		$marker = VanillaBlocks::STONE()->getStateId();
 		$chunk->setBlockStateId(3, 64, 3, $marker);
 		$manager->setChunk(0, 0, $chunk);
 		(new RyzeOverworldGenerator(12345, ''))->generateChunk($manager, 0, 0);
