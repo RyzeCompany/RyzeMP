@@ -1,0 +1,634 @@
+<?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+ */
+
+declare(strict_types=1);
+
+namespace pocketmine\world\generator\vanilla\feature;
+
+use pocketmine\block\tile\Tile;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\world\ChunkManager;
+use pocketmine\world\format\Chunk;
+use pocketmine\world\format\PalettedBlockArray;
+use pocketmine\world\format\SubChunk;
+use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
+use function array_combine;
+use function array_flip;
+use function array_keys;
+use function count;
+use function intdiv;
+
+/**
+ * The decoration region (vanilla's WorldGenRegion for the FEATURES step): the 3x3 chunks around the decorated chunk,
+ * read and written as Java block states. Blocks written by features are remembered as Java states, so later reads
+ * see exactly what was written (the Bedrock mapping is lossy for a few properties, e.g. leaf distance); other blocks
+ * are mapped back from the PocketMine states.
+ *
+ * Heightmaps are computed from the current blocks on first use and kept up to date on writes, like vanilla's chunk
+ * heightmaps (Heightmap.update()).
+ */
+final class FeatureLevel{
+	public const WORLD_SURFACE_WG = 0;
+	public const WORLD_SURFACE = 1;
+	public const OCEAN_FLOOR_WG = 2;
+	public const OCEAN_FLOOR = 3;
+	public const MOTION_BLOCKING = 4;
+	public const MOTION_BLOCKING_NO_LEAVES = 5;
+
+	public const SIZE = 48;
+
+	public int $minX = 0;
+	public int $minZ = 0;
+	public int $centerChunkX = 0;
+	public int $centerChunkZ = 0;
+	public readonly int $maxY;
+	private readonly int $sections;
+
+	/** @var SubChunk[] by (chunk index * sections + section) */
+	private array $subChunks = [];
+	/** @var Chunk[] by (dx + 1) * 3 + (dz + 1) */
+	private array $chunks = [];
+	/** @phpstan-var array<int, true> */
+	private array $dirty = [];
+	/** See {@link FeatureLevel::begin()}. */
+	private bool $copyOnWrite = false;
+	/** @phpstan-var array<int, true> subchunk indexes already copied in copy-on-write mode */
+	private array $copied = [];
+	/** @phpstan-var array<int, true> chunk indexes holding block entity data (Chunk::getPendingTileNBT()) */
+	private array $pendingTiles = [];
+	/** @phpstan-var array<int, int> Java states written during this decoration */
+	private array $written = [];
+	/** @phpstan-var array<int, array<int, int>> heightmap type => column => first available y */
+	private array $heightmaps = [];
+	/**
+	 * Terrain heightmaps (WORLD_SURFACE_WG, OCEAN_FLOOR_WG) per chunk index: vanilla only updates these during the
+	 * terrain step, so features see the terrain's heights (first free y per column, index x | z << 4).
+	 * @phpstan-var array<int, array{list<int>, list<int>}>
+	 */
+	private array $terrainHeights = [];
+	/** @phpstan-var (\Closure(int, int, Chunk) : array{list<int>, list<int>})|null */
+	public ?\Closure $terrainHeightProvider = null;
+	/** @phpstan-var array<int, array<int, bool>> heightmap type => Java state => opaque */
+	private array $opaque = [];
+	/** @phpstan-var array<int, bool> Java state => may be waterlogged (needs a liquid layer read) */
+	private array $waterloggable = [];
+
+	private readonly int $voidAir;
+	/** @phpstan-var array<int, true> */
+	private array $motionBlocking;
+	/** @phpstan-var array<int, true> */
+	private array $motionBlockingNoLeaves;
+
+	/**
+	 * Whether writes are logged in {@link $writeLog} (the native decoration mirrors the region and needs the writes
+	 * made on the PHP side).
+	 */
+	public bool $logWrites = false;
+	/**
+	 * Logged writes: key, Java state, PocketMine state triples (key bit 31: written by setPmState(), which does not
+	 * update heightmaps; PocketMine state bit 31: water in the liquid layer).
+	 * @phpstan-var list<int>
+	 */
+	public array $writeLog = [];
+
+	/** Positional random of this region (WorldGenRegion.getRandom()), set by the decorator. */
+	public ?\pocketmine\world\generator\vanilla\random\RandomSource $regionRandom = null;
+
+	public function __construct(
+		public readonly JavaBlocks $blocks,
+		public readonly int $minY,
+		public readonly int $height,
+		public readonly int $seaLevel,
+		public readonly int $seed,
+		public readonly FeatureBiomes $biomes
+	){
+		$this->maxY = $minY + $height;
+		$this->sections = $height >> 4;
+		$this->voidAir = $blocks->voidAir;
+		$this->motionBlocking = $blocks->tag("minecraft:blocks_motion_in_heightmap");
+		$this->motionBlockingNoLeaves = $blocks->tag("minecraft:blocks_motion_in_heightmap_no_leaves");
+	}
+
+	/**
+	 * @param bool $copyOnWrite whether the chunks' subchunks are shared with a live world (blocks grown in a loaded
+	 *                          world): each subchunk is then copied on its first write, and only the copy is changed
+	 */
+	public function begin(ChunkManager $world, int $chunkX, int $chunkZ, bool $copyOnWrite = false) : void{
+		$this->copyOnWrite = $copyOnWrite;
+		$this->copied = [];
+		$this->centerChunkX = $chunkX;
+		$this->centerChunkZ = $chunkZ;
+		$this->minX = ($chunkX - 1) << 4;
+		$this->minZ = ($chunkZ - 1) << 4;
+		$this->subChunks = [];
+		$this->chunks = [];
+		$this->dirty = [];
+		$this->pendingTiles = [];
+		$this->written = [];
+		$this->heightmaps = [];
+		$this->terrainHeights = [];
+		$this->writeLog = [];
+		$minSection = $this->minY >> 4;
+		for($dx = -1; $dx <= 1; ++$dx){
+			for($dz = -1; $dz <= 1; ++$dz){
+				$chunk = $world->getChunk($chunkX + $dx, $chunkZ + $dz) ?? throw new \InvalidArgumentException("Chunk " . ($chunkX + $dx) . " " . ($chunkZ + $dz) . " is not available for decoration");
+				$index = ($dx + 1) * 3 + ($dz + 1);
+				$this->chunks[$index] = $chunk;
+				if(count($chunk->getPendingTileNBT()) > 0){
+					$this->pendingTiles[$index] = true;
+				}
+				for($s = 0; $s < $this->sections; ++$s){
+					$this->subChunks[$index * $this->sections + $s] = $chunk->getSubChunk($minSection + $s);
+				}
+			}
+		}
+		$this->biomes->begin($chunkX, $chunkZ, $this->chunks);
+	}
+
+	/**
+	 * Marks the modified chunks as dirty, so PocketMine sends them back from the worker.
+	 */
+	public function finish() : void{
+		foreach($this->dirty as $index => $_){
+			$this->chunks[$index]->setTerrainDirtyFlag(Chunk::DIRTY_FLAG_BLOCKS, true);
+		}
+		$this->written = [];
+		$this->subChunks = [];
+		$this->chunks = [];
+	}
+
+	public function isOutsideBuildHeight(int $y) : bool{
+		return $y < $this->minY || $y >= $this->maxY;
+	}
+
+	public function isInsideBuildHeight(int $y) : bool{
+		return $y >= $this->minY && $y < $this->maxY;
+	}
+
+	/**
+	 * Whether a block can be written (inside the 3x3 chunks and the build height), WorldGenRegion.ensureCanWrite().
+	 */
+	public function ensureCanWrite(int $x, int $y, int $z) : bool{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		return $dx >= 0 && $dx < self::SIZE && $dz >= 0 && $dz < self::SIZE && $y >= $this->minY && $y < $this->maxY;
+	}
+
+	public function isInRegion(int $x, int $z) : bool{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		return $dx >= 0 && $dx < self::SIZE && $dz >= 0 && $dz < self::SIZE;
+	}
+
+	public function getState(int $x, int $y, int $z) : int{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		if($dx < 0 || $dx >= self::SIZE || $dz < 0 || $dz >= self::SIZE || $y < $this->minY || $y >= $this->maxY){
+			return $this->voidAir;
+		}
+		$key = (($y - $this->minY) * self::SIZE + $dz) * self::SIZE + $dx;
+		if(isset($this->written[$key])){
+			return $this->written[$key];
+		}
+		$sub = $this->subChunks[((($dx >> 4) * 3 + ($dz >> 4)) * $this->sections) + (($y - $this->minY) >> 4)];
+		$java = $this->blocks->fromPm($sub->getBlockStateId($x & 15, $y & 15, $z & 15));
+		if($this->waterloggable[$java] ??= $this->blocks->hasProperty($java, "waterlogged")){
+			if($sub->getLiquidLayerStateId($x & 15, $y & 15, $z & 15) === $this->blocks->pmWaterState()){
+				$java = $this->blocks->withBool($java, "waterlogged", true);
+			}
+		}
+		return $java;
+	}
+
+	/**
+	 * Sets a block (WorldGenRegion.setBlock()). Returns false if the position cannot be written.
+	 */
+	public function setState(int $x, int $y, int $z, int $state) : bool{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		if($dx < 0 || $dx >= self::SIZE || $dz < 0 || $dz >= self::SIZE || $y < $this->minY || $y >= $this->maxY){
+			return false;
+		}
+		$key = (($y - $this->minY) * self::SIZE + $dz) * self::SIZE + $dx;
+		$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
+		if(isset($this->pendingTiles[$chunkIndex])){
+			$this->removeBlockEntityIfReplaced($chunkIndex, $x, $y, $z, $state);
+		}
+		$blocks = $this->blocks;
+		$pm = $blocks->toPm($state);
+		$water = $blocks->pmNeedsWater($state);
+		if($this->logWrites){
+			$this->writeLog[] = $key;
+			$this->writeLog[] = $state;
+			$this->writeLog[] = $water ? $pm | 0x80000000 : $pm;
+		}
+		$this->written[$key] = $state;
+		$subIndex = ($chunkIndex * $this->sections) + (($y - $this->minY) >> 4);
+		$sub = $this->copyOnWrite && !isset($this->copied[$subIndex]) ? $this->copySubChunk($subIndex) : $this->subChunks[$subIndex];
+		$sub->setBlockStateId($x & 15, $y & 15, $z & 15, $pm);
+		$sub->setLiquidLayerStateId($x & 15, $y & 15, $z & 15, $water ? $blocks->pmWaterState() : $blocks->pmAirState());
+		$this->dirty[$chunkIndex] = true;
+		if(count($this->heightmaps) > 0){
+			$column = $dz * self::SIZE + $dx;
+			foreach($this->heightmaps as $type => $map){
+				if(isset($map[$column])){
+					$this->updateHeightmap($type, $column, $x, $y, $z, $state);
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Sets a Bedrock-only block (a PocketMine state id with no Java block state, e.g. an item frame, which is an
+	 * entity in Java). Later reads of the position see the Java state the Bedrock state maps back to. Heightmaps are
+	 * not updated (only meant for blocks without collision). Returns false if the position cannot be written.
+	 */
+	public function setPmState(int $x, int $y, int $z, int $pmState) : bool{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		if($dx < 0 || $dx >= self::SIZE || $dz < 0 || $dz >= self::SIZE || $y < $this->minY || $y >= $this->maxY){
+			return false;
+		}
+		$key = (($y - $this->minY) * self::SIZE + $dz) * self::SIZE + $dx;
+		$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
+		if(isset($this->pendingTiles[$chunkIndex])){
+			$this->chunks[$chunkIndex]->removePendingTileNBT($x & 15, $y, $z & 15);
+		}
+		unset($this->written[$key]);
+		if($this->logWrites){
+			$this->writeLog[] = $key | 0x80000000;
+			$this->writeLog[] = $this->blocks->fromPm($pmState);
+			$this->writeLog[] = $pmState;
+		}
+		$subIndex = ($chunkIndex * $this->sections) + (($y - $this->minY) >> 4);
+		$sub = $this->copyOnWrite && !isset($this->copied[$subIndex]) ? $this->copySubChunk($subIndex) : $this->subChunks[$subIndex];
+		$sub->setBlockStateId($x & 15, $y & 15, $z & 15, $pmState);
+		$sub->setLiquidLayerStateId($x & 15, $y & 15, $z & 15, $this->blocks->pmAirState());
+		$this->dirty[$chunkIndex] = true;
+		return true;
+	}
+
+	/**
+	 * Copy-on-write mode: replaces a shared subchunk by a copy (in the region and in its chunk) before its first write.
+	 */
+	private function copySubChunk(int $subIndex) : SubChunk{
+		$copy = clone $this->subChunks[$subIndex];
+		$this->subChunks[$subIndex] = $copy;
+		$this->copied[$subIndex] = true;
+		$this->chunks[intdiv($subIndex, $this->sections)]->setSubChunk(($this->minY >> 4) + $subIndex % $this->sections, $copy);
+		return $copy;
+	}
+
+	/**
+	 * WorldGenRegion.setBlock(): a block entity goes away when its block is replaced by another block.
+	 */
+	private function removeBlockEntityIfReplaced(int $chunkIndex, int $x, int $y, int $z, int $state) : void{
+		$chunk = $this->chunks[$chunkIndex];
+		if($chunk->getPendingTileNBTAt($x & 15, $y, $z & 15) !== null && $this->blocks->blockOf[$this->getState($x, $y, $z)] !== $this->blocks->blockOf[$state]){
+			$chunk->removePendingTileNBT($x & 15, $y, $z & 15);
+		}
+	}
+
+	/**
+	 * Gives the block at a position its block entity data (a tile's saved data, created when the chunk reaches the
+	 * world, see Chunk::addPendingTileNBT()). Returns false if the position cannot be written.
+	 */
+	public function setBlockEntity(int $x, int $y, int $z, CompoundTag $nbt) : bool{
+		if(!$this->ensureCanWrite($x, $y, $z)){
+			return false;
+		}
+		$chunkIndex = (($x - $this->minX) >> 4) * 3 + (($z - $this->minZ) >> 4);
+		$this->chunks[$chunkIndex]->addPendingTileNBT($nbt->setInt(Tile::TAG_X, $x)->setInt(Tile::TAG_Y, $y)->setInt(Tile::TAG_Z, $z));
+		$this->pendingTiles[$chunkIndex] = true;
+		$this->dirty[$chunkIndex] = true;
+		return true;
+	}
+
+	/**
+	 * Adds an entity to spawn with the chunk of its position (Chunk::addPendingEntityNBT()). Returns false if the
+	 * position is outside the region.
+	 */
+	public function addEntity(int $x, int $z, CompoundTag $nbt) : bool{
+		if(!$this->isInRegion($x, $z)){
+			return false;
+		}
+		$chunkIndex = (($x - $this->minX) >> 4) * 3 + (($z - $this->minZ) >> 4);
+		$this->chunks[$chunkIndex]->addPendingEntityNBT($nbt);
+		$this->dirty[$chunkIndex] = true;
+		return true;
+	}
+
+	/**
+	 * Index of the chunk at the given offset from the centre chunk (dx, dz in -1..1).
+	 */
+	public function getRegionChunk(int $dx, int $dz) : Chunk{
+		return $this->chunks[($dx + 1) * 3 + ($dz + 1)];
+	}
+
+	public function isEmptyBlock(int $x, int $y, int $z) : bool{
+		return $this->blocks->isAir($this->getState($x, $y, $z));
+	}
+
+	public function isWaterAt(int $x, int $y, int $z) : bool{
+		return $this->blocks->isWater($this->getState($x, $y, $z));
+	}
+
+	public function getBiome(int $x, int $y, int $z) : int{
+		return $this->biomes->getBiome($x, $y, $z);
+	}
+
+	private function isOpaque(int $type, int $state) : bool{
+		if(isset($this->opaque[$type][$state])){
+			return $this->opaque[$type][$state];
+		}
+		$blocks = $this->blocks;
+		$block = $blocks->blockOf[$state];
+		$opaque = match($type){
+			self::WORLD_SURFACE_WG, self::WORLD_SURFACE => !$blocks->isAir($state),
+			self::OCEAN_FLOOR_WG, self::OCEAN_FLOOR => isset($this->motionBlocking[$block]),
+			self::MOTION_BLOCKING => isset($this->motionBlocking[$block]) || $blocks->fluid($state) !== JavaBlocks::FLUID_NONE,
+			default => isset($this->motionBlockingNoLeaves[$block]) || $blocks->fluid($state) !== JavaBlocks::FLUID_NONE,
+		};
+		return $this->opaque[$type][$state] = $opaque;
+	}
+
+	/**
+	 * First free y above the highest block matching the heightmap type (vanilla's getHeight()).
+	 */
+	public function getHeight(int $type, int $x, int $z) : int{
+		$dx = $x - $this->minX;
+		$dz = $z - $this->minZ;
+		if($dx < 0 || $dx >= self::SIZE || $dz < 0 || $dz >= self::SIZE){
+			return $this->minY; //vanilla would crash here
+		}
+		if(($type === self::WORLD_SURFACE_WG || $type === self::OCEAN_FLOOR_WG) && $this->terrainHeightProvider !== null){
+			return $this->terrainHeightsOf(($dx >> 4) * 3 + ($dz >> 4))[$type === self::WORLD_SURFACE_WG ? 0 : 1][($dx & 15) | (($dz & 15) << 4)];
+		}
+		$column = $dz * self::SIZE + $dx;
+		if(isset($this->heightmaps[$type][$column])){
+			return $this->heightmaps[$type][$column];
+		}
+		$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
+		//start at the top of the highest non-empty section, like Heightmap.primeHeightmaps()
+		$top = $this->minY;
+		for($s = $this->sections - 1; $s >= 0; --$s){
+			if(!$this->subChunks[$chunkIndex * $this->sections + $s]->isEmptyFast()){
+				$top = $this->minY + ($s << 4) + 16;
+				break;
+			}
+		}
+		$height = $this->minY;
+		for($y = $top - 1; $y >= $this->minY; --$y){
+			$state = $this->getState($x, $y, $z);
+			if($this->isOpaque($type, $state)){
+				$height = $y + 1;
+				break;
+			}
+		}
+		return $this->heightmaps[$type][$column] = $height;
+	}
+
+	/**
+	 * Terrain heightmaps (WORLD_SURFACE_WG, OCEAN_FLOOR_WG) of a chunk of the region (index (dx + 1) * 3 + dz + 1),
+	 * computed on first use and then kept for the rest of the decoration.
+	 * @phpstan-return array{list<int>, list<int>}
+	 */
+	public function terrainHeightsOf(int $chunkIndex) : array{
+		if(!isset($this->terrainHeights[$chunkIndex])){
+			$provider = $this->terrainHeightProvider ?? throw new \LogicException("No terrain height provider");
+			$this->terrainHeights[$chunkIndex] = $provider($this->centerChunkX - 1 + intdiv($chunkIndex, 3), $this->centerChunkZ - 1 + $chunkIndex % 3, $this->chunks[$chunkIndex]);
+		}
+		return $this->terrainHeights[$chunkIndex];
+	}
+
+	/**
+	 * Terrain heightmaps computed so far in this decoration, by region chunk index.
+	 * @phpstan-return array<int, array{list<int>, list<int>}>
+	 */
+	public function getKnownTerrainHeights() : array{
+		return $this->terrainHeights;
+	}
+
+	/**
+	 * Sets the terrain heightmaps of a chunk of the region (computed by the native decoration).
+	 * @phpstan-param array{list<int>, list<int>} $heights
+	 */
+	public function setTerrainHeights(int $chunkIndex, array $heights) : void{
+		$this->terrainHeights[$chunkIndex] = $heights;
+	}
+
+	/**
+	 * Applies writes made by the native decoration (which already applied them to its own copy of the region): each
+	 * one exactly like setState(), without logging.
+	 *
+	 * @param int[] $keys   region keys (((y - minY) * SIZE + dz) * SIZE + dx)
+	 * @param int[] $states Java states
+	 * @phpstan-param array<int, int> $keys
+	 * @phpstan-param array<int, int> $states
+	 * @param CompoundTag[] $blockEntities block entity data of the keys with bit 31 set (their state is the index)
+	 * @phpstan-param list<CompoundTag> $blockEntities
+	 */
+	public function applyNativeWrites(array $keys, array $states, array $blockEntities = []) : void{
+		//setState() inlined (keys are always inside the region)
+		$blocks = $this->blocks;
+		$minY = $this->minY;
+		$sections = $this->sections;
+		$water = $blocks->pmWaterState();
+		$air = $blocks->pmAirState();
+		$heightmaps = count($this->heightmaps) > 0;
+		foreach($keys as $i => $key){
+			$state = $states[$i];
+			if(($key & 0x80000000) !== 0){
+				//block entity, in the order of the writes
+				$key &= 0x7fffffff;
+				$this->setBlockEntity(
+					$this->minX + $key % self::SIZE,
+					intdiv($key, self::SIZE * self::SIZE) + $minY,
+					$this->minZ + intdiv($key, self::SIZE) % self::SIZE,
+					$blockEntities[$state] ?? throw new \InvalidArgumentException("Unknown block entity $state")
+				);
+				continue;
+			}
+			$dx = $key % self::SIZE;
+			$rest = intdiv($key, self::SIZE);
+			$dz = $rest % self::SIZE;
+			$yRel = intdiv($rest, self::SIZE);
+			$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
+			if(isset($this->pendingTiles[$chunkIndex])){
+				$this->removeBlockEntityIfReplaced($chunkIndex, $this->minX + $dx, $yRel + $minY, $this->minZ + $dz, $state);
+			}
+			$this->written[$key] = $state;
+			$sub = $this->subChunks[$chunkIndex * $sections + ($yRel >> 4)];
+			$sub->setBlockStateId($dx & 15, $yRel & 15, $dz & 15, $blocks->toPm($state));
+			$sub->setLiquidLayerStateId($dx & 15, $yRel & 15, $dz & 15, $blocks->pmNeedsWater($state) ? $water : $air);
+			$this->dirty[$chunkIndex] = true;
+			if($heightmaps){
+				$column = $dz * self::SIZE + $dx;
+				foreach($this->heightmaps as $type => $map){
+					if(isset($map[$column])){
+						$this->updateHeightmap($type, $column, $this->minX + $dx, $yRel + $minY, $this->minZ + $dz, $state);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Applies a batch of native writes from the PocketMine layers the native side built (native/vanillagen/decor/
+	 * pmlayers.go), with the same result as applyNativeWrites() byte for byte: the sections it wrote many blocks into
+	 * get their new layers at once, the other writes are applied one by one. Returns false (nothing applied) when the
+	 * writes must go through applyNativeWrites() instead: heightmaps to update.
+	 *
+	 * @param int[] $keys   region keys of the writes, in order (no block entities)
+	 * @param int[] $states their Java states
+	 * @phpstan-param array<int, int> $keys
+	 * @phpstan-param array<int, int> $states
+	 * @param int $chunkMask region chunks with writes (bit = chunk index)
+	 * @phpstan-param list<array{int, int, int, int, int, int, list<array{int, string, list<int>}>}> $sections
+	 *        [section index, layers before, bits and palette size of layer 0 before, of layer 1 before, new layers
+	 *        ([bits, words, palette])]
+	 * @param int[]  $singleSections section index of the other writes
+	 * @param int[]  $singleIndexes  their block index in the section ((x << 8) | (z << 4) | y)
+	 * @param int[]  $singleBlocks   their PocketMine states
+	 * @param string $singleWater    one byte each: whether the liquid layer gets water
+	 * @phpstan-param array<int, int> $singleSections
+	 * @phpstan-param array<int, int> $singleIndexes
+	 * @phpstan-param array<int, int> $singleBlocks
+	 *
+	 * @throws \UnexpectedValueException if the native side's layers do not match the region (nothing applied)
+	 */
+	public function applyNativeLayers(array $keys, array $states, int $chunkMask, array $sections, array $singleSections, array $singleIndexes, array $singleBlocks, string $singleWater) : bool{
+		if(count($this->heightmaps) > 0 || $this->copyOnWrite){
+			return false;
+		}
+		$blocks = $this->blocks;
+		$air = $blocks->pmAirState();
+		$water = $blocks->pmWaterState();
+		$maxSection = 9 * $this->sections;
+		//check everything before changing anything
+		foreach($sections as [$index, $layerCount, $bits0, $count0, $bits1, $count1, $_]){
+			$sub = $index < $maxSection ? $this->subChunks[$index] : throw new \UnexpectedValueException("Native layers for section $index");
+			$layers = $sub->getBlockLayers();
+			if(
+				$sub->getEmptyBlockId() !== $air || count($layers) !== $layerCount ||
+				($layerCount > 0 && ($layers[0]->getBitsPerBlock() !== $bits0 || count($layers[0]->getPalette()) !== $count0)) ||
+				($layerCount > 1 && ($layers[1]->getBitsPerBlock() !== $bits1 || count($layers[1]->getPalette()) !== $count1))
+			){
+				throw new \UnexpectedValueException("Native layers of section $index were built from different blocks");
+			}
+		}
+		foreach($singleSections as $index){
+			if($index >= $maxSection || $this->subChunks[$index]->getEmptyBlockId() !== $air){
+				throw new \UnexpectedValueException("Native write in section $index");
+			}
+		}
+		$newLayers = [];
+		foreach($sections as $i => [$index, $_, $_, $_, $_, $_, $layers]){
+			foreach($layers as [$bits, $words, $palette]){
+				try{
+					$newLayers[$i][] = $bits === 0 ? new PalettedBlockArray($palette[0]) : PalettedBlockArray::fromData($bits, $words, $palette);
+				}catch(\Throwable $e){
+					throw new \UnexpectedValueException("Bad native layer for section $index: " . $e->getMessage(), 0, $e);
+				}
+			}
+		}
+
+		//block entity data goes away when its block is replaced by another block (removeBlockEntityIfReplaced()),
+		//checked against the states before the batch
+		foreach($this->pendingTiles as $chunkIndex => $_){
+			if(($chunkMask & (1 << $chunkIndex)) === 0){
+				continue;
+			}
+			$chunk = $this->chunks[$chunkIndex];
+			$byKey = null;
+			foreach($chunk->getPendingTileNBT() as $nbt){
+				$x = $nbt->getInt(Tile::TAG_X);
+				$y = $nbt->getInt(Tile::TAG_Y);
+				$z = $nbt->getInt(Tile::TAG_Z);
+				if(!$this->ensureCanWrite($x, $y, $z)){
+					continue;
+				}
+				$key = (($y - $this->minY) * self::SIZE + ($z - $this->minZ)) * self::SIZE + ($x - $this->minX);
+				$byKey ??= array_flip($keys);
+				if(!isset($byKey[$key])){
+					continue;
+				}
+				$previous = $this->getState($x, $y, $z);
+				foreach(array_keys($keys, $key, true) as $i){
+					if($chunk->getPendingTileNBTAt($x & 15, $y, $z & 15) !== null && $blocks->blockOf[$previous] !== $blocks->blockOf[$states[$i]]){
+						$chunk->removePendingTileNBT($x & 15, $y, $z & 15);
+					}
+					$previous = $states[$i];
+				}
+			}
+		}
+
+		//what later reads of the positions return (the last write of each)
+		$this->written = array_combine($keys, $states) + $this->written;
+
+		foreach($sections as $i => [$index, $_, $_, $_, $_, $_, $_]){
+			$this->subChunks[$index]->setBlockLayers($newLayers[$i]);
+		}
+		foreach($singleSections as $i => $index){
+			$sub = $this->subChunks[$index];
+			$offset = $singleIndexes[$i];
+			$x = $offset >> 8;
+			$z = ($offset >> 4) & 15;
+			$y = $offset & 15;
+			$sub->setBlockStateId($x, $y, $z, $singleBlocks[$i]);
+			$sub->setLiquidLayerStateId($x, $y, $z, $singleWater[$i - 1] === "\x01" ? $water : $air);
+		}
+		for($chunkIndex = 0; $chunkIndex < 9; ++$chunkIndex){
+			if(($chunkMask & (1 << $chunkIndex)) !== 0){
+				$this->dirty[$chunkIndex] = true;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Section of a chunk of the region (chunk index (dx + 1) * 3 + dz + 1, section 0 = minY).
+	 */
+	public function getRegionSubChunk(int $chunkIndex, int $section) : SubChunk{
+		return $this->subChunks[$chunkIndex * $this->sections + $section];
+	}
+
+	private function updateHeightmap(int $type, int $column, int $x, int $y, int $z, int $state) : void{
+		$first = $this->heightmaps[$type][$column];
+		if($y <= $first - 2){
+			return;
+		}
+		if($this->isOpaque($type, $state)){
+			if($y >= $first){
+				$this->heightmaps[$type][$column] = $y + 1;
+			}
+		}elseif($first - 1 === $y){
+			for($yy = $y - 1; $yy >= $this->minY; --$yy){
+				if($this->isOpaque($type, $this->getState($x, $yy, $z))){
+					$this->heightmaps[$type][$column] = $yy + 1;
+					return;
+				}
+			}
+			$this->heightmaps[$type][$column] = $this->minY;
+		}
+	}
+}
