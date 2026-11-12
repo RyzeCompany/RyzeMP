@@ -34,6 +34,7 @@ final class VanillaDataIdentity{
 	public const ALGORITHM = "ryze-vanillamine-core-v2";
 	public const PRESET_PREFIX = "core-v2;data=";
 	public const FEATURES_PRESET_PREFIX = "core-v3;data=";
+	public const COMPILED_PRESET_PREFIX = "core-v4;data=";
 
 	private const ASSETS = [
 		"data",
@@ -109,10 +110,11 @@ final class VanillaDataIdentity{
 	 * @phpstan-return array{directory: string, hash: string}
 	 */
 	public static function parse(string $preset) : array{
-		if(!str_starts_with($preset, self::PRESET_PREFIX) && !str_starts_with($preset, self::FEATURES_PRESET_PREFIX)){
-			throw new InvalidGeneratorOptionsException("Expected core-v2 or core-v3;data=<absolute path>;sha256=<64 lowercase hex digits>");
+		if(!str_starts_with($preset, self::PRESET_PREFIX) && !str_starts_with($preset, self::FEATURES_PRESET_PREFIX) && !str_starts_with($preset, self::COMPILED_PRESET_PREFIX)){
+			throw new InvalidGeneratorOptionsException("Expected core-v2, core-v3 or core-v4;data=<absolute path>;sha256=<64 lowercase hex digits>");
 		}
-		$prefix = str_starts_with($preset, self::FEATURES_PRESET_PREFIX) ? self::FEATURES_PRESET_PREFIX : self::PRESET_PREFIX;
+		$prefix = str_starts_with($preset, self::COMPILED_PRESET_PREFIX) ? self::COMPILED_PRESET_PREFIX :
+			(str_starts_with($preset, self::FEATURES_PRESET_PREFIX) ? self::FEATURES_PRESET_PREFIX : self::PRESET_PREFIX);
 		$rest = substr($preset, strlen($prefix));
 		$separator = strrpos($rest, ";sha256=");
 		if($separator === false){
@@ -137,10 +139,15 @@ final class VanillaDataIdentity{
 
 	/** Returns the pinned hash for v2 presets; legacy core-v1 has no hash. */
 	public static function hasPlacedFeatures(string $preset) : bool{
-		return str_starts_with($preset, self::FEATURES_PRESET_PREFIX);
+		return str_starts_with($preset, self::FEATURES_PRESET_PREFIX) || str_starts_with($preset, self::COMPILED_PRESET_PREFIX);
+	}
+
+	public static function hasCompiledTerrain(string $preset) : bool{
+		return str_starts_with($preset, self::COMPILED_PRESET_PREFIX);
 	}
 
 	public static function expectedHash(string $preset) : ?string{
-		return (str_starts_with($preset, self::PRESET_PREFIX) || str_starts_with($preset, self::FEATURES_PRESET_PREFIX)) ? self::parse($preset)["hash"] : null;
+		return (str_starts_with($preset, self::PRESET_PREFIX) || str_starts_with($preset, self::FEATURES_PRESET_PREFIX) ||
+			str_starts_with($preset, self::COMPILED_PRESET_PREFIX)) ? self::parse($preset)["hash"] : null;
 	}
 }
