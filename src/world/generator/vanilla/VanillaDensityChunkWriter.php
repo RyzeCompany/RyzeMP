@@ -10,6 +10,7 @@ use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
+use pocketmine\world\generator\vanilla\biome\TheEndBiomeSource;
 use pocketmine\world\generator\vanilla\carver\CarverSystem;
 use pocketmine\world\generator\vanilla\surface\MaterialSystem;
 use Symfony\Component\Filesystem\Path;
@@ -38,29 +39,39 @@ final class VanillaDensityChunkWriter{
 	private InterpretedTerrainFiller $terrain;
 	private MaterialSystem $materials;
 	private ?CarverSystem $carvers;
+	private ?TheEndBiomeSource $endBiomes = null;
 	/** @var list<int> */
 	private array $biomes;
 
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir){
+	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld"){
 		$data = new WorldgenData($dataDir);
-		$router = new NoiseRouter($data, $seed, "overworld");
-		if($router->minY !== -64 || $router->height !== 384){
-			throw new InvalidGeneratorOptionsException("Vanilla worldgen core-v1 requires Overworld height -64..319, got $router->minY / $router->height");
+		$router = new NoiseRouter($data, $seed, $dimension);
+		$expectedMinY = $dimension === "overworld" ? -64 : 0;
+		$expectedHeight = $dimension === "overworld" ? 384 : 128;
+		if($router->minY !== $expectedMinY || $router->height !== $expectedHeight){
+			throw new InvalidGeneratorOptionsException("Vanilla worldgen core-v1 dimension $dimension has unexpected height: $router->minY / $router->height");
 		}
-		$tree = ClimateBiomeTree::fromData($data);
-		$this->biomes = array_map(static fn(string $name) : int => BiomeMapping::toBedrock($name), $tree->getBiomeNames());
+		$tree = $dimension === "end" ? ClimateBiomeTree::single("minecraft:the_end") : ClimateBiomeTree::fromData($data, $dimension);
+		$names = $dimension === "end" ? TheEndBiomeSource::NAMES : $tree->getBiomeNames();
+		$this->biomes = array_map(static fn(string $name) : int => BiomeMapping::toBedrock($name), $names);
+		if($dimension === "end"){
+			$this->endBiomes = new TheEndBiomeSource($router->erosion);
+		}
 		$this->terrain = new InterpretedTerrainFiller($router, $tree);
-		$this->materials = new MaterialSystem($data, $router, $tree, $seed);
+		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
 		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
 		$this->air = VanillaBlocks::AIR()->getStateId();
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 	}
 
 	/** Checks the preset, data stamp and required baseline assets before world creation. */
-	public static function validatePreset(string $preset) : string{
+	public static function validatePreset(string $preset, string $dimension = "overworld") : string{
+		if(!in_array($dimension, ["overworld", "nether", "end"], true)){
+			throw new InvalidGeneratorOptionsException("Unsupported VanillaMine dimension: $dimension");
+		}
 		if(!str_starts_with($preset, self::PRESET_PREFIX)){
 			throw new InvalidGeneratorOptionsException("Expected core-v1;data=<absolute path> (or empty legacy preset)");
 		}
@@ -84,9 +95,9 @@ final class VanillaDensityChunkWriter{
 		if(!is_array($stamp) || ($stamp["minecraft"] ?? null) !== self::MINECRAFT_DATA_VERSION || ($stamp["format"] ?? null) !== self::DATA_FORMAT){
 			throw new InvalidGeneratorOptionsException("VanillaMine worldgen cache must be Minecraft 26.3, format 5");
 		}
-		$settingsFile = $dir . "/data/minecraft/worldgen/noise_settings/overworld.json";
+		$settingsFile = $dir . "/data/minecraft/worldgen/noise_settings/" . $dimension . ".json";
 		if(!is_file($settingsFile) ||
-			(!is_file($dir . "/multi_noise_biome_tree.json") && !is_file($dir . "/reports/biome_parameters/minecraft/overworld.json"))){
+			($dimension !== "end" && !is_file($dir . "/multi_noise_biome_tree.json") && !is_file($dir . "/reports/biome_parameters/minecraft/" . $dimension . ".json"))){
 			throw new InvalidGeneratorOptionsException("VanillaMine worldgen cache is incomplete");
 		}
 		$settingsRaw = file_get_contents($settingsFile);
@@ -120,6 +131,9 @@ final class VanillaDensityChunkWriter{
 		}
 		$terrain = $this->terrain->fill($chunkX, $chunkZ);
 		$terrain->unpackBiomes();
+		if($this->endBiomes !== null){
+			$terrain->biomes = $this->endBiomes->fillChunk($chunkX, $chunkZ, $terrain->height >> 2);
+		}
 		$this->materials->apply($terrain);
 		$this->carvers?->apply($terrain);
 		$height = $terrain->height;
@@ -136,7 +150,7 @@ final class VanillaDensityChunkWriter{
 			for($qx = 0; $qx < 4; ++$qx){
 				for($qz = 0; $qz < 4; ++$qz){
 					for($qy = 0; $qy < 4; ++$qy){
-						$index = (($qx << 2) | $qz) * $quartsY + (($subY << 2) - ($minY >> 2)) + $qy;
+						$index = (($qx << 2) | $qz) * $quartsY + max(0, min($quartsY - 1, (($subY << 2) - ($minY >> 2)) + $qy));
 						$id = $terrain->biomes[$index] ?? throw new \UnexpectedValueException("Missing 3D biome cell $index");
 						if($id < 0 || $id >= $biomeCount){
 							throw new \UnexpectedValueException("Unknown VanillaMine biome index $id");
@@ -166,7 +180,7 @@ final class VanillaDensityChunkWriter{
 				for($y = $minY; $y < $maxY; ++$y){
 					$m = $terrain->materials[$base + $y - $minY] ?? throw new \UnexpectedValueException("Missing VanillaMine terrain material");
 					$state = $states[$m] ?? throw new \UnexpectedValueException("Unknown VanillaMine terrain material $m");
-					if($y === $minY){
+					if($y === $minY && $this->dimension !== "end"){
 						$state = $this->bedrock;
 					}
 					if($state !== $this->air){
