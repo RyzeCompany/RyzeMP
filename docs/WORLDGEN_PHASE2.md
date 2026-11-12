@@ -78,3 +78,36 @@ Use only on a **new disposable test world**. Do not select this setting for an a
 The `core-v1` preset is stored in `level.dat` for new worlds, so a world with empty legacy options never changes its generator semantics during this integration. Do not edit the preset on an existing world. Keep the chosen external data cache immutable and backed up; replacing a cache under the same path could change generated chunks despite the version stamp. This branch does not modify the LevelDB provider, automatically rewrite old chunks, touch `dimensions.yml`, replace RyzeCompany dependencies or change existing Nether/End generator names. Rollback remains stopping the server, using an offline LevelDB backup and disabling the experimental world.
 
 All upstream source retains the LGPL-family header; the numeric noise fixture documents its separate MIT-licensed deepslate reference. Mojang data and Go binaries are not included in this branch. Attribution and component-level notices must be revalidated before release.
+
+
+## Continued integration: Nether, End and guarded biome conversion (2026-11-12 UTC)
+
+**Registered opt-in names, none of which change existing worlds or DimensionManager defaults:**
+
+| Experimental class | Generator registry name | Dimension | Current pipeline |
+| --- | --- | --- | --- |
+| `RyzeOverworldGenerator` (nonempty preset) | `ryze_vanilla_overworld` | Overworld | VanillaMine density / multi-noise / biomes / aquifers / surface materials / optional carvers |
+| `RyzeVanillaNetherCoreGenerator` | `ryze_vanillamine_nether_core_v1` | Nether | VanillaMine Nether density / biome tree / materials / optional carvers; no Nether vegetation or structures |
+| `RyzeVanillaEndCoreGenerator` | `ryze_vanillamine_end_core_v1` | End | VanillaMine End density / End biome source / materials, **plus** seed-based obsidian spikes; no End cities / chorus / gateway placement |
+
+Both secondary generators require a **new world** with `core-v1;data=/absolute/path` pointing to a preprepared **Minecraft Java 26.3 / format 5** VanillaMine cache. Their noise settings select `nether` and `end` respectively. These names are **not** aliases to the existing `vanilla_nether` and `vanilla_end`; the old RyzeMP dimension generators remain the default in `DimensionManager`. To test transitions, create separate test worlds with their correct dimension folder names and matching generator metadata while `DimensionManager` is configured to use them; **never edit an existing dimension's level.dat or NBT**. If the destination already exists, do not reuse it for this experiment.
+
+The original VanillaMine `EndSpikes::forSeed()` seed permutation (ten pillars, heights 76–103) and `EndFeatures::spike()` block geometry were adapted to write *only* the requested chunk. This avoids population-order dependencies across chunk boundaries. Existing End crystals/boss AI remain separate. Basic iron-bar cages are placed, but **their directional blockstates and crystal entities have not been fully reproduced**. The deterministic seed layout is checked against the original numerical End fixtures. This is one partial End feature, not complete End structure support.
+
+**Versioning guard:** Legacy experimental worlds whose `generatorOptions` is empty still use exactly the original 2D algorithm; new core worlds select `core-v1` explicitly. `level.dat` retains the literal generator option and seed. The external data cache is validated against `version.json` and the required metadata/noise files before generation. The version stamp **does not guarantee content immutability**; the data files must be retained read-only with an offline backup. A cryptographic data manifest/fingerprint remains required before production.
+
+**Multiversion guard:** `BiomeMapping` rejects unknown upstream Java biome names rather than injecting arbitrary IDs. A PHPUnit case enumerates every mapped Java biome and checks that its Bedrock ID exists in **RyzeMP's** `LegacyBiomeIdToStringIdMap`. However, real 1.16/1.21/1.26 mixed-client packet translation and older-client fallbacks are **not** verified here. Mappings of some unfamiliar blocks are conservative substitutes and do not imply game parity.
+
+### Tests and performance interpretation
+
+- PHPUnit covers synthetic Overworld density/material surfaces, 3D biomes, generation order, negative height, deterministic aquifer invocation, seed/preset metadata and LevelDB reopen with NBT.
+- Synthetic dimension tests check Nether and End biome/terrain isolation, generator names and a numeric End spike seed reference.
+- Original upstream noise/deepslate fixture tests and carver arithmetic are present. The reference carver-mask test **skips** if `POCKETMINE_VANILLA_WORLDGEN_DATA` is absent, so CI success does not establish full real-data cave parity.
+- A PHPUnit performance baseline measures 4 synthetic density chunks and prints average/maximum milliseconds and peak memory delta to CI stderr. It does **not** measure real Minecraft generation speed, server TPS or load with connected clients. The benchmark must be repeated with a verified full 26.3 cache and real server workloads before release.
+- The existing PHAR workflow builds and tests RyzeMP's normal smoke boot; it does **not** automatically validate visual entry into the three opt-in worlds. Real-client acceptance is outstanding.
+
+### Go/native audit and blockers
+
+VanillaMine source `native/vanillagen` at the audited reference uses Go **1.24** and an explicit framed localhost protocol (**protocol version 7, algorithm version 4**). Its PHP manager starts a child process with a per-run token, and worker connections verify algorithm/biome data before using it. The native program, Java data downloader, build artifacts, packaged binaries and PHP/Go bridge are **not imported** into RyzeMP. The opted-in backend is real **interpreted PHP**; there is **no claim** of functional native generation, compiled PHP backend, tested Go build, measured production throughput or crash fallback in this PR. Before attempting native mode, verify OS/CPU support, provenance, LGPL notice and wire compatibility with the Ryze multiversion fork.
+
+**Remaining highest-priority work:** full features (placed ore deposits, trees, vegetation, lakes, biome decoration), VanillaMine structure placement (villages, mineshafts, temples, fortresses, bastions, End cities), terrain adaptation around structure pieces, Nether/End decorations and transitions with live clients, full Mojang 26.3 cache oracle tests, old-world seam tests, stress TPS/memory, full server restart, binary build/timeout/fallback if native acceleration is pursued, and final visual approval. The PR remains **Draft**, with no merge permission.
