@@ -10,6 +10,7 @@ use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
+use pocketmine\world\generator\vanilla\carver\CarverSystem;
 use pocketmine\world\generator\vanilla\surface\MaterialSystem;
 use Symfony\Component\Filesystem\Path;
 use function file_exists;
@@ -36,6 +37,7 @@ final class VanillaDensityChunkWriter{
 
 	private InterpretedTerrainFiller $terrain;
 	private MaterialSystem $materials;
+	private ?CarverSystem $carvers;
 	/** @var list<int> */
 	private array $biomes;
 
@@ -52,6 +54,7 @@ final class VanillaDensityChunkWriter{
 		$this->biomes = array_map(static fn(string $name) : int => BiomeMapping::toBedrock($name), $tree->getBiomeNames());
 		$this->terrain = new InterpretedTerrainFiller($router, $tree);
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed);
+		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
 		$this->air = VanillaBlocks::AIR()->getStateId();
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 	}
@@ -100,6 +103,7 @@ final class VanillaDensityChunkWriter{
 		$terrain = $this->terrain->fill($chunkX, $chunkZ);
 		$terrain->unpackBiomes();
 		$this->materials->apply($terrain);
+		$this->carvers?->apply($terrain);
 		$height = $terrain->height;
 		$quartsY = $height >> 2;
 		$minY = $terrain->minY;
