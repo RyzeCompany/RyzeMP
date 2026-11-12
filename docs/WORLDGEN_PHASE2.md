@@ -111,3 +111,41 @@ The original VanillaMine `EndSpikes::forSeed()` seed permutation (ten pillars, h
 VanillaMine source `native/vanillagen` at the audited reference uses Go **1.24** and an explicit framed localhost protocol (**protocol version 7, algorithm version 4**). Its PHP manager starts a child process with a per-run token, and worker connections verify algorithm/biome data before using it. The native program, Java data downloader, build artifacts, packaged binaries and PHP/Go bridge are **not imported** into RyzeMP. The opted-in backend is real **interpreted PHP**; there is **no claim** of functional native generation, compiled PHP backend, tested Go build, measured production throughput or crash fallback in this PR. Before attempting native mode, verify OS/CPU support, provenance, LGPL notice and wire compatibility with the Ryze multiversion fork.
 
 **Remaining highest-priority work:** full features (placed ore deposits, trees, vegetation, lakes, biome decoration), VanillaMine structure placement (villages, mineshafts, temples, fortresses, bastions, End cities), terrain adaptation around structure pieces, Nether/End decorations and transitions with live clients, full Mojang 26.3 cache oracle tests, old-world seam tests, stress TPS/memory, full server restart, binary build/timeout/fallback if native acceleration is pursued, and final visual approval. The PR remains **Draft**, with no merge permission.
+
+
+## 2026-11-12 continuation: verified Java data bootstrap and opt-in decoration
+
+The prior empty-preset 2D generator and historical core-v1 profiles stay untouched. Two new, explicit world-data presets prevent silent upgrades:
+
+| Preset | Capabilities | Important qualification |
+| --- | --- | --- |
+| core-v2;data=/absolute/cache;sha256=HEX | Genuine VanillaMine density, biomes, aquifers, material rules and carvers | Canonical SHA-256 of all source inputs is checked before every new chunk; decoration remains disabled |
+| core-v3;data=/absolute/cache;sha256=HEX | Same pipeline plus original VanillaMine seeded placed-feature engine | Experimental and unsafe for production until NBT persistence and real-data parity are verified |
+
+In both cases, HEX is the 64-character lowercase SHA-256 printed by tools/worldgen-data-fingerprint.php. The entire generator-options string persists in the existing level.dat. Fingerprints cover all file bytes and relative names in the VanillaMine cache (data, reports, trees, Java blocks/items, Geyser mappings and the version stamp), not timestamps or absolute location. A changed cache makes the generator throw before writing any new chunk. Symlinked cache inputs are rejected. Full hashing per chunk can be expensive and has not been benchmarked on the real 26.3 dataset.
+
+### Authentic Java data preparation: implemented but not run in this session
+
+From an Internet-connected, trusted machine with rights to use Minecraft Java Edition server files, run these commands in the RyzeMP repository:
+
+    composer install
+    php tools/prepare-vanillamine-worldgen.php /absolute/new/empty/vanillamine-cache
+    php tools/worldgen-data-fingerprint.php /absolute/new/empty/vanillamine-cache
+
+The first CLI refuses nonempty/symlink directories and only runs with explicit operator action. It uses VanillaMine's original VanillaDataFetcher at commit 4dd2228b47d64c8015c28138c846e6c4acb28345, not an approximate generator. That fetcher resolves Java 26.3 using Mojang's version manifest, checks the server JAR against its published SHA-1, uses a SHA-256-verified Eclipse Temurin JRE if required, runs the official Minecraft data generator and verifies pinned GeyserMC mapping files using their SHA-256 checksums (revision 81700ab543c1f4e9f9041f58dac4154ecb0d0c8b). It emits Minecraft version 26.3 and cache format 5. The generated asset cache contains density/noise settings, material rules, biome lists and R-trees, features, placed features, tags, structures and templates. Do not commit or redistribute Mojang assets; observe the Minecraft EULA.
+
+This session's container could not resolve Mojang domain names and had Go 1.23.2, below the audited native Go 1.24 requirement. No real data was downloaded or executed here. The procedure is reproducible but NOT itself proof of real-data parity.
+
+### Placed features and shortcomings
+
+The source for VanillaMine's FeatureRegistry, FeatureDecorator, feature placement modifiers, predicates, seeded FeatureRandom, OreFeature, trees, vegetation, geodes, caves, Nether and End features is ported and connected to populateChunk only in explicitly selected core-v3 new worlds. The decorator evaluates original JSON-based feature rules over the existing RyzeMP 3x3 chunk region. This is NOT a second noise simulation.
+
+Important RyzeMP API differences: Chunk lacks VanillaMine pending tile/entity NBT methods, while SubChunk lacks its liquid-layer setters. FeatureLevel now writes second block layers using RyzeMP's existing palettes, and tests exercise it; it deliberately throws if a feature needs unsupported tile/entity NBT instead of silently discarding important data. This can abort a partially populated test chunk. Never use core-v3 on a production world until a transactional NBT adapter exists. VanillaMine's Java block shape setters for chorus, fire and redstone wires also do not exist in this fork; directional shapes are not fully reproduced. These limitations preclude claiming full Bedrock visual parity.
+
+Village, temple, mineshaft, mansion, bastion, fortress, trial chamber, End City and other structure assembly plus terrain Beardifier remain unimplemented. Source settings existing in the cache do not prove structure placement. Neither the native Go vanillagen runtime nor its wire protocol are integrated. Nether/End default RyzeMP generators, DimensionManager, worlds, portals, multiversion dependencies, LevelDB provider and climate PR #58 are unchanged.
+
+### Reference test procedure
+
+Set POCKETMINE_VANILLA_WORLDGEN_DATA to the prepared authentic cache path, then run PHPUnit tests under tests/phpunit/world/generator/vanilla. CarverTest compares original cave masks, and VanillaRealDataReferenceTest compares Nether and End block/material and biome hashes against independently produced numerical Java 26.3 reference fixtures. Tests skip when real data is unavailable. Imported feature RNG and seed reference tests run without Mojang assets. A green CI result without the environment variable proves only synthetic/reference-numeric unit stages, not full Java world parity.
+
+Actual PHAR startup with opt-in worlds, LevelDB restart, real Bedrock clients, mixed-protocol sessions, data-driven structures and production TPS benchmarks remain acceptance blockers. Keep PR #60 Draft and use offline LevelDB backup / previous build for rollback.
