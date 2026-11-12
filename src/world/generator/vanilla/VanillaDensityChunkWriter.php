@@ -75,7 +75,11 @@ final class VanillaDensityChunkWriter{
 			throw new InvalidGeneratorOptionsException("Missing VanillaMine version.json in $dir");
 		}
 		try{
-			$stamp = json_decode(file_get_contents($stampFile), true, 512, JSON_THROW_ON_ERROR);
+			$raw = file_get_contents($stampFile);
+			if($raw === false){
+				throw new InvalidGeneratorOptionsException("Could not read VanillaMine data stamp");
+			}
+			$stamp = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
 		}catch(\JsonException $e){
 			throw new InvalidGeneratorOptionsException("Invalid VanillaMine data stamp", 0, $e);
 		}
