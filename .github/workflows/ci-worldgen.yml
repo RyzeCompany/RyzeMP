@@ -27,11 +27,9 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
       - name: Prepare optional PHPStan exclusion directory
         run: mkdir -p build/php
-      - name: Analyze Phase 2 files with PHPStan level 9
+      - name: Analyze complete Phase 2 core using PHPStan level 9
         run: |
           php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
-            src/world/generator/vanilla/OverworldTerrainSampler.php \
-            src/world/generator/vanilla/RyzeOverworldGenerator.php \
+            src/world/generator/vanilla \
             src/world/dimension/generator/VanillaGenerators.php \
-            tests/phpunit/world/generator/vanilla/RyzeOverworldGeneratorTest.php \
-            tests/phpunit/world/generator/vanilla/RyzeOverworldLevelDBTest.php
+            tests/phpunit/world/generator/vanilla
