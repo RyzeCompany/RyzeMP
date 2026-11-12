@@ -22,7 +22,7 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 	public function __construct(int $seed, string $preset){
 		$path = VanillaDensityChunkWriter::validatePreset($preset, static::DIMENSION);
 		parent::__construct($seed, $preset);
-		$this->writer = new VanillaDensityChunkWriter($seed, $path, static::DIMENSION);
+		$this->writer = new VanillaDensityChunkWriter($seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset));
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
