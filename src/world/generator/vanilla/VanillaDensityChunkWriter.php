@@ -12,6 +12,8 @@ use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
 use pocketmine\world\generator\vanilla\biome\TheEndBiomeSource;
 use pocketmine\world\generator\vanilla\carver\CarverSystem;
+use pocketmine\world\generator\vanilla\feature\FeatureDecorator;
+use pocketmine\world\generator\vanilla\feature\FeatureRegistry;
 use pocketmine\world\generator\vanilla\surface\MaterialSystem;
 use Symfony\Component\Filesystem\Path;
 use function file_exists;
@@ -40,6 +42,7 @@ final class VanillaDensityChunkWriter{
 	private MaterialSystem $materials;
 	private ?CarverSystem $carvers;
 	private ?TheEndBiomeSource $endBiomes = null;
+	private ?FeatureDecorator $features = null;
 	/** @var list<int> */
 	private array $biomes;
 
@@ -47,7 +50,7 @@ final class VanillaDensityChunkWriter{
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null){
+	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false){
 		$this->terrainDataDir = $dataDir;
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($dataDir, $this->pinnedHash);
@@ -68,6 +71,35 @@ final class VanillaDensityChunkWriter{
 		$this->terrain = new InterpretedTerrainFiller($router, $tree);
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
 		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
+		if($enablePlacedFeatures){
+			$sample = $this->endBiomes !== null ?
+				fn(int $qx, int $qy, int $qz) : int => $this->endBiomes->getNoiseBiome($qx, $qy, $qz) :
+				function(int $qx, int $qy, int $qz) use ($router, $tree) : int{
+					$x = (float) ($qx << 2);
+					$y = (float) ($qy << 2);
+					$z = (float) ($qz << 2);
+					return $tree->search(
+						ClimateBiomeTree::quantize($router->temperature->compute($x, 0.0, $z)),
+						ClimateBiomeTree::quantize($router->vegetation->compute($x, 0.0, $z)),
+						ClimateBiomeTree::quantize($router->continents->compute($x, 0.0, $z)),
+						ClimateBiomeTree::quantize($router->erosion->compute($x, 0.0, $z)),
+						ClimateBiomeTree::quantize($router->depth->compute($x, $y, $z)),
+						ClimateBiomeTree::quantize($router->ridges->compute($x, 0.0, $z))
+					);
+				};
+			$this->features = new FeatureDecorator(
+				$data,
+				$seed,
+				$router->minY,
+				$dimension === "end" ? 256 : $router->height,
+				$router->seaLevel,
+				$names,
+				$sample,
+				null,
+				$dimension === "end" ? TheEndBiomeSource::NAMES : FeatureRegistry::multiNoiseBiomes($data, $dimension)
+			);
+			$this->features->regionRandomFactory = $router->random->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
+		}
 		$this->air = VanillaBlocks::AIR()->getStateId();
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 	}
@@ -77,7 +109,8 @@ final class VanillaDensityChunkWriter{
 		if(!in_array($dimension, ["overworld", "nether", "end"], true)){
 			throw new InvalidGeneratorOptionsException("Unsupported VanillaMine dimension: $dimension");
 		}
-		if(str_starts_with($preset, VanillaDataIdentity::PRESET_PREFIX)){
+		if(str_starts_with($preset, VanillaDataIdentity::PRESET_PREFIX) ||
+			str_starts_with($preset, VanillaDataIdentity::FEATURES_PRESET_PREFIX)){
 			$pinned = VanillaDataIdentity::parse($preset);
 			$dir = $pinned["directory"];
 			VanillaDataIdentity::assertMatches($dir, $pinned["hash"]);
@@ -128,6 +161,20 @@ final class VanillaDensityChunkWriter{
 		foreach(["surface", "surface_secondary", "badlands_pillar", "badlands_pillar_roof", "badlands_surface", "iceberg_pillar", "iceberg_pillar_roof", "iceberg_surface"] as $noise){
 			if(!is_file($dir . "/data/minecraft/worldgen/noise/" . $noise . ".json")){
 				throw new InvalidGeneratorOptionsException("VanillaMine cache is missing noise $noise");
+			}
+		}
+		if(VanillaDataIdentity::hasPlacedFeatures($preset)){
+			foreach([
+				"java_blocks.json",
+				"geyser/blocks.nbt",
+				"geyser/collisions.nbt",
+				"data/minecraft/worldgen/placed_feature",
+				"data/minecraft/worldgen/feature",
+				"data/minecraft/tags/block"
+			] as $required){
+				if(!file_exists($dir . "/" . $required)){
+					throw new InvalidGeneratorOptionsException("VanillaMine placed-feature cache is missing $required");
+				}
 			}
 		}
 		return $dir;
@@ -210,5 +257,23 @@ final class VanillaDensityChunkWriter{
 				$chunk->setHeightMap($x, $z, $highest);
 			}
 		}
+		if($this->features !== null){
+			$this->features->recordTerrain($chunkX, $chunkZ, $chunk);
+		}
+	}
+
+	/** Runs Java 26.3 placed-feature decoration, with no structures or native backend. */
+	public function populate(\pocketmine\world\ChunkManager $world, int $chunkX, int $chunkZ) : void{
+		if($this->features === null){
+			return;
+		}
+		if($this->pinnedHash !== null){
+			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
+		}
+		$this->features->decorate($world, $chunkX, $chunkZ);
+	}
+
+	public function hasPlacedFeatures() : bool{
+		return $this->features !== null;
 	}
 }
