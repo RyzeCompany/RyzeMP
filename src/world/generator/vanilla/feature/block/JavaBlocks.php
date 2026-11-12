@@ -885,6 +885,33 @@ final class JavaBlocks{
 	 * must be restored in the protocol translation layer before production.
 	 */
 
+	/**
+	 * Whether the Bedrock block of this Java state keeps water in the liquid layer (waterlogged blocks, seagrass,
+	 * kelp...).
+	 */
+	public function pmNeedsWater(int $state) : bool{
+		if(!isset($this->pmWater[$state])){
+			$this->toPm($state);
+		}
+		return $this->pmWater[$state];
+	}
+
+	public function pmWaterState() : int{
+		return $this->pmWaterState;
+	}
+
+	public function pmAirState() : int{
+		return $this->pmAir;
+	}
+
+	public function toPmBlock(int $state) : Block{
+		return RuntimeBlockStateRegistry::getInstance()->fromStateId($this->toPm($state));
+	}
+
+	/**
+	 * Java state for a PocketMine state id (and whether the liquid layer has water). Several Java states can map to
+	 * the same Bedrock state (e.g. leaf distances, waterlogging): the Java default state of the block is preferred.
+	 */
 	public function fromPm(int $pmState, bool $wet = false) : int{
 		if($wet){
 			if(isset($this->fromPmWet[$pmState])){
