@@ -174,6 +174,7 @@ final class VanillaDensityCoreTest extends TestCase{
 			self::assertSame(VanillaBlocks::GRASS()->getStateId(), $loaded->getBlockStateId(3, 80, 4));
 			self::assertSame(BiomeIds::FOREST, $loaded->getBiomeId(3, 270, 4));
 			// An existing chunk must not be rewritten by a new generator invocation.
+			$manager->setChunk(-1, 2, $loaded);
 			(new RyzeOverworldGenerator(77123, $preset))->generateChunk($manager, -1, 2);
 			self::assertSame(VanillaBlocks::GRASS()->getStateId(), $loaded->getBlockStateId(3, 80, 4));
 		}finally{
