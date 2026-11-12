@@ -10,6 +10,7 @@ use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
+use pocketmine\world\generator\vanilla\surface\MaterialSystem;
 use Symfony\Component\Filesystem\Path;
 use function file_exists;
 use function file_get_contents;
@@ -34,6 +35,7 @@ final class VanillaDensityChunkWriter{
 	public const DATA_FORMAT = 5;
 
 	private InterpretedTerrainFiller $terrain;
+	private MaterialSystem $materials;
 	/** @var list<int> */
 	private array $biomes;
 
@@ -53,6 +55,7 @@ final class VanillaDensityChunkWriter{
 		$tree = ClimateBiomeTree::fromData($data);
 		$this->biomes = array_map(static fn(string $name) : int => BiomeMapping::toBedrock($name), $tree->getBiomeNames());
 		$this->terrain = new InterpretedTerrainFiller($router, $tree);
+		$this->materials = new MaterialSystem($data, $router, $tree, $seed);
 		$this->air = VanillaBlocks::AIR()->getStateId();
 		$this->stone = VanillaBlocks::STONE()->getStateId();
 		$this->deepslate = VanillaBlocks::DEEPSLATE()->getStateId();
@@ -104,6 +107,7 @@ final class VanillaDensityChunkWriter{
 		}
 		$terrain = $this->terrain->fill($chunkX, $chunkZ);
 		$terrain->unpackBiomes();
+		$this->materials->apply($terrain);
 		$height = $terrain->height;
 		$quartsY = $height >> 2;
 		$minY = $terrain->minY;
@@ -137,12 +141,10 @@ final class VanillaDensityChunkWriter{
 			$chunk->setSubChunk($subY, new SubChunk($old->getEmptyBlockId(), $old->getBlockLayers(), $palette));
 		}
 
-		$states = [
-			Aquifer::MATERIAL_AIR => $this->air,
-			Aquifer::MATERIAL_STONE => $this->stone,
-			Aquifer::MATERIAL_WATER => $this->water,
-			Aquifer::MATERIAL_LAVA => $this->lava
-		];
+		$states = [];
+		foreach($this->materials->palette->getNames() as $material => $javaId){
+			$states[$material] = JavaBlockMapping::toBlock($javaId)->getStateId();
+		}
 		for($x = 0; $x < 16; ++$x){
 			for($z = 0; $z < 16; ++$z){
 				$base = (($x << 4) | $z) * $height;
@@ -150,9 +152,6 @@ final class VanillaDensityChunkWriter{
 				for($y = $minY; $y < $maxY; ++$y){
 					$m = $terrain->materials[$base + $y - $minY] ?? throw new \UnexpectedValueException("Missing VanillaMine terrain material");
 					$state = $states[$m] ?? throw new \UnexpectedValueException("Unknown VanillaMine terrain material $m");
-					if($m === Aquifer::MATERIAL_STONE && $y < 0){
-						$state = $this->deepslate;
-					}
 					if($y === $minY){
 						$state = $this->bedrock;
 					}
