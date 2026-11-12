@@ -284,6 +284,15 @@ final class VanillaDensityCoreTest extends TestCase{
 		new RyzeOverworldGenerator(7001, $preset);
 	}
 
+	public function testCoreV3CannotTreatSyntheticDataAsRealPlacedFeatureCache() : void{
+		$preset = 'core-v3;data=' . $this->dir . ';sha256=' . VanillaDataIdentity::fingerprint($this->dir);
+		self::assertTrue(VanillaDataIdentity::hasPlacedFeatures($preset));
+		self::assertSame($this->dir, VanillaDataIdentity::parse($preset)['directory']);
+		$this->expectException(InvalidGeneratorOptionsException::class);
+		$this->expectExceptionMessage('java_blocks.json');
+		VanillaDensityChunkWriter::validatePreset($preset);
+	}
+
 	public function testCoreV2RejectsUnpinnedOrMalformedHash() : void{
 		$this->expectException(InvalidGeneratorOptionsException::class);
 		VanillaDensityChunkWriter::validatePreset('core-v2;data=' . $this->dir . ';sha256=' . str_repeat('0', 64));
