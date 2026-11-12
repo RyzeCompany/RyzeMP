@@ -293,6 +293,9 @@ final class FeatureLevel{
 			if($state === $this->blocks->pmAirState()){
 				return;
 			}
+			if(!isset($layers[0])){
+				$layers[] = new PalettedBlockArray($sub->getEmptyBlockId());
+			}
 			$layers[] = new PalettedBlockArray($this->blocks->pmAirState());
 			$sub = new SubChunk(
 				$sub->getEmptyBlockId(),
