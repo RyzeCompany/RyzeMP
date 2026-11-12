@@ -9,6 +9,8 @@ use pocketmine\world\dimension\generator\nether\NetherGenerator;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\RyzeOverworldGenerator;
+use pocketmine\world\generator\vanilla\RyzeVanillaNetherCoreGenerator;
+use pocketmine\world\generator\vanilla\RyzeVanillaEndCoreGenerator;
 use pocketmine\world\generator\vanilla\VanillaDensityChunkWriter;
 
 /**
@@ -20,6 +22,8 @@ final class VanillaGenerators{
 	public const NETHER = "vanilla_nether";
 	public const END = "vanilla_end";
 	public const OVERWORLD_EXPERIMENTAL = "ryze_vanilla_overworld";
+	public const NETHER_CORE = "ryze_vanillamine_nether_core_v1";
+	public const END_CORE = "ryze_vanillamine_end_core_v1";
 
 	public static function register() : void{
 		$manager = GeneratorManager::getInstance();
@@ -30,6 +34,23 @@ final class VanillaGenerators{
 		}
 		if($manager->getGenerator('the_end') === null){
 			$manager->addAlias(self::END, 'the_end');
+		}
+		// These names are opt-in. DimensionManager still owns its existing worlds,
+		// Nether/End generator names and portal transitions unchanged.
+		foreach([self::NETHER_CORE => [RyzeVanillaNetherCoreGenerator::class, "nether"], self::END_CORE => [RyzeVanillaEndCoreGenerator::class, "end"]] as $name => [$class, $dimension]){
+			$manager->addGenerator(
+				$class,
+				$name,
+				static function(string $preset) use ($dimension) : ?InvalidGeneratorOptionsException{
+					try{
+						VanillaDensityChunkWriter::validatePreset($preset, $dimension);
+						return null;
+					}catch(InvalidGeneratorOptionsException $e){
+						return $e;
+					}
+				},
+				true
+			);
 		}
 		$manager->addGenerator(
 			RyzeOverworldGenerator::class,
