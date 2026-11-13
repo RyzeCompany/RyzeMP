@@ -55,10 +55,10 @@ use function floor;
  *
  * - Using an item on it stores one item (one stack of a single item type at most) and makes the pot wobble.
  * - Hopper, dropper and crafter integration requires the later RyzeMP item-transfer adapter.
- * - Broken with a sword, axe, pickaxe, shovel, hoe, mace or trident, it shatters into its
+ * - Broken with a sword, axe, pickaxe, shovel, hoe or trident, it shatters into its
  *   sherds (bricks for plain sides). Broken by hand, with any other item (spears included) or with silk touch, it
  *   drops itself with its sherds. The stored items always drop.
- * - A comparator reads the fullness of the stored stack.
+ * - Comparator integration depends on RyzeMP's later redstone adapter; this class exposes the output value.
  */
 class DecoratedPot extends Transparent implements HorizontalFacing{
 	use HorizontalFacingTrait;
@@ -123,7 +123,7 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 	 */
 	private function shattersWith(Item $item) : bool{
 		return $item instanceof Sword || $item instanceof Axe || $item instanceof Pickaxe || $item instanceof Shovel ||
-			$item instanceof Hoe || $item instanceof Mace || $item instanceof Trident;
+			$item instanceof Hoe || $item instanceof Trident;
 	}
 
 	/**
