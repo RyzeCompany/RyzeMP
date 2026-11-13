@@ -224,7 +224,9 @@ and the End Ship Elytra. It verifies the key, reward table and spawner NBT.
 It also encodes the Trial Chamber chunk and live block updates for every
 accepted protocol. When a client lacks a block state, it receives the safe
 `info_update` block without the corresponding block entity. LevelDB retains
-the original block and NBT.
+the original block and NBT. The chunk serializer also translates Pale Garden
+and Sulfur Caves to Dark Forest and Dripstone Caves for protocols predating
+their respective releases. This conversion only touches network data.
 
 ## Concurrent PHAR benchmark
 
