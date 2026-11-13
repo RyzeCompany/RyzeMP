@@ -83,11 +83,7 @@ final class ArchaeologyContent{
 		if(self::$decoratedPotRegistered){
 			return;
 		}
-		$pot = new DecoratedPot(
-			new BlockIdentifier(BlockTypeIds::DECORATED_POT, DecoratedPotTile::class),
-			"Decorated Pot",
-			new BlockTypeInfo(BlockBreakInfo::instant())
-		);
+		$pot = self::newDecoratedPot();
 		RuntimeBlockStateRegistry::getInstance()->register($pot);
 		GlobalBlockStateHandlers::getDeserializer()->map(BlockTypeNames::DECORATED_POT, static fn(BlockStateReader $in) : DecoratedPot =>
 			(clone $pot)->setFacing($in->readCardinalHorizontalFacing()));
@@ -97,20 +93,38 @@ final class ArchaeologyContent{
 	}
 
 	/** @internal */
+	private static function newDecoratedPot() : DecoratedPot{
+		return new DecoratedPot(
+			new BlockIdentifier(BlockTypeIds::DECORATED_POT, DecoratedPotTile::class),
+			"Decorated Pot",
+			new BlockTypeInfo(BlockBreakInfo::instant())
+		);
+	}
+
+	/** @internal */
 	public static function registerRecipe(CraftingManager $craftingManager) : void{
 		$brush = self::brush();
-		if($craftingManager->matchRecipeByOutputs([$brush])->valid()){
-			return;
+		if(!$craftingManager->matchRecipeByOutputs([$brush])->valid()){
+			$craftingManager->registerShapedRecipe(new ShapedRecipe(
+				["F", "C", "S"],
+				[
+					"F" => new ExactRecipeIngredient(VanillaItems::FEATHER()),
+					"C" => new ExactRecipeIngredient(VanillaItems::COPPER_INGOT()),
+					"S" => new ExactRecipeIngredient(VanillaItems::STICK())
+				],
+				[$brush]
+			));
 		}
-		$craftingManager->registerShapedRecipe(new ShapedRecipe(
-			["F", "C", "S"],
-			[
-				"F" => new ExactRecipeIngredient(VanillaItems::FEATHER()),
-				"C" => new ExactRecipeIngredient(VanillaItems::COPPER_INGOT()),
-				"S" => new ExactRecipeIngredient(VanillaItems::STICK())
-			],
-			[$brush]
-		));
+		//Vanilla plain pot: four bricks in a diamond. Patterned pots require
+		//RyzeMP's crafting manager to support dynamic special recipe outputs.
+		$pot = self::newDecoratedPot()->asItem();
+		if(!$craftingManager->matchRecipeByOutputs([$pot])->valid()){
+			$craftingManager->registerShapedRecipe(new ShapedRecipe(
+				[" B ", "B B", " B "],
+				["B" => new ExactRecipeIngredient(VanillaItems::BRICK())],
+				[$pot]
+			));
+		}
 	}
 
 	private static function brush() : Brush{
