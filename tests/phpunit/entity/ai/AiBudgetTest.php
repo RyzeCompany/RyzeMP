@@ -6,7 +6,7 @@ namespace pocketmine\entity\ai;
 use PHPUnit\Framework\TestCase;
 
 final class AiBudgetTest extends TestCase{
-	protected function tearDown() : void{ AiBudget::configure(120,8,160); }
+	protected function tearDown() : void{ AiBudget::configure(120,8,160); AiBudget::setDisabledWorlds([]); }
 
 	public function testFairGoalBudgetAcrossTickBoundaries() : void{
 		AiBudget::configure(1,1,16);
@@ -25,6 +25,16 @@ final class AiBudgetTest extends TestCase{
 		AiBudget::configure(1,1,16,true);
 		self::assertTrue(AiBudget::isEnabled());
 	}
+	public function testExcludedWorldFoldersDoNotExecuteAI() : void{
+		AiBudget::configure(10, 2, 160, true);
+		AiBudget::setDisabledWorlds(["lobby", "arena"]);
+		self::assertFalse(AiBudget::isEnabledInWorld("lobby"));
+		self::assertFalse(AiBudget::isEnabledInWorld("arena"));
+		self::assertTrue(AiBudget::isEnabledInWorld("world"));
+		AiBudget::configure(10, 2, 160, false);
+		self::assertFalse(AiBudget::isEnabledInWorld("world"));
+	}
+
 	public function testPathBudgetAndClampedNodes() : void{
 		AiBudget::configure(4,1,1);
 		self::assertSame(16,AiBudget::getPathNodeLimit());

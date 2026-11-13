@@ -13,20 +13,15 @@ Tracking: [issue #59](https://github.com/RyzeCompany/RyzeMP/issues/59). Source a
 - Optional natural despawn; *naturally spawned* mobs are transient and do not persist with chunks, while bred and manually created/plugin mobs preserve their normal LevelDB persistence.
 - Per-world \`/gamerule domobspawning\` and \`/gamerule mobgriefing\` saved in gamerules.yml and synchronized over the existing multiversion session protocol.
 
-The initial version must not be described as complete Bedrock or VanillaMine mob parity. It does not include most other hostile/passive mobs, advanced breeding variants, tame/ride mechanics, all path block danger classes, Nether/End spawn rules, structure-specific spawn tables, herd density, independent category caps by 9x9 chunks, the entire Mob AI behavior tree or Trial Chamber Breeze waves. Those remain release blockers for the Phase 3 checklist.
+The initial version must not be described as complete Bedrock or VanillaMine mob parity. It does not include most other hostile/passive mobs, advanced breeding variants, tame/ride mechanics, all path block danger classes, Nether/End spawn rules, structure-specific spawn tables, herd density, full official population semantics and actor-specific caps beyond the registered subset, the entire Mob AI behavior tree or Trial Chamber Breeze waves. Those remain release blockers for the Phase 3 checklist.
 
 ## Configuration
 
-Under \`pocketmine.yml\`:
+RyzeMP now uses **VanillaMine-shaped** `mobs:` keys in `resources/pocketmine.yml`: `disabled-worlds`, `mode: vanilla|legacy`, `chunk-chance`, `max-attempts-per-tick`, `global-cap`, `spawn-limits`, `max-distance`, `instant-despawn-distance`, `hostile-interval`, `passive-interval`, `hostile-cap`, and `passive-cap`. The default goals/path budgets match VanillaMine's 200/10/400.
 
-- `mobs.enabled`: enable AI and natural spawning. Stock new `pocketmine.yml` has `true`; older configurations missing this key default to `false` to avoid unexpected activation. Set it explicitly to opt in.
-- \`mobs.max-ai-updates-per-tick\`: default 120 (shared across worlds).
-- \`mobs.max-path-searches-per-tick\`: default 8.
-- \`mobs.max-path-nodes\`: default 160.
-- \`mobs.spawning.enabled\`: default true.
-- \`mobs.spawning.interval-ticks\`: default 20.
-- \`mobs.spawning.max-attempts\`: default 6.
-- \`mobs.spawning.max-total\`: default 72; per-category defaults monsters 40, animals 24, aquatic 12.
+See **[docs/MOB_SPAWNING_CONFIG.md](MOB_SPAWNING_CONFIG.md)** for complete examples, which controls are functional, and which VanillaMine options are only reserved until their implementation is ported.
+
+Old configurations missing `mobs.enabled` still default to false, and old `interval-ticks` configs are read in legacy mode automatically, so upgrading will not unexpectedly enable natural mobs or discard existing values.
 
 Do not turn this on for HCF production without checking plugin assumptions. New Mob AI is isolated from protocol 2225, RyzeRTC, RakNet, NetherNet, LevelDB and the native Go world generator.
 
