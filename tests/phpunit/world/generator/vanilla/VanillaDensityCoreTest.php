@@ -253,6 +253,21 @@ final class VanillaDensityCoreTest extends TestCase{
 		self::assertSame($hash, VanillaDataIdentity::fingerprint($this->dir)); // new-world folder is outside cache inputs
 	}
 
+	public function testPinnedPopulationStillRejectsAChangedCacheBeforePublishing() : void{
+		$hash = VanillaDataIdentity::fingerprint($this->dir);
+		$writer = new VanillaDensityChunkWriter(7001, $this->dir, pinnedHash: $hash);
+		$writer->beginPopulation();
+		// The first full scan is redundant; the mandatory end-of-task scan
+		// must still reject changed bytes, even when the input remains JSON.
+		$this->put('data/minecraft/worldgen/noise/surface.json', ['changed' => true]);
+		$this->expectException(InvalidVanillaDataException::class);
+		try{
+			$writer->validatePopulationResult();
+		}finally{
+			$writer->endPopulation();
+		}
+	}
+
 	public function testCoreV2RefusesCacheMutationBeforeWritingNewChunk() : void{
 		$hash = VanillaDataIdentity::fingerprint($this->dir);
 		$preset = 'core-v2;data=' . $this->dir . ';sha256=' . $hash;
