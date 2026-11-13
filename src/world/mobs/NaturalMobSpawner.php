@@ -22,6 +22,8 @@ use pocketmine\player\Player;
 use pocketmine\world\GameRules;
 use pocketmine\world\mobs\spawn\NaturalSpawnPolicy as Policy;
 use pocketmine\world\World;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\math\Vector3;
 
 /**
  * Conservative Bedrock-style natural population around loaded players.
@@ -64,8 +66,7 @@ final class NaturalMobSpawner{
 		}
 		// Nether and End entity lists are not yet ported; do not spawn
 		// Overworld animals in non-Overworld dimensions.
-		$generator = strtolower($w->getProvider()->getWorldData()->getGenerator());
-		if(str_contains($generator,"nether") || str_contains($generator,"end")){
+		if($w->getServer()->getDimensionManager()->getDimension($w) !== DimensionIds::OVERWORLD){
 			return;
 		}
 		$players = [];
@@ -139,6 +140,22 @@ final class NaturalMobSpawner{
 					$identifier=$class::getNetworkTypeId();$surface=true;$group="animal";
 				}else{continue;}
 			}
+
+			// The range is measured in 3D against every eligible player. Never
+			// spawn inside another player's safe radius in a mixed session.
+			$canSpawnNearPlayer = false;
+			$spawnPosition = new Vector3($x + 0.5, $y, $z + 0.5);
+			foreach($players as $viewer){
+				$actualDistance = $viewer->getPosition()->distanceSquared($spawnPosition);
+				if($actualDistance < Policy::MIN_PLAYER_DISTANCE ** 2){
+					$canSpawnNearPlayer = false;
+					break;
+				}
+				if(Policy::withinPlayerRange($actualDistance)){
+					$canSpawnNearPlayer = true;
+				}
+			}
+			if(!$canSpawnNearPlayer){ continue; }
 			$location=new Location($x+0.5,$y,$z+0.5,$w,0.0,0.0);
 			if(MobPreSpawnEvent::hasHandlers()){
 				$pre=new MobPreSpawnEvent($identifier,$location,SpawnReason::NATURAL);

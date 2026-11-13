@@ -20,6 +20,10 @@ final class NaturalSpawnPolicyTest extends TestCase{
 		self::assertFalse(Policy::underCap(0,0));
 		self::assertFalse(Policy::underCap(0,-2));
 	}
+	public function testThreeDimensionalDistanceRules() : void{
+		self::assertFalse(Policy::withinPlayerRange(24**2 + 48**2));
+		self::assertTrue(Policy::withinPlayerRange(30**2 + 20**2));
+	}
 	public function testPeacefulAndLightConstraints() : void{
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_PEACEFUL,0));
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_NORMAL,8));
