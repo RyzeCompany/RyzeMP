@@ -43,19 +43,22 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 	private static ?\WeakMap $personaSkins = null;
 	/** @phpstan-var \WeakMap<Skin, int> */
 	private static ?\WeakMap $skinSourceProtocols = null;
+	/** @phpstan-var \WeakMap<Skin, SkinData> */
+	private static ?\WeakMap $sourceSkins = null;
 	/** @phpstan-var \WeakMap<Skin, array<int, SkinData>> */
 	private static ?\WeakMap $outgoingSkinCache = null;
 
 	public function __construct(){
 		self::$personaSkins ??= new \WeakMap();
 		self::$skinSourceProtocols ??= new \WeakMap();
+		self::$sourceSkins ??= new \WeakMap();
 		self::$outgoingSkinCache ??= new \WeakMap();
 	}
 
 	public function toSkinData(Skin $skin) : SkinData{
-		$persona = self::$personaSkins[$skin] ?? null;
-		if($persona !== null){
-			return $persona;
+		$original = self::$sourceSkins[$skin] ?? self::$personaSkins[$skin] ?? null;
+		if($original !== null){
+			return $original;
 		}
 		return $this->toClassicSkinData($skin, true);
 	}
@@ -93,8 +96,15 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 			}
 		}elseif($useCache){
 			$sourceProtocol = self::$skinSourceProtocols[$skin] ?? null;
-			$forceClassicGeometry = $sourceProtocol !== null && $sourceProtocol >= ProtocolInfo::PROTOCOL_1_26_40 && $targetProtocol < ProtocolInfo::PROTOCOL_1_26_40;
-			$converted = $this->toClassicSkinData($skin, true, $targetProtocol, $forceClassicGeometry);
+			$original = self::$sourceSkins[$skin] ?? null;
+			// Preserve client skin identity and metadata for its own protocol. The 827 -> 844
+			// path uses the same classic skin wire layout and is an upgrade, not a downgrade.
+			if($original !== null && ($sourceProtocol === $targetProtocol || ($sourceProtocol === ProtocolInfo::PROTOCOL_1_21_100 && $targetProtocol === ProtocolInfo::PROTOCOL_1_21_111))){
+				$converted = $original;
+			}else{
+				$forceClassicGeometry = $sourceProtocol !== null && $sourceProtocol >= ProtocolInfo::PROTOCOL_1_26_40 && $targetProtocol < ProtocolInfo::PROTOCOL_1_26_40;
+				$converted = $this->toClassicSkinData($skin, true, $targetProtocol, $forceClassicGeometry);
+			}
 		}else{
 			// Respect plugin overrides of the legacy adapter method.
 			$converted = $this->toSkinData($skin);
@@ -203,6 +213,7 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 	}
 	public function fromSkinDataForProtocol(SkinData $data, int $sourceProtocol) : Skin{
 		$skin = $this->fromSkinData($data);
+		self::$sourceSkins[$skin] = $data;
 		self::$skinSourceProtocols[$skin] = $sourceProtocol;
 		return $skin;
 	}
