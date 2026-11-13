@@ -16,6 +16,9 @@ use pocketmine\world\generator\vanilla\feature\DeterministicDecoration;
 use pocketmine\world\generator\vanilla\feature\FeatureDecorator;
 use pocketmine\world\generator\vanilla\feature\FeatureRegistry;
 use pocketmine\world\generator\vanilla\surface\MaterialSystem;
+use pocketmine\world\generator\vanilla\native\NativeTerrainClient;
+use pocketmine\world\generator\vanilla\native\NativeTerrainFiller;
+use function getenv;
 use pocketmine\world\generator\vanilla\structure\placement\BedrockStructurePlacements;
 use pocketmine\world\generator\vanilla\structure\StructureEnvironment;
 use pocketmine\world\generator\vanilla\structure\StructureManager;
@@ -85,7 +88,18 @@ final class VanillaDensityChunkWriter{
 		if($dimension === "end"){
 			$this->endBiomes = new TheEndBiomeSource($router->erosion);
 		}
-		$this->terrain = $useCompiledTerrain ? new CompiledTerrainFiller($router, $tree, $dataDir . "/compiled") : new InterpretedTerrainFiller($router, $tree);
+		//Preserve the exact existing PHP fallback. Go is strictly opt-in via
+		//RYZEMP_VANILLAGEN_BINARY, and its transport is internal to the host.
+		$fallback = static fn() : TerrainFiller => $useCompiledTerrain ?
+			new CompiledTerrainFiller($router, $tree, $dataDir . "/compiled") :
+			new InterpretedTerrainFiller($router, $tree);
+		$stage = getenv("RYZEMP_VANILLAGEN_STAGE");
+		$flags = $stage === "full" ?
+			NativeTerrainClient::FLAG_MATERIALS | NativeTerrainClient::FLAG_CARVERS : 0;
+		$this->terrain = $useCompiledTerrain ?
+			(NativeTerrainFiller::connect($dataDir, $seed, $names, $router->minY, $router->height,
+				$fallback, $flags, $dimension) ?? $fallback()) :
+			$fallback();
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
 		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
 		if($enablePlacedFeatures || $enableStructures){
@@ -271,8 +285,14 @@ final class VanillaDensityChunkWriter{
 		if($this->endBiomes !== null){
 			$terrain->biomes = $this->endBiomes->fillChunk($chunkX, $chunkZ, $terrain->height >> 2);
 		}
-		$this->materials->apply($terrain);
-		$this->carvers?->apply($terrain);
+		//The native response may already include the material rules and carvers.
+		//Never run those stages twice, and retain the PHP path if Go is unavailable.
+		if($terrain->stage < TerrainChunk::STAGE_MATERIALS){
+			$this->materials->apply($terrain);
+		}
+		if($terrain->stage < TerrainChunk::STAGE_CARVED){
+			$this->carvers?->apply($terrain);
+		}
 		$height = $terrain->height;
 		$quartsY = $height >> 2;
 		$minY = $terrain->minY;
@@ -307,7 +327,7 @@ final class VanillaDensityChunkWriter{
 		}
 
 		$states = [];
-		foreach($this->materials->palette->getNames() as $material => $javaId){
+		foreach(($terrain->palette ?? $this->materials->palette->getNames()) as $material => $javaId){
 			$states[$material] = JavaBlockMapping::toBlock($javaId)->getStateId();
 		}
 		for($x = 0; $x < 16; ++$x){

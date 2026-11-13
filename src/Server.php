@@ -127,6 +127,7 @@ use pocketmine\world\Position;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
 use pocketmine\world\WorldManager;
+use pocketmine\world\generator\vanilla\native\VanillaNativeBackend;
 use pocketmine\YmlServerProperties as Yml;
 use Ramsey\Uuid\UuidInterface;
 use Symfony\Component\Filesystem\Path;
@@ -940,6 +941,10 @@ class Server{
 			$this->memoryManager = new MemoryManager($this);
 
 			$this->logger->info($this->language->translate(KnownTranslationFactory::pocketmine_server_start(TextFormat::AQUA . $this->getVersion() . TextFormat::RESET)));
+
+			//Spawn the optional native worldgen process before async workers start.
+			//Unconfigured servers continue using PHP without creating any process.
+			VanillaNativeBackend::prepareForServer();
 
 			if(($poolSize = $this->configGroup->getPropertyString(Yml::SETTINGS_ASYNC_WORKERS, "auto")) === "auto"){
 				$poolSize = 2;
