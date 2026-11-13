@@ -216,6 +216,11 @@ final class LootItemConverter{
 				$item->setHornType($type);
 			}
 		}
+		if($stack->ominousAmplifier !== null && $stack->id === "minecraft:ominous_bottle"){
+			$tag = clone $item->getNamedTag();
+			$tag->setInt("ominous_bottle_amplifier", $stack->ominousAmplifier);
+			$item->setNamedTag($tag);
+		}
 		return $item;
 	}
 

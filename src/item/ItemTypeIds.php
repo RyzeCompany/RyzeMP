@@ -373,8 +373,13 @@ final class ItemTypeIds{
 
 	public const BRUSH = 20332;
 	public const POTTERY_SHERD = 20333;
+	public const WIND_CHARGE = 20334;
+	public const HEAVY_CORE = 20335;
+	public const OMINOUS_BOTTLE = 20336;
+	public const FLOW_ARMOR_TRIM_SMITHING_TEMPLATE = 20337;
+	public const FLOW_BANNER_PATTERN = 20338;
 
-	public const FIRST_UNUSED_ITEM_ID = 20334;
+	public const FIRST_UNUSED_ITEM_ID = 20339;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_ITEM_ID;
 

@@ -22,8 +22,10 @@ use pocketmine\data\bedrock\block\convert\BlockStateWriter;
 use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\item\Item;
+use pocketmine\item\Crossbow;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
+use pocketmine\item\enchantment\ItemEnchantmentTags;
 use pocketmine\item\StringToItemParser;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
@@ -69,6 +71,12 @@ final class TrialChamberContent{
 
 		self::registerKey(self::trialKey(), ItemTypeNames::TRIAL_KEY);
 		self::registerKey(self::trialKey(ominous: true), ItemTypeNames::OMINOUS_TRIAL_KEY);
+		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::WIND_CHARGE), "Wind Charge"), ItemTypeNames::WIND_CHARGE);
+		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::HEAVY_CORE), "Heavy Core"), BlockTypeNames::HEAVY_CORE);
+		self::registerKey(new Crossbow(new ItemIdentifier(ItemTypeIds::CROSSBOW), "Crossbow", [ItemEnchantmentTags::CROSSBOW]), ItemTypeNames::CROSSBOW);
+		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::FLOW_ARMOR_TRIM_SMITHING_TEMPLATE), "Flow Armor Trim Smithing Template"), ItemTypeNames::FLOW_ARMOR_TRIM_SMITHING_TEMPLATE);
+		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::OMINOUS_BOTTLE), "Ominous Bottle"), ItemTypeNames::OMINOUS_BOTTLE);
+		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::FLOW_BANNER_PATTERN), "Flow Banner Pattern"), ItemTypeNames::FLOW_BANNER_PATTERN);
 		self::$registered = true;
 	}
 
