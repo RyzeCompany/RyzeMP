@@ -28,6 +28,8 @@ use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\item\Item;
 use pocketmine\item\PotterySherd;
+use pocketmine\item\ItemIdentifier;
+use pocketmine\item\ItemTypeIds;
 use pocketmine\item\PotterySherdType;
 use pocketmine\item\VanillaItems;
 use pocketmine\loot\LootContext;
@@ -137,7 +139,7 @@ class DecoratedPot extends Spawnable{
 		if($type === null){
 			return self::BRICK_ID;
 		}
-		return GlobalItemDataHandlers::getSerializer()->serializeType(VanillaItems::POTTERY_SHERD()->setSherdType($type))->getName();
+		return GlobalItemDataHandlers::getSerializer()->serializeType((new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd"))->setSherdType($type))->getName();
 	}
 
 	public static function idToSherd(string $id) : ?PotterySherdType{
