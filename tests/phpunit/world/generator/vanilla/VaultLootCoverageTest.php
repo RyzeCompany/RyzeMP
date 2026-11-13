@@ -26,7 +26,7 @@ final class VaultLootCoverageTest extends TestCase{
 		$tables = new LootTables($directory);
 		$missing = [];
 		foreach([
-			"desert_pyramid", "desert_well", "cold_ocean_ruins", "warm_ocean_ruins",
+			"desert_pyramid", "desert_well", "ocean_ruin_cold", "ocean_ruin_warm",
 			"trail_ruins_common", "trail_ruins_rare"
 		] as $name){
 			$table = $tables->get("minecraft:archaeology/$name");
