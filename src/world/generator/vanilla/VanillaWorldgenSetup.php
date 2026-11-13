@@ -7,7 +7,6 @@ namespace pocketmine\world\generator\vanilla;
 use Closure;
 use pocketmine\utils\Config;
 use pocketmine\world\dimension\DimensionSettings;
-use pocketmine\world\generator\InvalidGeneratorOptionsException;
 
 /**
  * One-shot, opt-in Pterodactyl bootstrap. Never changes a pre-existing
@@ -33,7 +32,7 @@ final class VanillaWorldgenSetup{
         }
         if(!VanillaDataFetcher::isReady($cache)){
             if(file_exists($cache) && (!is_dir($cache) ||
-                count(scandir($cache) ?: []) > 2)){
+                count(($contents = scandir($cache)) === false ? [] : $contents) > 2)){
                 throw new \RuntimeException("Incomplete VanillaMine cache at $cache. Back it up and remove the incomplete cache using Pterodactyl Files before retrying.");
             }
             if(($problem = VanillaDataFetcher::checkPlatform()) !== null){
@@ -59,24 +58,28 @@ final class VanillaWorldgenSetup{
      * @param Closure(string): void $logger
      */
     public static function configureWorlds(string $root, string $cache, string $hash, Closure $logger) : void{
-        if(!preg_match('/^[a-f0-9]{64}$/D', $hash)){
+        if(preg_match('/^[a-f0-9]{64}$/D', $hash) !== 1){
             throw new \InvalidArgumentException("Worldgen SHA-256 is not valid");
         }
-        $root = realpath($root) ?: throw new \RuntimeException("Server directory not found");
+        $absoluteRoot = realpath($root);
+        if($absoluteRoot === false){
+            throw new \RuntimeException("Server directory not found");
+        }
+        $root = $absoluteRoot;
         $propertiesPath = $root . "/server.properties";
         if(!is_file($propertiesPath) || is_link($propertiesPath)){
             throw new \RuntimeException("server.properties must already exist as an ordinary file");
         }
         $properties = new Config($propertiesPath, Config::PROPERTIES);
-        $originalName = trim((string) $properties->get("level-name", "world"));
+        $originalName = trim(self::asConfigString($properties->get("level-name", "world")));
         if(!self::validName($originalName)){
             throw new \RuntimeException("Invalid level-name; world directories will not be changed");
         }
         $preset = "core-v6;data=" . $cache . ";sha256=" . $hash;
         $worldPath = $root . "/worlds/" . $originalName;
         $worldExists = file_exists($worldPath) || is_link($worldPath);
-        $currentType = strtolower((string) $properties->get("level-type", "default"));
-        $currentPreset = (string) $properties->get("generator-settings", "");
+        $currentType = strtolower(self::asConfigString($properties->get("level-type", "default")));
+        $currentPreset = self::asConfigString($properties->get("generator-settings", ""));
 
         if($worldExists && $currentType === self::GENERATOR){
             if($currentPreset !== $preset){
@@ -137,7 +140,7 @@ final class VanillaWorldgenSetup{
         $properties->set("level-name", $newName);
         $properties->set("level-type", self::GENERATOR);
         $properties->set("generator-settings", $preset);
-        if(trim((string) $properties->get("level-seed", "")) === ""){
+        if(trim(self::asConfigString($properties->get("level-seed", ""))) === ""){
             $properties->set("level-seed", "12345");
         }
         $properties->save();
@@ -152,6 +155,16 @@ final class VanillaWorldgenSetup{
             }
         }
         throw new \RuntimeException("Could not find a free name for world $base");
+    }
+
+    private static function asConfigString(mixed $value) : string{
+        if(is_string($value)){
+            return $value;
+        }
+        if(is_int($value)){
+            return (string) $value;
+        }
+        throw new \RuntimeException("Invalid non-string server property");
     }
 
     private static function validName(string $name) : bool{
