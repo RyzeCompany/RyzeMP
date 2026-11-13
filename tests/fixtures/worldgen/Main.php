@@ -6,15 +6,26 @@ namespace RyzeTests\Worldgen;
 
 use pocketmine\block\tile\Chest;
 use pocketmine\block\tile\EndGateway;
+use pocketmine\block\tile\ItemFrame;
 use pocketmine\block\tile\MonsterSpawner;
+use pocketmine\block\tile\TrialSpawner;
+use pocketmine\block\tile\Vault;
+use pocketmine\block\utils\VaultState;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\block\Vault as VaultBlock;
+use pocketmine\block\vault\VaultLogic;
+use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\entity\Location;
 use pocketmine\entity\object\EndCrystal;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
+use pocketmine\item\ItemTypeIds;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
+use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\plugin\PluginBase;
@@ -41,6 +52,8 @@ final class Main extends PluginBase{
 		"world_the_end" => [62, 24]
 	];
 	private const END_GATEWAY = [-3793, 69, -407];
+	private const END_SHIP_FRAME = [-164, 142, 1284];
+	private const VAULT_REWARD_UUID = "90f3ea7f-d374-4f16-a350-e085218df5fd";
 
 	protected function onEnable() : void{
 		$cache = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
@@ -73,7 +86,7 @@ final class Main extends PluginBase{
 	private function exerciseWorlds(string $profile, string $preset, string $snapshotPath, bool $reopen) : void{
 		$server = $this->getServer();
 		$remaining = count(self::WORLDS) + (VanillaDataIdentity::hasStructures($preset) ? count(self::STRUCTURE_CHUNKS) : 0)
-			+ (VanillaDataIdentity::hasStructureContent($preset) ? 2 : 0);
+			+ (VanillaDataIdentity::hasStructureContent($preset) ? 4 : 0);
 		$record = [];
 		$expected = $reopen ? json_decode(file_get_contents($snapshotPath), true, flags: JSON_THROW_ON_ERROR) : [];
 		$start = hrtime(true);
@@ -159,8 +172,11 @@ final class Main extends PluginBase{
 		}
 		if(VanillaDataIdentity::hasStructureContent($preset)){
 			$end = $server->getWorldManager()->getWorldByName("world_the_end") ?? throw new \RuntimeException("End is unavailable");
+			$overworld = $server->getWorldManager()->getWorldByName("world") ?? throw new \RuntimeException("Overworld is unavailable");
 			$this->checkEndCrystal($end, $reopen, $complete);
 			$this->checkEndGateway($end, $reopen, $complete);
+			$this->checkEndShip($end, $reopen, $complete);
+			$this->checkTrialChamber($overworld, $reopen, $complete);
 		}
 	}
 
@@ -223,6 +239,108 @@ final class Main extends PluginBase{
 			$check($world->loadChunk($x >> 4, $z >> 4) ?? throw new \RuntimeException("The End gateway chunk did not reopen"));
 		}else{
 			$world->requestChunkPopulation($x >> 4, $z >> 4, null)->onCompletion($check, self::populationFailure("End gateway"));
+		}
+	}
+
+	private function checkEndShip(World $world, bool $reopen, \Closure $complete) : void{
+		[$x, $y, $z] = self::END_SHIP_FRAME;
+		$check = static function() use ($world, $x, $y, $z, $complete) : void{
+			$frame = $world->getTileAt($x, $y, $z);
+			if(!$frame instanceof ItemFrame || $frame->getItem()->getTypeId() !== ItemTypeIds::ELYTRA){
+				throw new \RuntimeException("Generated End Ship did not retain Elytra in its item frame");
+			}
+			$world->save(true);
+			$complete();
+		};
+		if($reopen){
+			$world->loadChunk($x >> 4, $z >> 4) ?? throw new \RuntimeException("The End Ship chunk did not reopen");
+			$check();
+		}else{
+			$world->requestChunkPopulation($x >> 4, $z >> 4, null)->onCompletion($check, self::populationFailure("End Ship"));
+		}
+	}
+
+	private function checkTrialChamber(World $world, bool $reopen, \Closure $complete) : void{
+		$check = static function(Chunk $chunk) use ($world, $reopen, $complete) : void{
+			$spawner = $world->getTileAt(4, -11, 211);
+			$vault = $world->getTileAt(4, -10, 215);
+			$normal = $world->getTileAt(6, -27, 211);
+			$vaultBlock = $world->getBlockAt(4, -10, 215);
+			$normalBlock = $world->getBlockAt(6, -27, 211);
+			if(!$spawner instanceof TrialSpawner || !$vault instanceof Vault || !$normal instanceof Vault ||
+				!$vaultBlock instanceof VaultBlock || !$vaultBlock->isOminous() ||
+				!$normalBlock instanceof VaultBlock || $normalBlock->isOminous()){
+				throw new \RuntimeException("Trial Chamber block or tile is missing");
+			}
+			$spawnTag = $spawner->saveNBT();
+			$config = $vault->getConfig();
+			if($spawnTag->getString(TrialSpawner::TAG_NORMAL_CONFIG) !== "minecraft:trial_chamber/breeze/normal" ||
+				$spawnTag->getString(TrialSpawner::TAG_OMINOUS_CONFIG) !== "minecraft:trial_chamber/breeze/ominous" ||
+				$config->getKeyItem()->getTypeId() !== ItemTypeIds::OMINOUS_TRIAL_KEY ||
+				$normal->getConfig()->getKeyItem()->getTypeId() !== ItemTypeIds::TRIAL_KEY ||
+				$config->getLootTable() !== "loot_tables/chests/trial_chambers/reward_ominous.json"){
+				throw new \RuntimeException("Trial Chamber block entity configuration differs from its template");
+			}
+			self::checkTrialChunkProtocols($world, $chunk, $vault, $normal, $spawner);
+
+			// Exercise the real loot table and the vault state machine without a game client.
+			$host = $vault->getHost();
+			$host->setBlock($vaultBlock);
+			$taken = VaultLogic::tryInsertKey(VaultState::ACTIVE, $config, $vault->getData(), $host, self::VAULT_REWARD_UUID, -1, $config->getKeyItem());
+			if($reopen){
+				if($taken !== 0 || $vaultBlock->getVaultState() !== VaultState::UNLOCKING ||
+					!$vault->getData()->hasRewardedPlayer(self::VAULT_REWARD_UUID) || $vault->getData()->getItemsToEject() === []){
+					throw new \RuntimeException("Vault reward or queued ejection changed after restart");
+				}
+			}elseif($taken !== 1 || $vault->getData()->getItemsToEject() === []){
+				throw new \RuntimeException("Ominous vault failed to roll rewards");
+			}else{
+				$world->setBlock($vault->getPosition(), $vaultBlock, false);
+			}
+			$world->save(true);
+			$complete();
+		};
+		if($reopen){
+			$check($world->loadChunk(0, 13) ?? throw new \RuntimeException("The Trial Chamber chunk did not reopen"));
+		}else{
+			$world->requestChunkPopulation(0, 13, null)->onCompletion($check, self::populationFailure("Trial Chamber"));
+		}
+	}
+
+	private static function checkTrialChunkProtocols(World $world, Chunk $chunk, Vault $vault, Vault $normal, TrialSpawner $spawner) : void{
+		$states = [
+			[BlockTypeNames::VAULT, $vault, ProtocolInfo::PROTOCOL_1_21_0],
+			[BlockTypeNames::VAULT, $normal, ProtocolInfo::PROTOCOL_1_20_70],
+			[BlockTypeNames::TRIAL_SPAWNER, $spawner, ProtocolInfo::PROTOCOL_1_20_60]
+		];
+		$positions = [$vault->getPosition(), $normal->getPosition(), $spawner->getPosition()];
+		$nbt = new NetworkNbtSerializer();
+		foreach(ProtocolInfo::ACCEPTED_PROTOCOL as $protocol){
+			$converter = TypeConverter::getInstance($protocol);
+			$translator = $converter->getBlockTranslator();
+			$tiles = [];
+			foreach($nbt->readMultiple(ChunkSerializer::serializeTiles($chunk, $converter)) as $root){
+				$tag = $root->mustGetCompoundTag();
+				$tiles[World::blockHash($tag->getInt("x"), $tag->getInt("y"), $tag->getInt("z"))] = $tag->getString("id");
+			}
+			$updates = array_filter($world->createBlockUpdatePackets($converter, $positions), static fn($packet) => $packet instanceof BlockActorDataPacket);
+			$count = 0;
+			foreach($states as [$name, $tile, $minimum]){
+				$supported = $protocol >= $minimum;
+				$state = $translator->internalIdToNetworkStateData($tile->getBlock()->getStateId());
+				$tileId = $tile->saveNBT()->getString("id");
+				$pos = $tile->getPosition();
+				$tileHash = World::blockHash($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+				if($state->getName() !== ($supported ? $name : BlockTypeNames::INFO_UPDATE) ||
+					($tiles[$tileHash] ?? null) !== ($supported ? $tileId : null) || $tile->canSpawnTo($converter) !== $supported){
+					throw new \RuntimeException("$name at $pos translated as " . $state->getName() . " on Bedrock $protocol");
+				}
+				$count += (int) $supported;
+			}
+			if(count($updates) !== $count ||
+				ChunkSerializer::serializeFullChunk($chunk, DimensionIds::OVERWORLD, $converter) === ""){
+				throw new \RuntimeException("Trial Chamber chunk or block updates failed on Bedrock $protocol");
+			}
 		}
 	}
 

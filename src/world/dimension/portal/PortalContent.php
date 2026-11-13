@@ -33,6 +33,7 @@ use pocketmine\scheduler\AsyncPool;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use InvalidArgumentException;
 
 /**
@@ -71,6 +72,7 @@ final class PortalContent{
 		self::registerBlock($typeId);
 		self::registerGateway($gatewayId);
 		self::registerElytra();
+		TrialChamberContent::register();
 		self::registerItem();
 		self::registerRecipe($craftingManager);
 
@@ -86,6 +88,7 @@ final class PortalContent{
 					PortalContent::registerBlock($this->typeId);
 					PortalContent::registerGateway($this->gatewayId);
 					PortalContent::registerElytra();
+					TrialChamberContent::register();
 				}
 			}, $worker);
 		});

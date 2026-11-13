@@ -1217,7 +1217,8 @@ class World implements ChunkManager{
 			$blockPosition = BlockPosition::fromVector3($b);
 
 			$tile = $this->getTileAt($b->x, $b->y, $b->z);
-			if($tile instanceof Spawnable){
+			$spawnTile = $tile instanceof Spawnable && $tile->canSpawnTo($typeConverter);
+			if($spawnTile){
 				$expectedClass = $fullBlock->getIdInfo()->getTileClass();
 				if($expectedClass !== null && $tile instanceof $expectedClass && count($fakeStateProperties = $tile->getRenderUpdateBugWorkaroundStateProperties($fullBlock)) > 0){
 					$originalStateData = $blockTranslator->internalIdToNetworkStateData($fullBlock->getStateId());
@@ -1241,7 +1242,7 @@ class World implements ChunkManager{
 				UpdateBlockPacket::DATA_LAYER_NORMAL
 			);
 
-			if($tile instanceof Spawnable){
+			if($spawnTile){
 				$packets[] = BlockActorDataPacket::create($blockPosition, $tile->getSerializedSpawnCompound($typeConverter));
 			}
 		}

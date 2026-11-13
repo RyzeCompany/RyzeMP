@@ -25,7 +25,9 @@ namespace pocketmine\world\generator\vanilla\feature\block;
 
 use pocketmine\block\Block;
 use pocketmine\block\RuntimeBlockStateRegistry;
+use pocketmine\block\TrialSpawner;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\block\Vault;
 use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\nbt\BigEndianNbtSerializer;
 use pocketmine\nbt\tag\ByteTag;
@@ -875,9 +877,11 @@ final class JavaBlocks{
 				$pm = $this->pmAir;
 			}
 		}
-		if(!$this->hasStructureContent && $name === "minecraft:end_gateway" &&
-			RuntimeBlockStateRegistry::getInstance()->fromStateId($pm) instanceof EndGateway){
-			$pm = $this->pmAir;
+		if(!$this->hasStructureContent && ($name === "minecraft:end_gateway" || $name === "minecraft:trial_spawner" || $name === "minecraft:vault")){
+			$block = RuntimeBlockStateRegistry::getInstance()->fromStateId($pm);
+			if($block instanceof EndGateway || $block instanceof TrialSpawner || $block instanceof Vault){
+				$pm = $this->pmAir;
+			}
 		}
 		$this->pmWater[$state] = ($this->fluid($state) & 15) === self::FLUID_WATER && $this->blockOf[$state] !== $this->waterBlock;
 		return $this->toPm[$state] = $pm;

@@ -204,7 +204,7 @@ final class ChunkSerializer{
 	public static function serializeTiles(Chunk $chunk, TypeConverter $typeConverter) : string{
 		$stream = new ByteBufferWriter();
 		foreach($chunk->getTiles() as $tile){
-			if($tile instanceof Spawnable){
+			if($tile instanceof Spawnable && $tile->canSpawnTo($typeConverter)){
 				$stream->writeByteArray($tile->getSerializedSpawnCompound($typeConverter)->getEncodedNbt());
 			}
 		}

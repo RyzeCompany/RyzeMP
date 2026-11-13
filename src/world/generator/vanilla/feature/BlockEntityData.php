@@ -71,7 +71,7 @@ final class BlockEntityData{
 	];
 
 
-	private static function toBedrockPath(string $javaId) : string{
+	public static function toBedrockPath(string $javaId) : string{
 		$id = "minecraft:" . WorldgenData::stripNamespace($javaId);
 		return self::BEDROCK_LOOT_NAMES[$id] ?? "loot_tables/" . WorldgenData::stripNamespace($id) . ".json";
 	}

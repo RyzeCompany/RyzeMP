@@ -368,7 +368,10 @@ final class ItemTypeIds{
 
 	public const CHEST_MINECART = 20329;
 
-	public const FIRST_UNUSED_ITEM_ID = 20330;
+	public const TRIAL_KEY = 20330;
+	public const OMINOUS_TRIAL_KEY = 20331;
+
+	public const FIRST_UNUSED_ITEM_ID = 20332;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_ITEM_ID;
 

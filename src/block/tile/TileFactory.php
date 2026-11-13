@@ -82,6 +82,8 @@ final class TileFactory{
 		$this->register(MobHead::class, ["Skull", "minecraft:skull"]);
 		$this->register(GlowingItemFrame::class, ["GlowItemFrame"]);
 		$this->register(HangingSign::class, ["HangingSign", "minecraft:hanging_sign"]);
+		$this->register(TrialSpawner::class, ["TrialSpawner", "minecraft:trial_spawner"]);
+		$this->register(Vault::class, ["Vault", "minecraft:vault"]);
 
 		//TODO: ChalkboardBlock
 		//TODO: ChemistryTable

@@ -193,11 +193,8 @@ The PHAR test also generates a village bell, a fortress blaze spawner and an
 End City chest and verifies their terrain and block entities after restart.
 Dungeon containers roll their Java loot once on first inventory access using
 their saved seed and the world's pinned cache. Unsupported items and
-components use the runtime's available representations. Generated structure
-geometry is available for Trial Chambers, but the trial spawner and vault
-mechanics, unsupported block entities, structure mobs and minecarts, and
-complete End gameplay still need their runtime adapters. Retail Bedrock
-sessions and production-load measurements are still required.
+components use the runtime's available representations. Retail Bedrock sessions
+and production-load measurements are still required.
 
 ## End gateways, spike crystals and ship loot
 
@@ -213,3 +210,18 @@ The two-boot fixture checks the generated gateway exit, an actual entity
 teleport and the saved spike crystal. It also checks network serialization for
 protocols 589, 2193 and 2225. Gateways created by the dragon fight and full
 Elytra flight mechanics are outside this increment.
+
+## Trial Chambers and legacy clients
+
+Core-v6 places normal and ominous vaults and keeps the named or inline
+normal and ominous spawner configurations from Java templates. Vaults use
+the world's pinned loot tables and save the rewarded player IDs and pending
+ejections. Trial spawner mob waves and other structure entities still need
+the corresponding entity runtime.
+
+The restart fixture generates both vault variants, a Breeze trial spawner
+and the End Ship Elytra. It verifies the key, reward table and spawner NBT.
+It also encodes the Trial Chamber chunk and live block updates for every
+accepted protocol. When a client lacks a block state, it receives the safe
+`info_update` block without the corresponding block entity. LevelDB retains
+the original block and NBT.

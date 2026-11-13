@@ -28,13 +28,18 @@ use pocketmine\block\tile\Bed;
 use pocketmine\block\tile\Container;
 use pocketmine\block\tile\Tile;
 use pocketmine\block\tile\TileFactory;
+use pocketmine\block\tile\TrialSpawner;
+use pocketmine\block\tile\Vault;
 use pocketmine\block\utils\DyeColor;
+use pocketmine\block\vault\VaultConfig;
 use pocketmine\data\bedrock\DyeColorIdMap;
+use pocketmine\item\VanillaItems;
 use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootStack;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\StringTag;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 use pocketmine\world\generator\vanilla\feature\BlockEntityData;
@@ -79,7 +84,14 @@ final class StructureBlockEntities{
 			if($name === "minecraft:spawner" && $entity !== null && $entity->getString("id", "") !== ""){
 				return BlockEntityData::spawner(EntityConversion::bedrockId($entity->getString("id")));
 			}
-
+			if($blocks->hasStructureContent && $name === "minecraft:trial_spawner"){
+				$tag = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(TrialSpawner::class));
+				TrialSpawner::copyConfiguration($javaNbt, $tag);
+				return $tag;
+			}
+			if($blocks->hasStructureContent && $name === "minecraft:vault"){
+				return self::vault($blocks, $state, $javaNbt);
+			}
 		}
 		$tileId = self::tileId($blocks, $state);
 		if($tileId === null){
@@ -127,6 +139,29 @@ final class StructureBlockEntities{
 			}
 		}
 		return $nbt;
+	}
+
+	private static function vault(JavaBlocks $blocks, int $state, CompoundTag $javaNbt) : CompoundTag{
+		$nbt = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(Vault::class));
+		$defaults = $blocks->getBool($state, "ominous") ? VaultConfig::ominous() : new VaultConfig();
+		$config = $javaNbt->getCompoundTag(Vault::TAG_CONFIG);
+		if($config === null){
+			return $nbt->setTag(Vault::TAG_CONFIG, $defaults->toNbt());
+		}
+		$key = $defaults->getKeyItem();
+		if(($keyTag = $config->getCompoundTag(VaultConfig::TAG_KEY_ITEM)) !== null){
+			$key = LootItemConverter::toItem(new LootStack($keyTag->getString("id", "minecraft:air")), $blocks->getDataDir()) ?? VanillaItems::AIR();
+			$key->setCount(max(1, min($key->getMaxStackSize(), $keyTag->getInt("count", 1))));
+		}
+		$lootTable = $config->getTag(VaultConfig::TAG_LOOT_TABLE);
+		$override = $config->getTag(VaultConfig::TAG_OVERRIDE_LOOT_TABLE_TO_DISPLAY);
+		return $nbt->setTag(Vault::TAG_CONFIG, (new VaultConfig(
+			$lootTable instanceof StringTag ? BlockEntityData::toBedrockPath($lootTable->getValue()) : $defaults->getLootTable(),
+			VaultConfig::readRange($config, VaultConfig::TAG_ACTIVATION_RANGE, $defaults->getActivationRange()),
+			VaultConfig::readRange($config, VaultConfig::TAG_DEACTIVATION_RANGE, $defaults->getDeactivationRange()),
+			$key,
+			$override instanceof StringTag ? BlockEntityData::toBedrockPath($override->getValue()) : null
+		))->toNbt());
 	}
 
 	private static function color(string $name) : ?DyeColor{

@@ -11,6 +11,10 @@ on:
       - 'src/world/format/Chunk.php'
       - 'src/world/format/io/FastChunkSerializer.php'
       - 'src/block/tile/**'
+      - 'src/block/TrialSpawner.php'
+      - 'src/block/Vault.php'
+      - 'src/block/vault/**'
+      - 'src/network/mcpe/serializer/ChunkSerializer.php'
       - 'src/loot/**'
       - 'tests/phpunit/world/generator/vanilla/**'
       - '.github/workflows/ci-worldgen.yml'
@@ -43,4 +47,5 @@ jobs:
             src/world/dimension/portal/PortalContent.php src/world/dimension/portal/PortalTravel.php src/world/dimension/portal/block/EndGateway.php \
             src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
             src/block/tile src/loot src/world/locate/LocateTimeoutException.php \
+            src/block/TrialSpawner.php src/block/Vault.php src/block/vault src/network/mcpe/serializer/ChunkSerializer.php \
             tests/phpunit/world/generator/vanilla
