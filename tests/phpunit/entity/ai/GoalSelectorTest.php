@@ -9,19 +9,8 @@ use pocketmine\entity\ai\goal\GoalSelector;
 
 /** No live world needed: validates exclusivity and preemption of goal flags. */
 final class GoalSelectorTest extends TestCase{
-	private static function goal(int $flags, bool $ready) : Goal{
-		return new class($flags, $ready) extends Goal{
-			public int $starts = 0;
-			public int $stops = 0;
-			public int $ticks = 0;
-			public function __construct(private int $flags, public bool $ready){}
-			public function getFlags() : int{ return $this->flags; }
-			public function canStart() : bool{ return $this->ready; }
-			public function canContinue() : bool{ return $this->ready; }
-			public function start() : void{ ++$this->starts; }
-			public function stop() : void{ ++$this->stops; }
-			public function tick() : void{ ++$this->ticks; }
-		};
+	private static function goal(int $flags, bool $ready) : GoalSelectorTestGoal{
+		return new GoalSelectorTestGoal($flags, $ready);
 	}
 
 	public function testHigherPriorityPreemptsMoveWithoutInterruptingUnrelatedLook() : void{
@@ -78,4 +67,18 @@ final class GoalSelectorTest extends TestCase{
 		$selector->tick(false);
 		self::assertSame(2, $goal->ticks);
 	}
+}
+
+/** Test-double with introspectable counters, used only by GoalSelectorTest. */
+final class GoalSelectorTestGoal extends Goal{
+	public int $starts = 0;
+	public int $stops = 0;
+	public int $ticks = 0;
+	public function __construct(private int $flags, public bool $ready){}
+	public function getFlags() : int{ return $this->flags; }
+	public function canStart() : bool{ return $this->ready; }
+	public function canContinue() : bool{ return $this->ready; }
+	public function start() : void{ ++$this->starts; }
+	public function stop() : void{ ++$this->stops; }
+	public function tick() : void{ ++$this->ticks; }
 }
