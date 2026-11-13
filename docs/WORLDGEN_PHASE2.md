@@ -7,10 +7,27 @@
 ## Estado actual
 
 El perfil experimental más completo es `core-v6;data=/absolute/cache;sha256=HEX`.
-Usa Java 26.3, formato de caché 5, y el backend PHP compilado. Añade a los
-tres generadores los placed features, las estructuras con Beardifier y los
-bloques de estructura descritos más abajo. Las secciones de auditoría e
-integraciones previas conservan el estado histórico de cada perfil.
+Usa Java 26.3, formato de caché 5, y PHP compilado por defecto. Go
+`vanillagen` se habilita opcionalmente con un ejecutable local verificado y
+vuelve a PHP cuando no está disponible o falla. Añade a los tres generadores
+placed features, estructuras con Beardifier y los bloques de estructura
+descritos más abajo. Las secciones de auditoría e integraciones previas
+conservan el estado histórico de cada perfil; sus matrices de «pendiente»
+describen aquellos commits, no la situación del HEAD actual.
+
+El [workflow de datos auténticos](https://github.com/RyzeCompany/RyzeMP/actions/runs/43454060602)
+del 13 de noviembre pasó con 25 pruebas y 501 276 aserciones Java. Comparó
+Go/PHP en 12 chunks de tres dimensiones y dos semillas, incluida la recuperación
+PHP tras detener Go. El PHAR guardó, reabrió y amplió mundos LevelDB en los
+tres planos con Go activado y con los perfiles PHP. El benchmark loopback de
+48 chunks y dos workers tardó 11,9–12,3 s con Go y 30,4–31,8 s con PHP
+en ese runner; no es una medida con clientes conectados.
+
+**Aceptación pendiente:** probar el HEAD con clientes retail 1.26.40 y 1.26.60
+simultáneos; revisar visualmente arqueología, Trial Chambers y gateways;
+comprobar copias offline de mundos existentes, sus inventarios y reinicios,
+y restaurar un backup con el build anterior. No atribuir estas pruebas al
+fixture de CI. El PR #60 permanece en borrador.
 
 ### Crear un servidor de prueba
 
@@ -338,13 +355,22 @@ crafting still requires a dynamic special recipe. The pinned archaeology
 loot tables also require persistent lead and sniffer egg item IDs; mob
 leashing and sniffer egg hatching are gameplay work outside this generator.
 
-## Upstream Go evaluation
+## Go integration and PHP recovery
 
-The real-data job checks out VanillaMine at its pinned revision and compiles
-vanillagen with Go 1.24. It runs the upstream reference tests with the same
-Java data cache and measures the native terrain, materials and carvers for
-all three dimensions. This measures the native kernel in isolation. It
-excludes RyzeMP structures, PHP decoration, packet conversion and LevelDB,
-which are included as applicable in the PHP server workload. The native
-wire protocol and process management still require a RyzeMP integration
-and equivalence tests before using Go on an existing pinned world.
+The real-data job checks out VanillaMine at the pinned revision, compiles
+vanillagen with Go 1.24 and runs the upstream reference tests against the
+verified Java cache. RyzeMP launches an explicitly configured local Go binary
+before async workers start, verifies its optional SHA-256, and uses a
+loopback-only framed protocol. A missing, incompatible or crashed helper
+switches the affected generator to its compiled PHP filler.
+
+The [current job](https://github.com/RyzeCompany/RyzeMP/actions/runs/43454060602)
+compares Go and PHP biome arrays, material names and carver masks at every
+cell in 12 chunks covering Overworld, Nether and End with two seeds. It
+stops Go and confirms PHP recovery. Then it starts the actual RyzeMP PHAR
+with Go enabled, generates and reopens three LevelDB dimensions, and runs
+the 48-chunk benchmark. Structures, features, block actors and saved chunks
+are checked by the PHAR fixture. These tests do not prove parity for every
+seed, platform or production workload. The Go binary and Mojang data are
+not bundled with the PHAR; the [VPS guide](WORLDGEN_GO_VPS.md) explains
+installation and diagnostics.
