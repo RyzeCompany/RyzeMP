@@ -28,7 +28,7 @@ final class Main extends PluginBase{
 					}
 					++$native;
 				}
-				if($native !== 42 || CommandMetadata::API_VERSION !== 1){throw new \RuntimeException("Wrong native command API");}
+				if($native !== 43 || CommandMetadata::API_VERSION !== 1){throw new \RuntimeException("Wrong native command API");}
 				$command = new class($this, "ryzeci", "Public API fixture", ["ryzealias"]) extends BaseCommand{
 					public array $calls = [];
 					protected function prepare() : void{
@@ -45,10 +45,10 @@ final class Main extends PluginBase{
 				$file = (new \ReflectionClass(BaseCommand::class))->getFileName();
 				$root = dirname((new \ReflectionClass(\pocketmine\Server::class))->getFileName(), 2);
 				if(!str_starts_with($file, $root . "/lib/commando/")){throw new \RuntimeException("Commando is not embedded in server");}
-				foreach(["pocketmine:help give", "pocketmine:time query", "pocketmine:version"] as $input){
+				foreach(["pocketmine:help give", "pocketmine:time query", "pocketmine:weather query", "pocketmine:version"] as $input){
 					if(!$server->dispatchCommand($sender, $input)){throw new \RuntimeException("Native dispatch failed: " . $input);}
 				}
-				$this->getLogger()->info("COMMAND_API_PUBLIC_OK native=42 protocols=3 plugin-alias-typed-dispatch=ok");
+				$this->getLogger()->info("COMMAND_API_PUBLIC_OK native=43 protocols=3 plugin-alias-typed-dispatch=ok");
 			}catch(\Throwable $error){
 				$this->getLogger()->critical("COMMAND_API_PUBLIC_FAILED " . $error->getMessage());
 			}finally{

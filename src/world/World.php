@@ -119,6 +119,7 @@ use pocketmine\world\sound\BlockSound;
 use pocketmine\world\sound\ProtocolSound;
 use pocketmine\world\sound\Sound;
 use pocketmine\world\utils\SubChunkExplorer;
+use pocketmine\world\weather\Weather;
 use pocketmine\YmlServerProperties;
 use function abs;
 use function array_filter;
@@ -323,7 +324,7 @@ class World implements ChunkManager{
 	/** @phpstan-var ReversePriorityQueue<int, Vector3> */
 	private ReversePriorityQueue $scheduledBlockUpdateQueue;
 	/**
-	 * @var int[] blockHash => tick delay
+	 * @var int[] blockHash => absolute due server tick
 	 * @phpstan-var array<BlockPosHash, int>
 	 */
 	private array $scheduledBlockUpdateQueueIndex = [];
@@ -396,6 +397,8 @@ class World implements ChunkManager{
 	private \Logger $logger;
 
 	private RuntimeBlockStateRegistry $blockStateRegistry;
+
+	private Weather $weather;
 
 	/**
 	 * @phpstan-return ChunkPosHash
@@ -512,6 +515,7 @@ class World implements ChunkManager{
 			$defaultCoordinates = $tag instanceof ByteTag && $tag->getValue() !== 0;
 		}
 		$this->gameRules = new GameRules($provider->getPath() . "/gamerules.yml", $defaultCoordinates);
+		$this->weather = new Weather($this, $data);
 		$this->worldId = self::$worldIdCounter++;
 
 		$this->displayName = $this->provider->getWorldData()->getName();
@@ -1041,6 +1045,7 @@ class World implements ChunkManager{
 			}
 		}
 
+		$this->weather->tick();
 		$this->sunAnglePercentage = $this->computeSunAnglePercentage(); //Sun angle depends on the current time
 		$this->skyLightReduction = $this->computeSkyLightReduction(); //Sky light reduction depends on the sun angle
 
@@ -1058,9 +1063,15 @@ class World implements ChunkManager{
 		$this->timings->scheduledBlockUpdates->startTiming();
 		//Delayed updates
 		while($this->scheduledBlockUpdateQueue->count() > 0 && $this->scheduledBlockUpdateQueue->current()["priority"] <= $currentTick){
-			/** @var Vector3 $vec */
-			$vec = $this->scheduledBlockUpdateQueue->extract()["data"];
-			unset($this->scheduledBlockUpdateQueueIndex[World::blockHash($vec->x, $vec->y, $vec->z)]);
+			/** @var array{data: Vector3, priority: int} $entry */
+			$entry = $this->scheduledBlockUpdateQueue->extract();
+			$vec = $entry["data"];
+			$index = World::blockHash($vec->x, $vec->y, $vec->z);
+			//Ignore a previously scheduled tick replaced by a later lightning strike.
+			if(($this->scheduledBlockUpdateQueueIndex[$index] ?? null) !== $entry["priority"]){
+				continue;
+			}
+			unset($this->scheduledBlockUpdateQueueIndex[$index]);
 			if(!$this->isInLoadedTerrain($vec)){
 				continue;
 			}
@@ -1185,6 +1196,9 @@ class World implements ChunkManager{
 
 			if($time >= World::TIME_NIGHT && $time < World::TIME_SUNRISE){
 				$this->setTime($this->getTime() + World::TIME_FULL - $time);
+				if($this->weather->isWeatherCycleEnabled()){
+					$this->weather->resetCycle();
+				}
 
 				foreach($this->getPlayers() as $p){
 					$p->stopSleep();
@@ -1500,6 +1514,7 @@ class World implements ChunkManager{
 			//the chunk may have been unloaded during a previous chunk's update (e.g. during BlockGrowEvent)
 			return;
 		}
+		$this->weather->tickChunk($chunkX, $chunkZ);
 		foreach($this->getChunkEntities($chunkX, $chunkZ) as $entity){
 			$entity->onRandomUpdate();
 		}
@@ -1549,6 +1564,7 @@ class World implements ChunkManager{
 		$timings->startTiming();
 
 		$this->provider->getWorldData()->setTime($this->time);
+		$this->weather->save($this->provider->getWorldData());
 		$this->saveChunks();
 		$this->provider->getWorldData()->save();
 
@@ -1579,15 +1595,22 @@ class World implements ChunkManager{
 	 * Schedules a block update to be executed after the specified number of ticks.
 	 * Blocks will be updated with the scheduled update type.
 	 */
-	public function scheduleDelayedBlockUpdate(Vector3 $pos, int $delay) : void{
-		if(
-			!$this->isInWorld($pos->x, $pos->y, $pos->z) ||
-			(isset($this->scheduledBlockUpdateQueueIndex[$index = World::blockHash($pos->x, $pos->y, $pos->z)]) && $this->scheduledBlockUpdateQueueIndex[$index] <= $delay)
-		){
+	public function scheduleDelayedBlockUpdate(Vector3 $pos, int $delay, bool $replaceExisting = false) : void{
+		if(!$this->isInWorld($pos->x, $pos->y, $pos->z)){
 			return;
 		}
-		$this->scheduledBlockUpdateQueueIndex[$index] = $delay;
-		$this->scheduledBlockUpdateQueue->insert(new Vector3((int) $pos->x, (int) $pos->y, (int) $pos->z), $delay + $this->server->getTick());
+		$index = World::blockHash($pos->x, $pos->y, $pos->z);
+		$dueTick = $this->server->getTick() + max(1, $delay);
+		if(!$replaceExisting && isset($this->scheduledBlockUpdateQueueIndex[$index]) && $this->scheduledBlockUpdateQueueIndex[$index] <= $dueTick){
+			return;
+		}
+		$this->scheduledBlockUpdateQueueIndex[$index] = $dueTick;
+		$this->scheduledBlockUpdateQueue->insert(new Vector3((int) $pos->x, (int) $pos->y, (int) $pos->z), $dueTick);
+	}
+
+	/** Whether this location has a live delayed update (not a stale replaced entry). */
+	public function isBlockUpdateScheduled(Vector3 $pos) : bool{
+		return isset($this->scheduledBlockUpdateQueueIndex[World::blockHash($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())]);
 	}
 
 	private function tryAddToNeighbourUpdateQueue(int $x, int $y, int $z) : void{
@@ -1622,6 +1645,33 @@ class World implements ChunkManager{
 	 */
 	public function notifyNeighbourBlockUpdate(Vector3 $pos) : void{
 		$this->internalNotifyNeighbourBlockUpdate($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+	}
+
+	/**
+	 * Returns the strongest vanilla-style power emitted into the specified block by
+	 * directly adjacent sources. This interface is available to native blocks and plugins.
+	 * Unloaded neighboring chunks are never loaded by a power query.
+	 */
+	public function getRedstonePowerAt(int $x, int $y, int $z) : int{
+		$power = 0;
+		foreach(Facing::ALL as $side){
+			[$dx, $dy, $dz] = Facing::OFFSET[$side];
+			$nx = $x + $dx;
+			$ny = $y + $dy;
+			$nz = $z + $dz;
+			if(!$this->isInWorld($nx, $ny, $nz) ||
+				!$this->isChunkLoaded($nx >> Chunk::COORD_BIT_SIZE, $nz >> Chunk::COORD_BIT_SIZE)
+			){
+				continue;
+			}
+			$neighbor = $this->getBlockAt($nx, $ny, $nz);
+			$sourceFace = Facing::opposite($side);
+			$power = max($power, $neighbor->getWeakPower($sourceFace), $neighbor->getStrongPower($sourceFace));
+			if($power >= 15){
+				return 15;
+			}
+		}
+		return $power;
 	}
 
 	/**
@@ -3464,6 +3514,11 @@ class World implements ChunkManager{
 	 */
 	public function getDamageY() : int{
 		return $this->damageY;
+	}
+
+	/** Rain and thunder for this world; Nether and End always report clear. */
+	public function getWeather() : Weather{
+		return $this->weather;
 	}
 
 	public function getDifficulty() : int{

@@ -89,8 +89,12 @@ final class DimensionTransitionTest extends TestCase{
 	}
 
 	private function begin(int $dimension) : void{
+		$before = count($this->wire);
 		$this->session->onEnterWorld();
-		self::assertInstanceOf(ChangeDimensionPacket::class, $this->wire[count($this->wire) - 1]);
+		$newPackets = array_slice($this->wire, $before);
+		// A dimension change is followed by weather synchronization, so it is no longer necessarily the last packet.
+		self::assertCount(1, array_filter($newPackets, static fn($packet) : bool => $packet instanceof ChangeDimensionPacket));
+		self::assertCount(2, array_filter($newPackets, static fn($packet) : bool => $packet instanceof \pocketmine\network\mcpe\protocol\LevelEventPacket));
 	}
 
 	private function send(World $world, int $x, int $z) : void{

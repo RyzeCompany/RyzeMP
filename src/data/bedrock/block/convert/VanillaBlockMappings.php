@@ -689,7 +689,7 @@ final class VanillaBlockMappings{
 			->idComponents([...$commonProperties->copperIdPrefixes, "lightning_rod"])
 			->properties([
 				$commonProperties->anyFacingClassic,
-				new DummyProperty(StateNames::POWERED_BIT, false) //TODO
+				new BoolProperty(StateNames::POWERED_BIT, fn(PoweredByRedstone $b) => $b->isPowered(), fn(PoweredByRedstone $b, bool $v) => $b->setPowered($v))
 			])
 		);
 	}
@@ -1590,19 +1590,24 @@ final class VanillaBlockMappings{
 			$fillLevelProperty,
 			new DummyProperty(StateNames::CAULDRON_LIQUID, StringValues::CAULDRON_LIQUID_WATER)
 		]);
+		$powderSnowCauldronModel = Model::create(Blocks::POWDER_SNOW_CAULDRON(), Ids::CAULDRON)->properties([
+			$fillLevelProperty,
+			new DummyProperty(StateNames::CAULDRON_LIQUID, StringValues::CAULDRON_LIQUID_POWDER_SNOW)
+		]);
 		$emptyCauldronModel = Model::create(Blocks::CAULDRON(), Ids::CAULDRON)->properties([
 			new DummyProperty(StateNames::FILL_LEVEL, 0),
 			new DummyProperty(StateNames::CAULDRON_LIQUID, StringValues::CAULDRON_LIQUID_WATER)
 		]);
 		self::mapAsymmetricSerializer($reg, $lavaCauldronModel);
 		self::mapAsymmetricSerializer($reg, $waterCauldronModel);
+		self::mapAsymmetricSerializer($reg, $powderSnowCauldronModel);
 		self::mapAsymmetricSerializer($reg, $emptyCauldronModel);
 		$reg->deserializer->map(Ids::CAULDRON, fn(Reader $in) => $in->readInt(StateNames::FILL_LEVEL) === 0 ?
 			self::deserializeAsymmetric($emptyCauldronModel, $in) :
 			match ($liquid = $in->readString(StateNames::CAULDRON_LIQUID)) {
 				StringValues::CAULDRON_LIQUID_WATER => self::deserializeAsymmetric($waterCauldronModel, $in),
 				StringValues::CAULDRON_LIQUID_LAVA => self::deserializeAsymmetric($lavaCauldronModel, $in),
-				StringValues::CAULDRON_LIQUID_POWDER_SNOW => throw new UnsupportedBlockStateException("Powder snow is not supported yet"),
+				StringValues::CAULDRON_LIQUID_POWDER_SNOW => self::deserializeAsymmetric($powderSnowCauldronModel, $in),
 				default => throw $in->badValueException(StateNames::CAULDRON_LIQUID, $liquid)
 			}
 		);

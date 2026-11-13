@@ -17,14 +17,19 @@ final class GameRulesTest extends TestCase{
 
 	public function testDefaultsAndImportedWorldDefault() : void{
 		self::assertFalse((new GameRules($this->directory . "/world.yml"))->getBool("showcoordinates"));
+		self::assertTrue((new GameRules($this->directory . "/world.yml"))->getBool("doweathercycle"));
 		self::assertTrue((new GameRules($this->directory . "/nether.yml", true))->getBool("showCoordinates"));
 	}
 	public function testPersistenceAndIndependentWorlds() : void{
 		$first = new GameRules($this->directory . "/world.yml");
 		$second = new GameRules($this->directory . "/nether.yml");
 		$first->setBool("showCoordinates", true);
+		$first->setBool("doweathercycle", false);
 		self::assertTrue($first->getBool("showcoordinates"));
 		self::assertFalse($second->getBool("showcoordinates"));
+		self::assertFalse($first->getBool("doweathercycle"));
+		self::assertTrue($second->getBool("doweathercycle"));
+		self::assertFalse((new GameRules($this->directory . "/world.yml"))->getBool("doweathercycle"));
 		self::assertTrue((new GameRules($this->directory . "/world.yml"))->getBool("showcoordinates"));
 		$first->setBool("showcoordinates", false);
 		self::assertFalse((new GameRules($this->directory . "/world.yml", true))->getBool("showcoordinates"));
@@ -36,6 +41,7 @@ final class GameRulesTest extends TestCase{
 		self::assertTrue($network["showcoordinates"]->getValue());
 		self::assertFalse($network["naturalregeneration"]->getValue());
 		self::assertFalse($network["locatorbar"]->getValue());
+		self::assertTrue($network["doweathercycle"]->getValue());
 	}
 	public function testUnknownRuleRejected() : void{
 		$this->expectException(\InvalidArgumentException::class);

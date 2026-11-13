@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Cauldron as TileCauldron;
+use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\DyeColor;
 use pocketmine\color\Color;
 use pocketmine\entity\Entity;
@@ -39,6 +40,8 @@ use pocketmine\item\SplashPotion;
 use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\utils\Utils;
+use pocketmine\world\weather\Precipitation;
 use pocketmine\world\sound\CauldronAddDyeSound;
 use pocketmine\world\sound\CauldronCleanItemSound;
 use pocketmine\world\sound\CauldronDyeItemSound;
@@ -102,6 +105,17 @@ final class WaterCauldron extends FillableCauldron{
 
 	public function getFillSound() : Sound{
 		return new CauldronFillWaterSound();
+	}
+
+	/** Random precipitation fills ordinary, uncoloured water cauldrons. */
+	public function onPrecipitation(Precipitation $precipitation) : void{
+		if($precipitation === Precipitation::RAIN && $this->customWaterColor === null &&
+			$this->getFillLevel() < self::MAX_FILL_LEVEL && Utils::getRandomFloat() < 0.05
+		){
+			$next = clone $this;
+			$next->setFillLevel($this->getFillLevel() + 1);
+			BlockEventHelper::form($this, $next, $this);
+		}
 	}
 
 	public function getEmptySound() : Sound{

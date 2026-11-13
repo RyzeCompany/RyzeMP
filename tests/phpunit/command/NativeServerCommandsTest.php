@@ -47,7 +47,7 @@ final class NativeServerCommandsTest extends TestCase{
 			}
 			$roots[] = $command->getName();
 		}
-		self::assertCount(42, $roots);
+		self::assertCount(43, $roots);
 		foreach(["?" => "help", "teleport" => "tp", "w" => "tell", "msg" => "tell", "gr" => "gamerule", "pl" => "plugins", "unban" => "pardon", "suicide" => "kill", "ver" => "version"] as $alias => $name){
 			self::assertSame($this->map->getCommand($name), $this->map->getCommand($alias));
 		}
@@ -65,12 +65,12 @@ final class NativeServerCommandsTest extends TestCase{
 			"particle" => [["flame", "~", "~1", "~-2", "0.1", "0", "0.2", "3"]], "plugins" => [[]], "save-all" => [[]], "save-off" => [[]], "save-on" => [[]],
 			"say" => [["Hello", "world"]], "seed" => [[]], "setworldspawn" => [[], ["~", "64", "~-2"]], "spawnpoint" => [[], ["Name"], ["Name", "~", "70", "~"]],
 			"status" => [[]], "stop" => [[]], "tp" => [["Target"], ["Name", "Target"], ["~", "64", "~"], ["~", "64", "~", "90", "0"], ["Name", "~", "64", "~"], ["Name", "~", "64", "~", "90", "0"]],
-			"tell" => [["Space Name", "Hello", "world"]], "time" => [["query"], ["start"], ["stop"], ["set", "noon"], ["set", "1000"], ["add", "20"]],
+			"tell" => [["Space Name", "Hello", "world"]], "weather" => [["query"], ["clear"], ["rain", "6000"], ["thunder", "100"]], "time" => [["query"], ["start"], ["stop"], ["set", "noon"], ["set", "1000"], ["add", "20"]],
 			"timings" => [["on"], ["report"]], "title" => [["@s", "clear"], ["@s", "title", "Hello", "world"], ["@s", "times", "10", "40", "10"]],
 			"transferserver" => [["example.org"], ["example.org", "19133"]], "version" => [[], ["Plugin", "Name"]],
 			"whitelist" => [["list"], ["on"], ["add", "Name"], ["remove", "Name"]], "xp" => [["10"], ["-5L", "@s"]]
 		];
-		self::assertCount(42, $cases);
+		self::assertCount(43, $cases);
 		foreach($cases as $name => $variants){
 			foreach($variants as $args){
 				$matches = array_filter($this->map->getCommand($name)->getSignatures(), fn(CommandSignature $signature) : bool => $signature->parseArguments($args, $this->sender)["errors"] === []);

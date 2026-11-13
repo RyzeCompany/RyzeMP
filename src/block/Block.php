@@ -54,6 +54,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\Position;
+use pocketmine\world\weather\Precipitation;
 use pocketmine\world\World;
 use function count;
 use function get_class;
@@ -513,12 +514,26 @@ class Block{
 
 	}
 
+	/** Called for an exposed block by the world weather random tick. */
+	public function onPrecipitation(Precipitation $precipitation) : void{
+
+	}
+
 	/**
 	 * Called when this block is updated by the delayed blockupdate scheduler in the world.
 	 */
 	public function onScheduledUpdate() : void{
 
 	}
+
+	/** Minimal native redstone power API; other blocks may override the defaults. */
+	public function isRedstoneSource() : bool{ return false; }
+
+	/** @return int 0..15 */
+	public function getWeakPower(int $face) : int{ return 0; }
+
+	/** @return int 0..15 */
+	public function getStrongPower(int $face) : int{ return 0; }
 
 	/**
 	 * Do actions when interacted by Item. Returns if it has done anything

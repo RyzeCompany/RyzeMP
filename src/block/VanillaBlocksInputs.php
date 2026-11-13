@@ -1136,5 +1136,6 @@ final class VanillaBlocksInputs extends RegistrySource{
 		self::register("water_cauldron", fn(BID $id) => new WaterCauldron($id, "Water Cauldron", $cauldronBreakInfo), TileCauldron::class);
 		self::register("lava_cauldron", fn(BID $id) => new LavaCauldron($id, "Lava Cauldron", $cauldronBreakInfo), TileCauldron::class);
 		self::register("potion_cauldron", fn(BID $id) => new PotionCauldron($id, "Potion Cauldron", $cauldronBreakInfo), TileCauldron::class);
+		self::register("powder_snow_cauldron", fn(BID $id) => new PowderSnowCauldron($id, "Powder Snow Cauldron", $cauldronBreakInfo), TileCauldron::class);
 	}
 }

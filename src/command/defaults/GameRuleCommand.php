@@ -37,7 +37,7 @@ final class GameRuleCommand extends NativeCommand{
 		}
 		$name = strtolower($args[0]);
 		if(!array_key_exists($name, $rules->getAll())){
-			$sender->sendMessage("Regla no implementada: $name. Disponible: " . GameRules::SHOW_COORDINATES);
+			$sender->sendMessage("Regla no implementada: $name. Disponibles: " . implode(", ", array_keys($rules->getAll())));
 			return true;
 		}
 		if(!isset($args[1])){
