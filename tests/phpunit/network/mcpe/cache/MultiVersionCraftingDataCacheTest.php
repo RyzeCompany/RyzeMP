@@ -35,12 +35,16 @@ final class MultiVersionCraftingDataCacheTest extends TestCase{
 			'26.44' => [ProtocolInfo::PROTOCOL_1_26_40, '1.26.44'],
 			'26.45' => [ProtocolInfo::PROTOCOL_1_26_45, '1.26.45'],
 			'26.50' => [ProtocolInfo::PROTOCOL_1_26_50, '1.26.50'],
-			'26.51' => [ProtocolInfo::PROTOCOL_1_26_51, '1.26.51']
+			'26.51' => [ProtocolInfo::PROTOCOL_1_26_51, '1.26.51'],
+			'26.60' => [2225, '1.26.60']
 		];
 	}
 
 	#[DataProvider('supportedGameVersions')]
 	public function testEveryRecipeAndPotionEncodesAndDecodesForItsClient(int $protocolId, string $gameVersion) : void{
+		if($protocolId === 2225 && !is_file(\pocketmine\BEDROCK_DATA_PATH . "required_item_list-1.26.60.json")){
+			$this->markTestSkipped("2225 BedrockData requires the staged integration workflow");
+		}
 		$packet = CraftingDataCache::getInstance($protocolId)->getCache(self::$craftingManager);
 		// The dispenser and chest minecart registrations each enable a vanilla recipe.
 		self::assertCount(2260, $packet->recipesWithTypeIds);

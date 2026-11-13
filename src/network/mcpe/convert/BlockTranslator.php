@@ -44,6 +44,11 @@ final class BlockTranslator{
 	public const BLOCK_STATE_META_MAP_PATH = 1;
 
 	private const PATHS = [
+		// Prepared 2225 data; not enabled in session negotiation until validated.
+		2225 => [
+			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.60',
+			self::BLOCK_STATE_META_MAP_PATH => '-1.26.60',
+		],
 		ProtocolInfo::PROTOCOL_1_26_51 => [
 			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.50',
 			self::BLOCK_STATE_META_MAP_PATH => '-1.26.50',
@@ -187,7 +192,7 @@ final class BlockTranslator{
 			BlockStateDictionary::loadFromString(
 				$canonicalBlockStatesRaw,
 				$metaMappingRaw,
-				$protocolId >= ProtocolInfo::PROTOCOL_1_26_50 ? json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "block_network_ids-1.26.50.json"), flags: JSON_THROW_ON_ERROR) : null
+				$protocolId >= ProtocolInfo::PROTOCOL_1_26_50 ? json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . ($protocolId >= 2225 ? "block_network_ids-1.26.60.json" : "block_network_ids-1.26.50.json")), flags: JSON_THROW_ON_ERROR) : null
 			),
 			GlobalBlockStateHandlers::getSerializer(),
 		);

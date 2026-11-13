@@ -166,6 +166,8 @@ final class NativeCommandApiTest extends TestCase{
 		$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
 		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
 		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+		// Real sessions initialize their own logger in the constructor; mocks must as well.
+		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
 		$session->method("getProtocolId")->willReturn(589);$packets = [];
 		$session->method("sendDataPacket")->willReturnCallback(function($packet) use (&$packets) : bool{$packets[] = $packet;return true;});
 		$session->syncAvailableCommands();
@@ -173,6 +175,228 @@ final class NativeCommandApiTest extends TestCase{
 		self::assertCount(1, $data->commandData);
 		self::assertSame(44, $data->commandData[0]->getOverloads()[0]->getParameters()[0]->paramType);
 		self::assertContains("samplealias", $data->commandData[0]->aliases->getValues());
+	}
+
+
+
+	public function testAvailableCommandsWirePermissionUsesCanonicalCasingOnModernProtocols() : void{
+		$command = $this->command(static function(BaseCommand $cmd) : void{
+			$cmd->registerArgument(0, new RawStringArgument("namecrate"));
+		});
+		$map = $this->createMock(SimpleCommandMap::class);
+		$map->method("getCommands")->willReturn(["crate" => $command]);
+		$server = $this->createMock(\pocketmine\Server::class);
+		$server->method("getCommandMap")->willReturn($map);
+		$player = $this->createMock(\pocketmine\player\Player::class);
+		(new \ReflectionProperty(\pocketmine\entity\Entity::class, "closed"))->setValue($player, true);
+		(new \ReflectionProperty(\pocketmine\player\Player::class, "logger"))->setValue($player, $this->createMock(\Logger::class));
+		$player->method("hasPermission")->willReturn(true);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+		// Real sessions initialize their own logger in the constructor; mocks must as well.
+		(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
+			$session->method("getProtocolId")->willReturn($protocol);
+			$packet = null;
+			$session->method("sendDataPacket")->willReturnCallback(static function($sent) use (&$packet) : bool{
+				$packet = $sent;
+				return true;
+			});
+			$session->syncAvailableCommands();
+			self::assertInstanceOf(AvailableCommandsPacket::class, $packet);
+
+			$writer = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($writer, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
+			$commands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertCount(1, $commands);
+			self::assertSame($protocol >= 898 ? "Any" : "any", $commands[0]->getPermission(),
+				"AvailableCommands wire permission must match the protocol's case-sensitive enum string");
+			self::assertSame("namecrate", $commands[0]->getOverloads()[0]->getParameters()[0]->paramName);
+		}
+	}
+
+	public function testCrateRootCommandCanSendAvailableCommandsOnAllSupportedProtocolFamilies() : void{
+		$command = new TestNativeCommand($this->plugin, static function(BaseCommand $cmd) : void{
+			$cmd->registerSubCommand(new TestNativeSubCommand("remove", [], null));
+		}, "crate");
+		$map = $this->createMock(SimpleCommandMap::class);
+		$map->method("getCommands")->willReturn(["crate" => $command]);
+		$server = $this->createMock(\pocketmine\Server::class);
+		$server->method("getCommandMap")->willReturn($map);
+		$player = $this->createMock(\pocketmine\player\Player::class);
+		(new \ReflectionProperty(\pocketmine\entity\Entity::class, "closed"))->setValue($player, true);
+		(new \ReflectionProperty(\pocketmine\player\Player::class, "logger"))->setValue($player, $this->createMock(\Logger::class));
+		$player->method("hasPermission")->willReturn(true);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$session = $this->createPartialMock(\pocketmine\network\mcpe\NetworkSession::class, ["sendDataPacket", "getProtocolId"]);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "server"))->setValue($session, $server);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "player"))->setValue($session, $player);
+			(new \ReflectionProperty(\pocketmine\network\mcpe\NetworkSession::class, "logger"))->setValue($session, new \PrefixedLogger($this->createMock(\Logger::class), "test"));
+			$session->method("getProtocolId")->willReturn($protocol);
+			$sent = null;
+			$session->method("sendDataPacket")->willReturnCallback(static function($packet) use (&$sent) : bool{
+				$sent = $packet;
+				return true;
+			});
+			$session->syncAvailableCommands();
+			self::assertInstanceOf(AvailableCommandsPacket::class, $sent);
+			$overloads = $sent->commandData[0]->getOverloads();
+			self::assertNotEmpty($overloads);
+			self::assertContains([], array_map(static fn($overload) : array => $overload->getParameters(), $overloads));
+		}
+	}
+
+	public function testCrateDiagnosticSkipsParameterlessOverloadsWithoutDisconnecting() : void{
+		$hard = static fn(array $values) : CommandParameter => CommandParameter::enum(
+			"subcommand",
+			new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum("hcf:crate:action", $values),
+			0
+		);
+		$command = new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+			"crate", "Crates", 0, 0, null, [
+				// A valid root /crate overload has zero arguments.
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, []),
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+					$hard(["edit"]),
+					CommandParameter::standard("crate", AvailableCommandsPacket::ARG_TYPE_STRING)
+				]),
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+					$hard(["remove"])
+				])
+			], []
+		);
+		$diagnostic = CommandMetadata::describeCrateOverloads([$command]);
+		self::assertCount(2, $diagnostic);
+		self::assertSame("edit", json_decode($diagnostic[0], true, flags: JSON_THROW_ON_ERROR)["arguments"][0]["values"][0]);
+		self::assertSame("remove", json_decode($diagnostic[1], true, flags: JSON_THROW_ON_ERROR)["arguments"][0]["values"][0]);
+
+		// Test metadata and wire forms against every maintained command protocol family.
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble(
+				CommandMetadata::canonicalizePacketEnums([$command]), [], []
+			);
+			$out = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($out, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($out->getData()), $protocol);
+			$wireCommands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertCount(2, CommandMetadata::describeCrateOverloads($wireCommands));
+		}
+	}
+
+	public function testCrateDiagnosticHandlesEmptyAndNonActionOverloads() : void{
+		$command = new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+			"crate", "Crates", 0, 0, null, [
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, []),
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+					CommandParameter::standard("value", AvailableCommandsPacket::ARG_TYPE_STRING)
+				])
+			], []
+		);
+		self::assertSame(
+			['{"status":"no_crate_edit_or_remove_overloads"}'],
+			CommandMetadata::describeCrateOverloads([$command])
+		);
+	}
+
+	public function testFullCommandPacketDeduplicatesEnumsAndSurvivesEveryProtocolGeneration() : void{
+		$hard = static fn(string $arg, string $name, array $values) :
+			CommandParameter => CommandParameter::enum($arg, new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($name, $values), 0);
+		$soft = static fn(string $arg, string $name, array $values) :
+			CommandParameter => CommandParameter::softEnum($arg, new \pocketmine\network\mcpe\protocol\types\command\CommandSoftEnum($name, $values), 0);
+		$makeOverload = static fn(array $parameters) => new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, $parameters);
+		$crates = ["King", "Mythic", "Legends", "Zeus", "Infernal", "KOTH"];
+		$effects = ["NONE", "HEART", "LAVA", "RAINBOW_HELIX"];
+		$commandData = [
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				"crate", "Crates", 0, 0, null, [
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:edit", ["edit"]),
+						$hard("field", "hcf:crate:field", ["effect"]),
+						$hard("namecrate", "hcf:crate_choice", $crates),
+						$hard("effect", "hcf:effects", $effects)
+					]),
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:edit", ["edit"]),
+						$hard("field", "hcf:crate:field", ["rewards"]),
+						$hard("namecrate", "hcf:crate_choice", $crates),
+						CommandParameter::standard("amount", AvailableCommandsPacket::ARG_TYPE_INT)
+					]),
+					$makeOverload([
+						$hard("subcommand", "hcf:crate:remove", ["remove"]),
+						$hard("namecrate", "hcf:crate_choice", $crates)
+					])
+				], []
+			),
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				"rank", "Ranks", 0, 0, null, [
+					$makeOverload([
+						$soft("rank", "hcf:rank", ["default", "admin"]),
+						$hard("unrelated", "many:values", ["default", ...array_map(
+							static fn(int $n) : string => "value_" . $n, range(1, 300)
+						)])
+					])
+				], []
+			)
+		];
+
+		// Reproduce the real assembler problem: the same named enum was emitted
+		// several times because each overload created a new object instance.
+		$original = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($commandData, [], []);
+		$originalNames = array_map(static fn($e) : string => $e->getName(), $original->enums);
+		self::assertGreaterThan(count(array_unique($originalNames)), count($originalNames));
+
+		\pocketmine\command\CommandMetadata::canonicalizePacketEnums($commandData);
+		$overloads = $commandData[0]->getOverloads();
+		self::assertSame($overloads[0]->getParameters()[0]->enum, $overloads[1]->getParameters()[0]->enum);
+		self::assertSame($overloads[0]->getParameters()[2]->enum, $overloads[1]->getParameters()[2]->enum);
+		self::assertSame($overloads[0]->getParameters()[2]->enum, $overloads[2]->getParameters()[1]->enum);
+		self::assertNotSame($overloads[0]->getParameters()[1]->enum, $overloads[1]->getParameters()[1]->enum);
+		self::assertNotSame($overloads[0]->getParameters()[1]->enum->getName(), $overloads[1]->getParameters()[1]->enum->getName());
+
+		$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($commandData, [], []);
+		$names = array_map(static fn($e) : string => $e->getName(), $packet->enums);
+		self::assertSame(count($names), count(array_unique($names)), "No duplicated named enums in the complete packet");
+		self::assertCount(2, $packet->commandData);
+		$diagnostic = CommandMetadata::describeCrateOverloads($commandData);
+		self::assertCount(3, $diagnostic, "Only edit/remove overloads are logged");
+		$entry = json_decode($diagnostic[0], true, flags: JSON_THROW_ON_ERROR);
+		self::assertSame("crate", $entry["command"]);
+		self::assertSame("edit", $entry["arguments"][0]["values"][0]);
+		self::assertSame($crates, $entry["arguments"][2]["values"]);
+		self::assertSame($effects, $entry["arguments"][3]["values"]);
+		self::assertStringNotContainsString('"default"', implode("\n", $diagnostic), "Unrelated rank data must not be logged");
+		self::assertSame(
+			['{"status":"no_crate_edit_or_remove_overloads"}'],
+			CommandMetadata::describeCrateOverloads([$commandData[1]])
+		);
+
+		foreach([589, 649, 898, 2193, 2225] as $protocol){
+			$writer = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($writer, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
+			$commands = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertSame(["crate", "rank"], array_map(static fn($c) : string => $c->getName(), $commands));
+			$wireTrace = CommandMetadata::describeCrateOverloads($commands);
+			self::assertCount(3, $wireTrace);
+			$wireEntry = json_decode($wireTrace[0], true, flags: JSON_THROW_ON_ERROR);
+			self::assertSame($crates, $wireEntry["arguments"][2]["values"]);
+			self::assertSame($effects, $wireEntry["arguments"][3]["values"]);
+			$variants = $commands[0]->getOverloads();
+			self::assertSame(["effect"], $variants[0]->getParameters()[1]->enum->getValues());
+			self::assertSame(["rewards"], $variants[1]->getParameters()[1]->enum->getValues());
+			self::assertSame($crates, $variants[0]->getParameters()[2]->enum->getValues());
+			self::assertSame($crates, $variants[1]->getParameters()[2]->enum->getValues());
+			self::assertSame($crates, $variants[2]->getParameters()[1]->enum->getValues());
+			self::assertSame($effects, $variants[0]->getParameters()[3]->enum->getValues());
+			self::assertSame(["default", "admin"], $commands[1]->getOverloads()[0]->getParameters()[0]->enum->getValues());
+		}
 	}
 
 	public function testNativeSetupNeedsNoOutgoingInterceptor() : void{
@@ -210,7 +434,7 @@ final class NativeCommandApiTest extends TestCase{
 
 final class TestNativeCommand extends BaseCommand{
 	public array $calls = [];
-	public function __construct(Plugin $plugin, private Closure $setup){parent::__construct($plugin, "sample");}
+	public function __construct(Plugin $plugin, private Closure $setup, string $name = "sample"){parent::__construct($plugin, $name);}
 	protected function prepare() : void{$this->setPermission("tests.command.root");($this->setup)($this);}
 	public function onRun(CommandSender $sender, string $aliasUsed, array $args) : void{$this->calls[] = $args;}
 }

@@ -1,0 +1,60 @@
+name: Verify public RyzeMP Composer create-project
+
+on:
+  workflow_run:
+    workflows: [Build and Release Phar]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-project:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Setup PocketMine PHP and Composer
+        uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+
+      - name: Install RyzeMP from public Packagist
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          for attempt in $(seq 1 10); do
+            if composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist --no-interaction --no-progress; then break; fi
+            if [[ "$attempt" = 10 ]]; then exit 1; fi
+            rm -rf ryzemp
+            composer clear-cache
+            sleep 15
+          done
+          cd ryzemp
+          composer validate --no-check-publish --no-interaction
+          php -r '
+          $root = json_decode(file_get_contents("composer.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($root["name"] ?? "") !== "ryzemcbe/ryzemp") {
+            fwrite(STDERR, "Wrong package from Packagist" . PHP_EOL);
+            exit(1);
+          }
+          $lock = json_decode(file_get_contents("composer.lock"), true, 512, JSON_THROW_ON_ERROR);
+          $expected = ["ryzemcbe/bedrock-data", "ryzemcbe/bedrock-protocol"];
+          foreach ($expected as $name) {
+            $matches = array_values(array_filter($lock["packages"], static fn($p) => $p["name"] === $name));
+            if (count($matches) !== 1 || ltrim($matches[0]["version"], "v") !== "1.0.0-beta.2") {
+              fwrite(STDERR, "Wrong dependency: " . $name . PHP_EOL);
+              exit(1);
+            }
+            echo $name . " " . $matches[0]["version"] . PHP_EOL;
+          }
+          '
+          test -f vendor/autoload.php
+          php -r 'require "vendor/autoload.php"; if(\pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL !== 2225) exit(1);'
+          php -r 'require "vendor/autoload.php"; echo "RyzeMP Composer autoload: OK" . PHP_EOL;'
+          echo "Public RyzeMP create-project smoke test: OK"

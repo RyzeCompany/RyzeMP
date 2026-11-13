@@ -51,6 +51,8 @@ final class BlockStateDictionary{
 		"minecraft:connection_south" => true,
 		"minecraft:connection_east" => true,
 		"minecraft:connection_west" => true,
+		"minecraft:connection_up" => true,
+		"minecraft:connection_down" => true,
 	];
 
 	/**

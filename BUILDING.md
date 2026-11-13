@@ -4,18 +4,18 @@
 
 - A shell, Git and Composer
 - A compatible 64-bit PHP runtime with the extensions required in [composer.json](composer.json)
-- Repository access to the customized `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData` dependencies
+- The public customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies, pinned to existing commits in `composer.lock`
 
 For the current CI build, GitHub Actions uses PHP 8.4 plus PocketMine's required extensions for validation, and PHP 8.3 for the PHAR builder.
 
 ## Distributions
 
-For installing a **published source project with Composer**, or downloading a **versioned PHAR directly from GitHub Releases**, see [DISTRIBUTION.md](docs/DISTRIBUTION.md). The public Composer command is not available until the maintainer registers the accessible packages on Packagist.
+For installing a **published source project with Composer**, or downloading a **versioned PHAR directly from GitHub Releases**, see [DISTRIBUTION.md](docs/DISTRIBUTION.md). The public Composer source-project installation for beta.3 has been verified against Packagist with a compatible PocketMine PHP runtime.
 
 ## Install dependencies
 
 ```bash
-git clone https://github.com/RyzeMCBE/RyzeMP.git RyzeMP
+git clone https://github.com/RyzeCompany/RyzeMP.git RyzeMP
 cd RyzeMP
 composer install --prefer-dist
 ```

@@ -1,12 +1,12 @@
 # RyzeMP
 
-**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeMCBE and based on PocketMine-MP 5.
+**RyzeMP** is a PHP-based Minecraft: Bedrock Edition server software, maintained by RyzeCompany and based on PocketMine-MP 5.
 
-> Development status: **1.0.0-beta.3**. This is a development branch; no stable RyzeMP release has been published yet.
+> Latest public prerelease: **v1.0.0-beta.4**. RyzeMP remains in beta; no stable release has been published.
 
 ## Features and purpose
 
-- Multiversion Bedrock network support through customized `RyzeMCBE/BedrockProtocol` and `RyzeMCBE/BedrockData` dependencies.
+- Multiversion Bedrock network support through customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies.
 - PocketMine-MP 5 plugin API compatibility. The PHP namespace remains `pocketmine\` intentionally.
 - Multiple worlds, game entities, inventory mechanics, native hopper and dimension-related work.
 - PHAR packaging and CI checks for code syntax, unit tests, and startup verification.
@@ -15,14 +15,37 @@ Support for a Bedrock protocol in the dependency does **not** guarantee every ga
 
 ## Get RyzeMP — two distribution channels
 
-- **Composer (source project for developers):** package `ryzemcbe/ryzemp`. Once the repositories are accessible and the release is registered with Packagist, use `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.3" --no-dev --prefer-dist`.
-- **GitHub Releases (ready-built server PHAR):** a release tag will produce `RyzeMP_v1.0.0-beta.3.phar` with SHA-256 checksum and license. Download and run it with a compatible PocketMine PHP environment.
+**Composer/Packagist:** all dependencies are resolved from public Packagist packages. For a new installation, use a compatible PocketMine PHP runtime and run:
 
-**These public channels are prepared, not published yet.** RyzeMP and both libraries currently require authorized access; the first public release is subject to dependency publication and live game tests.
+```bash
+composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist
+```
+
+For development from source, run `composer install` in the checked-out repository. Dependencies are pinned in `composer.lock`; no GitHub VCS override or private token is required. For future Bedrock upgrades, publish compatible dependency tags to Packagist first and then update the Composer constraints/lockfile in RyzeMP.
+
+
+- **Composer (source project for developers):** [ryzemcbe/ryzemp](https://packagist.org/packages/ryzemcbe/ryzemp) is publicly available. Install beta.4 with `composer create-project ryzemcbe/ryzemp ryzemp "1.0.0-beta.4" --no-dev --prefer-dist` using a compatible PocketMine PHP runtime.
+- **GitHub Releases (ready-built server PHAR):** download [RyzeMP v1.0.0-beta.4](https://github.com/RyzeCompany/RyzeMP/releases/tag/v1.0.0-beta.4) and its SHA-256 checksum, then run the PHAR with a compatible PocketMine PHP environment.
+
+**Public distribution is live.** RyzeMP beta.4 and both Bedrock beta.2 libraries are published on Packagist and verified by a clean `composer create-project` installation. The release workflow verifies the same locked dependencies, full PHPUnit suite, native NetherNet, public plugin API and actual PHAR pre-spawn/world spawn. The operator confirmed real-client world entry with the preceding integration.2 build. Final beta.4 host reinstall/gameplay/reconnect checks remain pending.
 
 Read [DISTRIBUTION.md](docs/DISTRIBUTION.md) for the publication checklist and [BUILDING.md](BUILDING.md) for developer builds. The development artifact is named `RyzeMP.phar`.
 
 The shell and Docker entrypoints prefer `RyzeMP.phar`, with a fallback to `PocketMine-MP.phar` for existing installs.
+
+
+## Bedrock 1.26.60 and Pterodactyl
+
+Protocol 2225 uses first-party [RyzeRTC](https://github.com/RyzeCompany/RyzeRTC/releases/tag/v0.1.0-dev.3), installed outside the PHAR with PHP 8.4 ZTS. The [official egg](https://github.com/RyzeCompany/egg-ryzemp) installs and verifies the compatible runtime. **Reinstall** updates from prepared official prereleases with `RYZEMP_CHANNEL=pruebas`; ordinary restarts preserve the version. HTTP TCP and RakNet/WebRTC UDP share the existing `server-ip` and `server-port`. No additional public port is required.
+
+See [egg updates](docs/EGG_UPDATES.md) and [NetherNet integration](docs/BEDROCK_1_26_60_NETHERNET.md).
+
+## API for plugin developers
+
+Use `ryzemcbe/ryzemp:^5.44.2-p1` as a Composer development dependency. The numeric
+Composer version follows the compatible plugin API; the server release remains
+`1.0.0-beta.4`. See [the Composer API guide](docs/COMPOSER_API.md) for installation,
+InvMenu, workstation requirements and the two tag series.
 
 ## Native command API
 
@@ -44,11 +67,11 @@ Read [RyzeMP compatibility and rebranding contract](docs/RYZEMP_COMPATIBILITY.md
 
 ## Development and releases
 
-- [Source repository](https://github.com/RyzeMCBE/RyzeMP)
-- [GitHub Actions](https://github.com/RyzeMCBE/RyzeMP/actions)
-- [Releases](https://github.com/RyzeMCBE/RyzeMP/releases)
+- [Source repository](https://github.com/RyzeCompany/RyzeMP)
+- [GitHub Actions](https://github.com/RyzeCompany/RyzeMP/actions)
+- [Releases](https://github.com/RyzeCompany/RyzeMP/releases)
 
-The source repository currently retains its historical GitHub path. Branding the software does not itself rename the repository.
+The source repository is now under the `RyzeCompany` GitHub organization; the public Composer vendor remains `ryzemcbe` to avoid changing dependency names between releases.
 
 ## License and credits
 

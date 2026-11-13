@@ -83,6 +83,7 @@ use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler;
+use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler;
 use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\network\mcpe\protocol\ServerboundPacket;
 use pocketmine\network\mcpe\protocol\ServerToClientHandshakePacket;
@@ -167,6 +168,8 @@ class NetworkSession{
 	private PacketRateLimiter $gamePacketLimiter;
 
 	private \PrefixedLogger $logger;
+	/** Temporary: trace the first command synchronization only, per session. */
+	private bool $crateCommandTraceCompleted = false;
 	private ?Player $player = null;
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
@@ -194,6 +197,9 @@ class NetworkSession{
 	private ?CompoundTag $cachedOfflinePlayerData = null;
 
 	private ?EncryptionContext $cipher = null;
+	/** Verified identity public key from NetherNet signaling. Null on RakNet. */
+	private ?string $netherNetIdentityPublicKey = null;
+	private ?string $netherNetIdentityXuid = null;
 
 	/**
 	 * @var string[]
@@ -264,6 +270,19 @@ class NetworkSession{
 
 	private function getLogPrefix() : string{
 		return "NetworkSession: " . $this->getDisplayName();
+	}
+
+	/**
+	 * Only the authenticated WebRTC adapter may call this, before Bedrock login.
+	 * NetherNet is already DTLS encrypted: the extra RakNet AES handshake is
+	 * not performed, but the Bedrock login public key MUST match signaling.
+	 */
+	public function useNetherNetTransport(string $identityPublicKeyDer, ?string $verifiedXuid = null) : void{
+		if($this->netherNetIdentityPublicKey !== null || strlen($identityPublicKeyDer) < 64 || strlen($identityPublicKeyDer) > 4096 || $this->protocolId !== null){
+			throw new \InvalidArgumentException("Invalid NetherNet transport identity initialization");
+		}
+		$this->netherNetIdentityPublicKey = $identityPublicKeyDer;
+		$this->netherNetIdentityXuid = $verifiedXuid;
 	}
 
 	public function getLogger() : \Logger{
@@ -699,6 +718,23 @@ class NetworkSession{
 				}
 				$writer->clear(); //memory reuse let's gooooo
 				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
+				// Read only the first outgoing AvailableCommandsPacket of this session.
+				// DataPacketSendEvent has already run, so these are the final bytes.
+				if($evPacket instanceof AvailableCommandsPacket && !$this->crateCommandTraceCompleted){
+					$this->crateCommandTraceCompleted = true; // Avoid duplicate logs on later refreshes.
+					try{
+						$decoded = new AvailableCommandsPacket();
+						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
+						$wireCommands = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+						$this->logger->info("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
+						foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads($wireCommands) as $line){
+							$this->logger->info("[CrateCommandTrace] stage=wire " . $line);
+						}
+					}catch(\Throwable $e){
+						// Diagnostics must never interrupt a valid connection.
+						$this->logger->warning("[CrateCommandTrace] stage=wire_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
+					}
+				}
 				$this->addToSendBuffer($encoded);
 			}
 			if($immediate){
@@ -718,9 +754,17 @@ class NetworkSession{
 	/**
 	 * @phpstan-return Promise<true>
 	 */
+	public function supportsTransportReceipts() : bool{
+		return $this->netherNetIdentityPublicKey === null;
+	}
+
 	public function sendDataPacketWithReceipt(ClientboundPacket $packet, bool $immediate = false) : Promise{
 		/** @phpstan-var PromiseResolver<true> $resolver */
 		$resolver = new PromiseResolver();
+		if(!$this->supportsTransportReceipts()){
+			$resolver->reject();
+			return $resolver->getPromise();
+		}
 
 		if(!$this->sendDataPacketInternal($packet, $immediate, $resolver)){
 			$resolver->reject();
@@ -1008,6 +1052,11 @@ class NetworkSession{
 				$error = "Expected XUID but none found";
 			}elseif($clientPubKey === null){
 				$error = "Missing client public key"; //failsafe
+			}elseif($this->netherNetIdentityPublicKey !== null && !hash_equals($this->netherNetIdentityPublicKey, $clientPubKey)){
+				$error = "NetherNet identity does not match Bedrock login public key";
+			}elseif($this->netherNetIdentityPublicKey !== null && (!$authenticated ||
+				($this->netherNetIdentityXuid !== null && (!($this->info instanceof XboxLivePlayerInfo) || $this->info->getXuid() !== $this->netherNetIdentityXuid)))){
+				$error = "NetherNet authenticated XUID does not match Bedrock login";
 			}
 		}
 
@@ -1081,7 +1130,7 @@ class NetworkSession{
 			}
 		}
 
-		if(EncryptionContext::$ENABLED){
+		if(EncryptionContext::$ENABLED && $this->netherNetIdentityPublicKey === null){
 			$this->server->getAsyncPool()->submitTask(new PrepareEncryptionTask($clientPubKey, function(string $encryptionKey, string $handshakeJwt) : void{
 				if(!$this->connected){
 					return;
@@ -1325,7 +1374,10 @@ class NetworkSession{
 				$lname, //TODO: commands containing uppercase letters in the name crash 1.9.0 client
 				$description instanceof Translatable ? $this->player->getLanguage()->translate($description) : $description,
 				0,
-				CommandPermissions::NORMAL,
+				// Bedrock 1.21.130+ encodes this as a string enum. The wire value
+				// is case-sensitive ("Any"), not the legacy PHP alias "any".
+				// Older clients still use an integer permission byte.
+				$this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_130 ? "Any" : CommandPermissions::NORMAL,
 				$aliasObj,
 				$overloads,
 				chainedSubCommandData: []
@@ -1334,7 +1386,24 @@ class NetworkSession{
 			$commandData[$command->getLabel()] = $data;
 		}
 
-		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble(array_values($commandData), [], []));
+		// Temporary diagnostic, automatically logged once per session.
+		// Only crate edit/remove arguments are included; never raw packet bytes.
+		if(!$this->crateCommandTraceCompleted){
+			try{
+				$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
+				foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
+					$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
+				}
+			}catch(\Throwable $e){
+				// Temporary diagnostics are never allowed to interrupt the login flow.
+				$this->logger->warning("[CrateCommandTrace] stage=metadata_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
+			}
+		}
+
+		// Resolve all enum definitions consistently across the entire command list,
+		// not one command at a time (subcommand overloads repeat enum names).
+		$normalized = \pocketmine\command\CommandMetadata::canonicalizePacketEnums(array_values($commandData));
+		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble($normalized, [], []));
 	}
 
 	/**
@@ -1398,7 +1467,7 @@ class NetworkSession{
 		try{
 			$transition = $this->dimensionTransition;
 			$hash = World::chunkHash($chunkX, $chunkZ);
-			$diagnosticReceipt = $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
+			$diagnosticReceipt = $this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
 			// Protocol 844 (1.21.111/114) must receive terrain before actors.
 			$waitForLegacyReceipt = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_21_111;
 			if($diagnosticReceipt || $waitForLegacyReceipt){
@@ -1575,7 +1644,7 @@ class NetworkSession{
 
 	private function traceDimension(string $message) : void{
 		$transition = $this->dimensionTransition;
-		if($transition !== null && $transition->hasDiagnostics()){
+		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
 			$this->logger->debug(sprintf("Dimension trace #%d world=%s elapsed=%.3f %s", $transition->getId(), $transition->getTargetWorld(), microtime(true) - $transition->getStartedAt(), $message));
 		}
 	}
@@ -1614,7 +1683,7 @@ class NetworkSession{
 		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
 		$packet = PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0);
 		$transition = $this->dimensionTransition;
-		if($transition !== null && $transition->hasDiagnostics()){
+		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
 			$this->sendDataPacketWithReceipt($packet)->onCompletion(function() use($transition) : void{
 				if($this->dimensionTransition === $transition){ $this->traceDimension("server_ack_transport_received"); }
 			}, function() use($transition) : void{

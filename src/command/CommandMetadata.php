@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace pocketmine\command;
 
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
+use pocketmine\network\mcpe\protocol\types\command\CommandData;
+use pocketmine\network\mcpe\protocol\types\command\ConstrainedEnumValue;
+use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
+use pocketmine\network\mcpe\protocol\types\command\CommandSoftEnum;
 use pocketmine\network\mcpe\protocol\types\command\CommandOverload;
 use pocketmine\network\mcpe\protocol\types\command\CommandParameter;
 use pocketmine\Server;
@@ -32,6 +36,116 @@ final class CommandMetadata{
 			$result[] = new CommandOverload($overload->isChaining(), $parameters);
 		}
 		return $result;
+	}
+
+
+	/**
+	 * Intern equivalent command enums before building AvailableCommandsPacket.
+	 *
+	 * Commands (especially alternative subcommand overloads) may construct fresh
+	 * CommandHardEnum objects with the same advertised name and values. The
+	 * BedrockProtocol assembler indexes those by object identity, which would
+	 * otherwise publish duplicate enum definitions under one name. Bedrock's
+	 * command parser may resolve a duplicate name to the wrong definition.
+	 *
+	 * Keep distinct value sets distinct, including when a plugin accidentally
+	 * reuses one name for different value sets. Only the packet-local clones are
+	 * modified; the registered command/argument objects remain unchanged.
+	 *
+	 * @param list<CommandData> $commands
+	 * @return list<CommandData>
+	 */
+	public static function canonicalizePacketEnums(array $commands) : array{
+		/** @var array<string, CommandHardEnum|CommandSoftEnum> $canonical */
+		$canonical = [];
+		/** @var array<string, string> $firstFingerprintByName */
+		$firstFingerprintByName = [];
+
+		$intern = static function(CommandHardEnum|CommandSoftEnum $enum) use (&$canonical, &$firstFingerprintByName) : CommandHardEnum|CommandSoftEnum{
+			$kind = $enum instanceof CommandSoftEnum ? "soft" : "hard";
+			$originalName = $enum->getName();
+			$values = $enum->getValues();
+			$fingerprint = hash("sha256", serialize($values));
+			$nameKey = $kind . "\0" . $originalName;
+			$first = $firstFingerprintByName[$nameKey] ?? null;
+			$firstFingerprintByName[$nameKey] ??= $fingerprint;
+			$name = $first !== null && $first !== $fingerprint
+				? $originalName . ":values-" . substr($fingerprint, 0, 16)
+				: $originalName;
+			$key = $kind . "\0" . $name . "\0" . $fingerprint;
+			if(!isset($canonical[$key])){
+				$canonical[$key] = $kind === "soft"
+					? new CommandSoftEnum($name, $values)
+					: new CommandHardEnum($name, $values);
+			}
+			return $canonical[$key];
+		};
+
+		foreach($commands as $command){
+			if($command->aliases !== null){
+				$command->aliases = $intern($command->aliases);
+			}
+			foreach($command->getOverloads() as $overload){
+				foreach($overload->getParameters() as $parameter){
+					if($parameter->enum !== null){
+						$parameter->enum = $intern($parameter->enum);
+					}
+				}
+			}
+		}
+		return $commands;
+	}
+
+
+	/**
+	 * Limited opt-in diagnostic for the exact crate edit/remove routes.
+	 * Produces structured, escaped single-line records without player data,
+	 * IPs, command input, raw packets or enums from unrelated commands.
+	 *
+	 * @param list<CommandData> $commands
+	 * @return list<string>
+	 */
+	public static function describeCrateOverloads(array $commands) : array{
+		$lines = [];
+		foreach($commands as $command){
+			$name = strtolower($command->getName());
+			if($name !== "crate" && !str_ends_with($name, ":crate")){continue;}
+			foreach($command->getOverloads() as $index => $overload){
+				$parameters = $overload->getParameters();
+				// /crate may advertise a valid root overload with no parameters.
+				// Do not let an optional trace crash a client's login.
+				$first = $parameters === [] ? null : reset($parameters);
+				if(!$first instanceof CommandParameter || $first->enum === null){continue;}
+				$action = array_map(
+					static fn(string|ConstrainedEnumValue $value) : string =>
+						$value instanceof ConstrainedEnumValue ? $value->getValue() : $value,
+					$first->enum->getValues()
+				);
+				if(!in_array("edit", $action, true) && !in_array("remove", $action, true)){continue;}
+				$arguments = [];
+				foreach($parameters as $parameter){
+					$enum = $parameter->enum;
+					$values = $enum === null ? null : array_map(
+						static fn(string|ConstrainedEnumValue $value) : string =>
+							$value instanceof ConstrainedEnumValue ? $value->getValue() : $value,
+						$enum->getValues()
+					);
+					$arguments[] = [
+						"name" => $parameter->paramName,
+						"type" => $enum === null ? "primitive" : ($enum instanceof CommandSoftEnum ? "soft_enum" : "hard_enum"),
+						"enum" => $enum?->getName(),
+						"values" => $values,
+						"param_type" => $enum === null ? $parameter->paramType : null
+					];
+				}
+				$lines[] = json_encode([
+					"command" => $name,
+					"overload" => $index,
+					"arguments" => $arguments
+				], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+			}
+		}
+		return $lines === [] ? ['{"status":"no_crate_edit_or_remove_overloads"}'] : $lines;
 	}
 
 	/** Refresh after dynamic names or visibility change; use only on the server thread. */

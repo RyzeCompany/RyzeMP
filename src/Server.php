@@ -62,6 +62,8 @@ use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
+use pocketmine\network\mcpe\nethernet\NetherNetInterface;
+use pocketmine\network\mcpe\nethernet\NetherNetSessionGateway;
 use pocketmine\network\mcpe\raklib\RakLibInterface;
 use pocketmine\network\mcpe\StandardEntityEventBroadcaster;
 use pocketmine\network\mcpe\StandardPacketBroadcaster;
@@ -1305,8 +1307,24 @@ class Server{
 	) : bool{
 		$prettyIp = $ipV6 ? "[$ip]" : $ip;
 		try{
-			$rakLibRegistered = $this->network->registerInterface(new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter));
-		}catch(NetworkInterfaceStartException $e){
+			$raklib = new RakLibInterface($this, $ip, $port, $ipV6, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
+			$nethernet = null;
+			if(!$ipV6 && ProtocolInfo::CURRENT_PROTOCOL >= 2225){
+				if(extension_loaded("ryzertc") && \RyzeRTC\Runtime::apiVersion() >= 2){
+					$nethernet = new NetherNetInterface($this, $ip, $port, $raklib,
+						new NetherNetSessionGateway($this, $this->network, $packetBroadcaster, $entityEventBroadcaster, $typeConverter));
+				}else{
+					$this->logger->warning("NetherNet UNAVAILABLE: PHP native extension 'ryzertc' API 2 is required; install the current official RyzeRTC Egg runtime. Legacy RakNet stays available.");
+				}
+			}
+			$rakLibRegistered = $this->network->registerInterface($raklib);
+			if($nethernet !== null){
+				if(!$rakLibRegistered || !$this->network->registerInterface($nethernet)){
+					$nethernet->shutdown();
+					throw new NetworkInterfaceStartException("NetherNet requires both shared RakLib UDP and HTTP signaling interfaces");
+				}
+			}
+		}catch(\Throwable $e){
 			$this->logger->emergency($this->language->translate(KnownTranslationFactory::pocketmine_server_networkStartFailed(
 				$ip,
 				(string) $port,

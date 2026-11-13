@@ -1,0 +1,45 @@
+name: Bedrock 2225 cross-repository integration
+
+on:
+  push:
+    branches: [feature/bedrock-1.26.60-nethernet, main]
+    paths:
+      - ".github/workflows/ci-2225-integration.yml"
+      - "src/network/mcpe/convert/**"
+      - "src/data/bedrock/ItemTagToIdMap.php"
+      - "tests/phpunit/network/mcpe/cache/**"
+      - "tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+
+      - name: Install the published protocol and data from composer.lock
+        run: composer install --no-interaction --no-progress
+
+      - name: Verify locked 2225 protocol and runtime data
+        run: |
+          php -r 'require "vendor/autoload.php"; echo \pocketmine\network\mcpe\protocol\ProtocolInfo::PROTOCOL_1_26_60, "\n";'
+          php -d memory_limit=2G vendor/bin/phpunit \
+            --bootstrap vendor/autoload.php --fail-on-warning \
+            tests/phpunit/network/mcpe/convert/Bedrock2225DataTest.php
+          php -d memory_limit=2G vendor/bin/phpunit \
+            --bootstrap vendor/autoload.php --fail-on-warning \
+            tests/phpunit/network/mcpe/nethernet
+          php -d memory_limit=2G vendor/bin/phpunit \
+            --bootstrap vendor/autoload.php --fail-on-warning \
+            tests/phpunit/network/mcpe/cache

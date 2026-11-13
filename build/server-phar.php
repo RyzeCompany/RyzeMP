@@ -116,6 +116,13 @@ function buildPhar(string $pharPath, string $basePath, array $includedPaths, arr
 	$regexIterator = new \RegexIterator($iterator, $regex);
 
 	$count = count($phar->buildFromIterator($regexIterator, $basePath));
+	foreach(['LICENSE', 'COPYING'] as $licenseFile){
+		if(!file_exists($basePath . $licenseFile)){
+			throw new \RuntimeException("Missing distribution license: " . $licenseFile);
+		}
+		$phar->addFile($basePath . $licenseFile, $licenseFile);
+		++$count;
+	}
 	yield "Added $count files";
 
 	if($compression !== null){
