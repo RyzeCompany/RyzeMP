@@ -24,6 +24,7 @@ use pocketmine\data\bedrock\block\convert\BlockStateReader;
 use pocketmine\data\bedrock\block\convert\BlockStateWriter;
 use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\bedrock\item\SavedItemData;
+use pocketmine\item\Item;
 use pocketmine\item\Brush;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
@@ -49,7 +50,26 @@ final class ArchaeologyContent{
 		GlobalItemDataHandlers::getSerializer()->map($brush, static fn() : SavedItemData => new SavedItemData(ItemTypeNames::BRUSH));
 		StringToItemParser::getInstance()->register("brush", static fn() : Brush => clone $brush);
 		self::registerSherds();
+		self::registerLootItems();
 		self::registerDecoratedPot();
+	}
+
+	private static bool $lootItemsRegistered = false;
+
+	/** Preserve the two archaeology rewards absent from the base item registry. */
+	public static function registerLootItems() : void{
+		if(self::$lootItemsRegistered){
+			return;
+		}
+		self::registerLootItem(new Item(new ItemIdentifier(ItemTypeIds::LEAD), "Lead"), ItemTypeNames::LEAD);
+		self::registerLootItem(new Item(new ItemIdentifier(ItemTypeIds::SNIFFER_EGG), "Sniffer Egg"), BlockTypeNames::SNIFFER_EGG);
+		self::$lootItemsRegistered = true;
+	}
+
+	private static function registerLootItem(Item $item, string $id) : void{
+		GlobalItemDataHandlers::getDeserializer()->map($id, static fn() : Item => clone $item);
+		GlobalItemDataHandlers::getSerializer()->map($item, static fn() : SavedItemData => new SavedItemData($id));
+		StringToItemParser::getInstance()->register($id, static fn() : Item => clone $item);
 	}
 
 

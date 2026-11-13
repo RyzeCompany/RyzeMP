@@ -334,7 +334,9 @@ sounds for each receiving client. The PHAR fixture locates a desert
 pyramid, brushes a naturally placed suspicious block and checks the
 revealed item after restarting. All 23 pottery sherd variants and decorated
 pot item and tile storage have runtime representations; patterned pot
-crafting still requires a dynamic special recipe.
+crafting still requires a dynamic special recipe. The pinned archaeology
+loot tables also require persistent lead and sniffer egg item IDs; mob
+leashing and sniffer egg hatching are gameplay work outside this generator.
 
 ## Upstream Go evaluation
 

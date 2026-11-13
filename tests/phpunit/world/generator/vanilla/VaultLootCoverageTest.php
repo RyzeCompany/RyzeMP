@@ -23,6 +23,7 @@ final class VaultLootCoverageTest extends TestCase{
 			self::markTestSkipped("Authentic Minecraft loot data required");
 		}
 		ArchaeologyContent::registerSherds();
+		ArchaeologyContent::registerLootItems();
 		$tables = new LootTables($directory);
 		$missing = [];
 		foreach([
