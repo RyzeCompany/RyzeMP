@@ -58,8 +58,9 @@ class PopulationTask extends AsyncTask{
 	private float $startedAt = 0.0;
 	private float $queueDelayMs = 0.0;
 	private float $workerDurationMs = 0.0;
-	/** @var array<string, float> */
-	private array $worldgenStages = [];
+	// AsyncTask uses ThreadSafe properties: transfer profiling aggregates in a
+	// scalar string, never as an array (PHP 8.4 ZTS rejects arrays here).
+	private string $worldgenStages = "";
 
 	/**
 	 * @param Chunk[]|null[] $adjacentChunks
@@ -107,7 +108,8 @@ class PopulationTask extends AsyncTask{
 			$this->dataFailure = $e->getMessage();
 		}finally{
 			if($profile){
-				$this->worldgenStages = VanillaWorldgenProfiler::finish();
+				$this->worldgenStages = igbinary_serialize(VanillaWorldgenProfiler::finish()) ??
+					throw new AssumptionFailedError("Could not serialize worldgen metrics");
 				$this->workerDurationMs = (microtime(true) - $this->startedAt) * 1000;
 			}
 		}
@@ -158,8 +160,10 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onCompletion() : void{
-		if($this->worldgenStages !== []){
-			VanillaWorldgenProfiler::report($this->worldgenStages, $this->queueDelayMs,
+		if($this->worldgenStages !== ""){
+			/** @var array<string, float> $stages */
+			$stages = igbinary_unserialize($this->worldgenStages);
+			VanillaWorldgenProfiler::report($stages, $this->queueDelayMs,
 				$this->workerDurationMs, (microtime(true) - $this->queuedAt) * 1000);
 		}
 		if($this->dataFailure !== null){
