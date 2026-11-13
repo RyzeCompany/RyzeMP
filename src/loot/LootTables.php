@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace pocketmine\loot;
 
 use pocketmine\world\generator\vanilla\feature\BlockEntityData;
+use pocketmine\world\generator\vanilla\VanillaDataIdentity;
+use pocketmine\world\World;
 use function array_key_exists;
 use function preg_match;
 
@@ -12,6 +14,9 @@ use function preg_match;
  * Java loot tables compiled from the same pinned cache as the generated world.
  */
 final class LootTables{
+	/** @var array<string, self> */
+	private static array $worldCaches = [];
+
 	private readonly LootData $data;
 	private readonly LootCompiler $compiler;
 	/** @var array<string, LootTable|null> */
@@ -27,6 +32,20 @@ final class LootTables{
 				\GlobalLogger::get()->debug("[Worldgen loot] $message");
 			}
 		});
+	}
+
+	public static function forWorld(World $world) : ?self{
+		$preset = $world->getProvider()->getWorldData()->getGeneratorOptions();
+		if(!VanillaDataIdentity::hasPlacedFeatures($preset)){
+			return null;
+		}
+		$cache = VanillaDataIdentity::parse($preset);
+		$directory = $cache["directory"];
+		if(!LootData::isAvailable($directory)){
+			return null;
+		}
+		VanillaDataIdentity::assertMatches($directory, $cache["hash"]);
+		return self::$worldCaches[$directory . ":" . $cache["hash"]] ??= new self($directory);
 	}
 
 	public function get(string $name) : ?LootTable{

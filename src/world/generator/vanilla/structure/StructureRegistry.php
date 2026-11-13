@@ -153,7 +153,8 @@ final class StructureRegistry{
 	 * @phpstan-param (\Closure(string) : void)|null $logger
 	 */
 	public static function shared(WorldgenData $data, JavaBlocks $blocks, ?\Closure $logger = null) : self{
-		return self::$shared[$data->getRoot()] ??= new self($data, $blocks, $logger);
+		$key = $data->getRoot() . "\0" . (int) $blocks->hasStructureContent;
+		return self::$shared[$key] ??= new self($data, $blocks, $logger);
 	}
 
 	public function warn(string $key, string $message) : void{

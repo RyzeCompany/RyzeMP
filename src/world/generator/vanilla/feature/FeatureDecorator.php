@@ -100,9 +100,10 @@ final class FeatureDecorator{
 		array $treeBiomeNames,
 		\Closure $sampleTreeBiome,
 		?\Closure $logger = null,
-		?array $possibleBiomes = null
+		?array $possibleBiomes = null,
+		bool $enableStructureContent = false
 	){
-		$this->blocks = JavaBlocks::get($data->getRoot());
+		$this->blocks = JavaBlocks::get($data->getRoot(), $enableStructureContent);
 		$this->registry = new FeatureRegistry($data, $this->blocks, $logger, $possibleBiomes);
 		foreach($treeBiomeNames as $treeIndex => $name){
 			$registryIndex = $this->registry->biomeIndex[$name] ?? throw new \RuntimeException("Biome $name has no feature data");

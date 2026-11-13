@@ -198,3 +198,18 @@ geometry is available for Trial Chambers, but the trial spawner and vault
 mechanics, unsupported block entities, structure mobs and minecarts, and
 complete End gameplay still need their runtime adapters. Retail Bedrock
 sessions and production-load measurements are still required.
+
+## End gateways, spike crystals and ship loot
+
+The pinned profile `core-v6;data=/absolute/cache;sha256=HEX` includes
+the structure generation from core-v5 and enables the added worldgen block
+entities. A natural outer-island End gateway keeps its exact exit from the
+Java configuration in LevelDB. The world loads the destination chunk before
+teleporting an entity or the owner of an ender pearl. The central spikes use
+the selected seed's layout when placing their crystals. End ships contain an
+Elytra in a Bedrock item frame.
+
+The two-boot fixture checks the generated gateway exit, an actual entity
+teleport and the saved spike crystal. It also checks network serialization for
+protocols 589, 2193 and 2225. Gateways created by the dragon fight and full
+Elytra flight mechanics are outside this increment.

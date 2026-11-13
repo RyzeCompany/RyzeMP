@@ -9,6 +9,8 @@ use pocketmine\event\entity\EntityPortalEnterEvent;
 use pocketmine\event\entity\EntityPortalTeleportEvent;
 use pocketmine\world\dimension\Dimensions;
 use pocketmine\block\NetherPortal;
+use pocketmine\block\tile\EndGateway as EndGatewayTile;
+use pocketmine\entity\projectile\EnderPearl;
 use pocketmine\math\Vector3;
 use pocketmine\promise\Promise;
 use pocketmine\world\dimension\DimensionSettings;
@@ -62,6 +64,8 @@ final class PortalTravel{
 	private array $netherTouches = [];
 	/** @var array<int, Entity> */
 	private array $endTouches = [];
+	/** @var array<int, int> Entity ID => pending End gateway timeout or next allowed tick. */
+	private array $gatewayCooldowns = [];
 
 	public function __construct(
 		private Dimensions $dimensions,
@@ -74,17 +78,21 @@ final class PortalTravel{
 
 	public function tick() : void{
 		++$this->currentTick;
-		foreach($this->linkedArrivals as $id => &$arrival){
+		foreach($this->gatewayCooldowns as $id => $until){
+			if($until <= $this->currentTick){
+				unset($this->gatewayCooldowns[$id]);
+			}
+		}
+		foreach($this->linkedArrivals as $id => $arrival){
 			$entity = $arrival["entity"];
 			if(!$this->canTravel($entity)){
 				unset($this->linkedArrivals[$id]);
 			}elseif($this->isTouchingPortal($entity, true) || $this->isTouchingPortal($entity, false)){
-				$arrival["outsideTicks"] = 0;
-			}elseif(++$arrival["outsideTicks"] >= 2){
+				$this->linkedArrivals[$id]["outsideTicks"] = 0;
+			}elseif(++$this->linkedArrivals[$id]["outsideTicks"] >= 2){
 				unset($this->linkedArrivals[$id]);
 			}
 		}
-		unset($arrival);
 		foreach($this->pending as $id => $request){
 			if(!$this->requestIsValid($request)){
 				unset($this->pending[$id]);
@@ -149,6 +157,61 @@ final class PortalTravel{
 		}
 		$this->netherTouches = [];
 		$this->endTouches = [];
+	}
+
+	public function touchEndGateway(Entity $entity, Position $position) : void{
+		$world = $position->getWorld();
+		if(!$this->canTravel($entity) || $entity->getWorld() !== $world || $this->dimensions->getDimension($world) !== DimensionIds::THE_END){
+			return;
+		}
+		$tile = $world->getTile($position);
+		if(!$tile instanceof EndGatewayTile){
+			return;
+		}
+		$exit = $tile->getExit();
+		if($exit === null || !$world->isInWorld($exit->getFloorX(), $exit->getFloorY(), $exit->getFloorZ())){
+			return;
+		}
+		$traveller = $entity instanceof EnderPearl ? $entity->getOwningEntity() : $entity;
+		if($traveller === null || !$this->canTravel($traveller) || $traveller->getWorld() !== $world){
+			return;
+		}
+		$id = $traveller->getId();
+		if(isset($this->gatewayCooldowns[$id])){
+			return;
+		}
+		if($entity instanceof EnderPearl){
+			$entity->flagForDespawn();
+		}
+		$deadline = $this->currentTick + $this->settings->portalLoadTimeoutTicks;
+		$this->gatewayCooldowns[$id] = $deadline;
+		$version = $traveller->getPortalTravelVersion();
+		$exact = $tile->isExact();
+		$fromPearl = $entity instanceof EnderPearl;
+		$world->requestChunkPopulation($exit->getFloorX() >> 4, $exit->getFloorZ() >> 4, null)->onCompletion(
+			function() use ($traveller, $world, $position, $exit, $exact, $fromPearl, $id, $deadline, $version) : void{
+				if(($this->gatewayCooldowns[$id] ?? null) !== $deadline || !$world->isLoaded() ||
+					!$this->canTravel($traveller) || $traveller->getWorld() !== $world || $traveller->getPortalTravelVersion() !== $version ||
+					(!$fromPearl && $traveller->getPosition()->distanceSquared($position->add(0.5, 0.0, 0.5)) > 4.0)){
+					return;
+				}
+				$this->gatewayCooldowns[$id] = $this->currentTick + 40;
+				$y = $exit->getFloorY();
+				if(!$exact){
+					$floor = $world->getHighestBlockAt($exit->getFloorX(), $exit->getFloorZ());
+					if($floor === null || $floor + 1 >= $world->getMaxY()){
+						return;
+					}
+					$y = $floor + 1;
+				}
+				$traveller->teleport(new Position($exit->getFloorX() + 0.5, $y, $exit->getFloorZ() + 0.5, $world));
+			},
+			function() use ($id, $deadline) : void{
+				if(($this->gatewayCooldowns[$id] ?? null) === $deadline){
+					unset($this->gatewayCooldowns[$id]);
+				}
+			}
+		);
 	}
 
 	public function touchNetherPortal(Entity $entity) : void{
@@ -329,7 +392,10 @@ final class PortalTravel{
 		return true;
 	}
 
-	/** Dispatch once; a redirected target must pass the same loading and safety guards as a linked target. */
+	/**
+	 * Dispatch once. A redirected target must pass the loading and safety guards.
+	 * @phpstan-param Closure() : void $onSuccess
+	 */
 	private function teleport(Entity $entity, bool $nether, Position $to, ?float $yaw, ?float $pitch, Closure $onSuccess, ?PortalLink $link = null) : void{
 		$source = $entity->getWorld();
 		$version = $entity->getPortalTravelVersion();
@@ -459,13 +525,13 @@ final class PortalTravel{
 					}
 				},
 				function() use($id, $token) : void{
-					if(($this->pending[$id]["token"] ?? null) === $token){
+					if(isset($this->pending[$id]) && $this->pending[$id]["token"] === $token){
 						unset($this->pending[$id]);
 					}
 				}
 			);
 		}catch(\Throwable $e){
-			if(($this->pending[$id]["token"] ?? null) === $token){
+			if(isset($this->pending[$id]) && $this->pending[$id]["token"] === $token){
 				unset($this->pending[$id]);
 			}
 			$world->getServer()->getLogger()->logException($e);

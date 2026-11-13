@@ -38,6 +38,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
+use pocketmine\world\dimension\portal\block\EndGateway;
 use pocketmine\world\generator\vanilla\VanillaDataFetcher;
 use pocketmine\world\generator\vanilla\WorldgenData;
 use function array_reverse;
@@ -195,11 +196,11 @@ final class JavaBlocks{
 	private int $pmAir;
 	private int $pmWaterState;
 
-	public static function get(string $dataDir) : self{
-		return self::$instances[$dataDir] ??= new self($dataDir);
+	public static function get(string $dataDir, bool $hasStructureContent = false) : self{
+		return self::$instances[$dataDir . "\0" . (int) $hasStructureContent] ??= new self($dataDir, $hasStructureContent);
 	}
 
-	private function __construct(private string $dataDir){
+	private function __construct(private string $dataDir, public readonly bool $hasStructureContent){
 		$json = json_decode(Filesystem::fileGetContents($dataDir . "/" . VanillaDataFetcher::JAVA_BLOCKS_FILE), true, 16, JSON_THROW_ON_ERROR);
 		if(!is_array($json) || !is_array($json["blocks"] ?? null)){
 			throw new \RuntimeException("Invalid " . VanillaDataFetcher::JAVA_BLOCKS_FILE);
@@ -873,6 +874,10 @@ final class JavaBlocks{
 			}catch(\Throwable){
 				$pm = $this->pmAir;
 			}
+		}
+		if(!$this->hasStructureContent && $name === "minecraft:end_gateway" &&
+			RuntimeBlockStateRegistry::getInstance()->fromStateId($pm) instanceof EndGateway){
+			$pm = $this->pmAir;
 		}
 		$this->pmWater[$state] = ($this->fluid($state) & 15) === self::FLUID_WATER && $this->blockOf[$state] !== $this->waterBlock;
 		return $this->toPm[$state] = $pm;

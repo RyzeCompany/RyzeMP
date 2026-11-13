@@ -88,7 +88,7 @@ final class EndCityPiece extends TemplatePiece{
 					->setString(Tile::TAG_ID, "ItemFrame")
 					->setFloat(ItemFrameTile::TAG_ITEM_ROTATION, 0.0)
 					->setFloat(ItemFrameTile::TAG_ITEM_DROP_CHANCE, 1.0);
-				$elytra = StringToItemParser::getInstance()->parse("elytra");
+				$elytra = $c->blocks->hasStructureContent ? StringToItemParser::getInstance()->parse("elytra") : null;
 				if($elytra !== null){
 					$tile->setTag(ItemFrameTile::TAG_ITEM, $elytra->nbtSerialize());
 				}

@@ -5,15 +5,24 @@ declare(strict_types=1);
 namespace RyzeTests\Worldgen;
 
 use pocketmine\block\tile\Chest;
+use pocketmine\block\tile\EndGateway;
 use pocketmine\block\tile\MonsterSpawner;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\entity\Location;
+use pocketmine\entity\object\EndCrystal;
+use pocketmine\entity\object\ItemEntity;
+use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
+use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
 use pocketmine\world\dimension\generator\VanillaGenerators;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\format\io\leveldb\LevelDB;
+use pocketmine\world\dimension\portal\block\EndGateway as EndGatewayBlock;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\generator\vanilla\VanillaDataIdentity;
 use pocketmine\world\World;
@@ -31,11 +40,12 @@ final class Main extends PluginBase{
 		"world_nether" => [7, 42],
 		"world_the_end" => [62, 24]
 	];
+	private const END_GATEWAY = [-3793, 69, -407];
 
 	protected function onEnable() : void{
 		$cache = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
 		$profile = getenv("RYZE_WORLDGEN_TEST_PROFILE");
-		if($cache === false || !in_array($profile, ["core-v1", "core-v4", "core-v5"], true)){
+		if($cache === false || !in_array($profile, ["core-v1", "core-v4", "core-v5", "core-v6"], true)){
 			throw new \RuntimeException("Worldgen fixture requires a data cache and a test profile");
 		}
 		$preset = "$profile;data=$cache";
@@ -62,7 +72,8 @@ final class Main extends PluginBase{
 
 	private function exerciseWorlds(string $profile, string $preset, string $snapshotPath, bool $reopen) : void{
 		$server = $this->getServer();
-		$remaining = count(self::WORLDS) + ($profile === "core-v5" ? count(self::STRUCTURE_CHUNKS) : 0);
+		$remaining = count(self::WORLDS) + (VanillaDataIdentity::hasStructures($preset) ? count(self::STRUCTURE_CHUNKS) : 0)
+			+ (VanillaDataIdentity::hasStructureContent($preset) ? 2 : 0);
 		$record = [];
 		$expected = $reopen ? json_decode(file_get_contents($snapshotPath), true, flags: JSON_THROW_ON_ERROR) : [];
 		$start = hrtime(true);
@@ -123,7 +134,7 @@ final class Main extends PluginBase{
 					throw new \RuntimeException("Worldgen population was rejected for $name");
 				}
 			);
-			if($profile === "core-v5"){
+			if(VanillaDataIdentity::hasStructures($preset)){
 				[$structureX, $structureZ] = self::STRUCTURE_CHUNKS[$name];
 				$key = "$name-structure";
 				if($reopen){
@@ -146,6 +157,80 @@ final class Main extends PluginBase{
 				}
 			}
 		}
+		if(VanillaDataIdentity::hasStructureContent($preset)){
+			$end = $server->getWorldManager()->getWorldByName("world_the_end") ?? throw new \RuntimeException("End is unavailable");
+			$this->checkEndCrystal($end, $reopen, $complete);
+			$this->checkEndGateway($end, $reopen, $complete);
+		}
+	}
+
+	private function checkEndCrystal(World $world, bool $reopen, \Closure $complete) : void{
+		$check = static function() use ($world, $complete) : void{
+			$crystals = array_filter(
+				$world->getChunkEntities(2, 0),
+				static fn($entity) => $entity instanceof EndCrystal && $entity->getPosition()->distanceSquared(new Vector3(42.5, 98, 0.5)) < 0.01
+			);
+			if(count($crystals) !== 1 || $world->getBlockAt(42, 97, 0)->getTypeId() !== VanillaBlocks::BEDROCK()->getTypeId()){
+				throw new \RuntimeException("The End spike crystal is missing or duplicated");
+			}
+			$world->save(true);
+			$complete();
+		};
+		if($reopen){
+			$world->loadChunk(2, 0) ?? throw new \RuntimeException("The End spike chunk did not reopen");
+			$check();
+		}else{
+			$world->requestChunkPopulation(2, 0, null)->onCompletion($check, self::populationFailure("End spike"));
+		}
+	}
+
+	private function checkEndGateway(World $world, bool $reopen, \Closure $complete) : void{
+		[$x, $y, $z] = self::END_GATEWAY;
+		$check = function(Chunk $chunk) use ($world, $x, $y, $z, $reopen, $complete) : void{
+			$tile = $world->getTileAt($x, $y, $z);
+			$gateway = $world->getBlockAt($x, $y, $z);
+			if(!$gateway instanceof EndGatewayBlock || !$tile instanceof EndGateway ||
+				!$tile->isExact() || !$tile->getExit()?->equals(new Vector3(100, 50, 0))){
+				throw new \RuntimeException("Generated End gateway did not retain its exit at $x,$y,$z");
+			}
+			foreach([589, 2193, 2225] as $protocol){
+				$converter = TypeConverter::getInstance($protocol);
+				$serialized = ChunkSerializer::serializeFullChunk($chunk, DimensionIds::THE_END, $converter);
+				$state = $converter->getBlockTranslator()->internalIdToNetworkStateData($gateway->getStateId());
+				$elytra = StringToItemParser::getInstance()->parse("elytra");
+				if($serialized === "" || $state->getName() !== "minecraft:end_gateway" || $elytra === null ||
+					$converter->getItemTranslator()->toNetworkIdQuiet($elytra) === null){
+					throw new \RuntimeException("End gateway or Elytra could not serialize for Bedrock $protocol");
+				}
+			}
+			if(!$reopen){
+				$world->save(true);
+				$complete();
+				return;
+			}
+			// A real server entity exercises the gateway's asynchronous destination path.
+			$world->requestChunkPopulation(6, 0, null)->onCompletion(function() use ($world, $gateway, $x, $y, $z, $complete) : void{
+				$entity = new ItemEntity(new Location($x + 0.5, $y, $z + 0.5, $world, 0, 0), VanillaItems::DIAMOND());
+				$gateway->onEntityInside($entity);
+				if(!$entity->getPosition()->equals(new Vector3(100.5, 50, 0.5))){
+					throw new \RuntimeException("End gateway did not teleport the entity to its stored exit");
+				}
+				$entity->close();
+				$complete();
+			}, self::populationFailure("End gateway exit"));
+		};
+		if($reopen){
+			$check($world->loadChunk($x >> 4, $z >> 4) ?? throw new \RuntimeException("The End gateway chunk did not reopen"));
+		}else{
+			$world->requestChunkPopulation($x >> 4, $z >> 4, null)->onCompletion($check, self::populationFailure("End gateway"));
+		}
+	}
+
+	/** @return \Closure(): void */
+	private static function populationFailure(string $context) : \Closure{
+		return static function() use ($context) : void{
+			throw new \RuntimeException("Population rejected for $context");
+		};
 	}
 
 	private static function checkDungeonLoot(World $world) : void{

@@ -27,7 +27,6 @@ use pocketmine\data\bedrock\item\SavedItemStackData;
 use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
 use pocketmine\loot\LootContext;
-use pocketmine\loot\LootData;
 use pocketmine\loot\LootTables;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
@@ -40,7 +39,6 @@ use pocketmine\nbt\UnexpectedTagTypeException;
 use pocketmine\utils\Utils;
 use pocketmine\world\Position;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
-use pocketmine\world\generator\vanilla\VanillaDataIdentity;
 
 /**
  * This trait implements most methods in the {@link Container} interface. It should only be used by Tiles.
@@ -51,9 +49,6 @@ trait ContainerTrait{
 
 	/** @var array<string, Tag> Unopened loot data preserved alongside the saved inventory. */
 	private array $lootTableNBT = [];
-
-	/** @var array<string, LootTables> */
-	private static array $worldgenLootTables = [];
 
 	abstract public function getRealInventory() : Inventory;
 
@@ -117,19 +112,8 @@ trait ContainerTrait{
 		}
 		$position = $this->getPosition();
 		$world = $position->getWorld();
-		$preset = $world->getProvider()->getWorldData()->getGeneratorOptions();
-		if(!VanillaDataIdentity::hasPlacedFeatures($preset)){
-			return;
-		}
 		try{
-			$cache = VanillaDataIdentity::parse($preset);
-			$directory = $cache["directory"];
-			if(!LootData::isAvailable($directory)){
-				return;
-			}
-			VanillaDataIdentity::assertMatches($directory, $cache["hash"]);
-			$tables = self::$worldgenLootTables[$directory . ":" . $cache["hash"]] ??= new LootTables($directory);
-			$loot = $tables->get($table->getValue());
+			$loot = LootTables::forWorld($world)?->get($table->getValue());
 			if($loot === null){
 				return;
 			}

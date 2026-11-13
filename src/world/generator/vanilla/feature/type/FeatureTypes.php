@@ -90,7 +90,7 @@ final class FeatureTypes{
 			//End
 			"end_spike" => EndFeatures::spike($registry, $json),
 			"end_platform" => EndFeatures::platform($registry),
-			"end_gateway" => EndFeatures::gateway($registry),
+			"end_gateway" => EndFeatures::gateway($registry, $json),
 			"chorus_plant" => EndFeatures::chorusPlant($registry),
 			"end_island" => EndFeatures::island($registry),
 			default => null

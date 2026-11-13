@@ -11,7 +11,7 @@ use pocketmine\world\generator\InvalidGeneratorOptionsException;
 /**
  * Experimental opt-in VanillaMine density/material/carver pipeline for secondary dimensions.
  * Does not replace RyzeMP's existing Nether/End generators, dimension IDs or portals.
- * Feature/structure decoration is deliberately NOT claimed until ported and tested.
+ * The selected preset controls feature and structure decoration.
  */
 abstract class VanillaDimensionCoreGenerator extends Generator{
 	protected const DIMENSION = "";
@@ -24,7 +24,8 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 		parent::__construct($seed, $preset);
 		$this->writer = new VanillaDensityChunkWriter(
 			$seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset),
-			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset)
+			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset),
+			VanillaDataIdentity::hasStructureContent($preset)
 		);
 	}
 

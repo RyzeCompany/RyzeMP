@@ -36,6 +36,7 @@ final class VanillaDataIdentity{
 	public const FEATURES_PRESET_PREFIX = "core-v3;data=";
 	public const COMPILED_PRESET_PREFIX = "core-v4;data=";
 	public const STRUCTURES_PRESET_PREFIX = "core-v5;data=";
+	public const CONTENT_PRESET_PREFIX = "core-v6;data=";
 
 	private const ASSETS = [
 		"data",
@@ -113,7 +114,7 @@ final class VanillaDataIdentity{
 	public static function parse(string $preset) : array{
 		$prefix = self::pinnedPrefix($preset);
 		if($prefix === null){
-			throw new InvalidGeneratorOptionsException("Expected core-v2 through core-v5 with an absolute data path and SHA-256");
+			throw new InvalidGeneratorOptionsException("Expected core-v2 through core-v6 with an absolute data path and SHA-256");
 		}
 		$rest = substr($preset, strlen($prefix));
 		$separator = strrpos($rest, ";sha256=");
@@ -146,7 +147,11 @@ final class VanillaDataIdentity{
 	}
 
 	public static function hasStructures(string $preset) : bool{
-		return str_starts_with($preset, self::STRUCTURES_PRESET_PREFIX);
+		return str_starts_with($preset, self::STRUCTURES_PRESET_PREFIX) || self::hasStructureContent($preset);
+	}
+
+	public static function hasStructureContent(string $preset) : bool{
+		return str_starts_with($preset, self::CONTENT_PRESET_PREFIX);
 	}
 
 	/** Historical core-v1 has no pinned hash. */
@@ -155,7 +160,7 @@ final class VanillaDataIdentity{
 	}
 
 	private static function pinnedPrefix(string $preset) : ?string{
-		foreach([self::PRESET_PREFIX, self::FEATURES_PRESET_PREFIX, self::COMPILED_PRESET_PREFIX, self::STRUCTURES_PRESET_PREFIX] as $prefix){
+		foreach([self::PRESET_PREFIX, self::FEATURES_PRESET_PREFIX, self::COMPILED_PRESET_PREFIX, self::STRUCTURES_PRESET_PREFIX, self::CONTENT_PRESET_PREFIX] as $prefix){
 			if(str_starts_with($preset, $prefix)){
 				return $prefix;
 			}

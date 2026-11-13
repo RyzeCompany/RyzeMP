@@ -23,6 +23,10 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\feature\type;
 
+use pocketmine\block\tile\EndGateway;
+use pocketmine\block\tile\Tile;
+use pocketmine\math\Vector3;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\generator\vanilla\EndSpike;
 use pocketmine\world\generator\vanilla\EndSpikes;
 use pocketmine\world\generator\vanilla\feature\block\Direction;
@@ -165,15 +169,17 @@ final class EndFeatures{
 		};
 	}
 
-	/**
-	 * End gateway with its bedrock frame. The exit of the gateway (block entity data) is not stored: the generator
-	 * writes no block entities; gateways without one far from the main island lead to the End spawn platform like
-	 * vanilla's end_gateway_return (see EndGatewayTravel).
-	 */
-	public static function gateway(FeatureRegistry $registry) : Feature{
+	/** @param mixed[] $json */
+	public static function gateway(FeatureRegistry $registry, array $json) : Feature{
 		$blocks = $registry->blocks;
-		return new class($blocks->defaultOf("end_gateway"), $blocks->defaultOf("bedrock")) implements Feature{
-			public function __construct(private int $gateway, private int $bedrock){}
+		$exit = $json["exit"] ?? null;
+		$tag = $blocks->hasStructureContent ? CompoundTag::create()->setString(Tile::TAG_ID, "EndGateway") : null;
+		if($tag !== null && is_array($exit) && is_int($exit[0] ?? null) && is_int($exit[1] ?? null) && is_int($exit[2] ?? null)){
+			$tag->setTag(EndGateway::TAG_EXIT, EndGateway::exitTag(new Vector3($exit[0], $exit[1], $exit[2])));
+			$tag->setByte(EndGateway::TAG_EXACT, ($json["exact"] ?? false) === true ? 1 : 0);
+		}
+		return new class($blocks->defaultOf("end_gateway"), $blocks->defaultOf("bedrock"), $tag) implements Feature{
+			public function __construct(private int $gateway, private int $bedrock, private ?CompoundTag $tile){}
 
 			public function place(FeatureContext $c, int $x, int $y, int $z) : bool{
 				$level = $c->level;
@@ -198,6 +204,9 @@ final class EndFeatures{
 							}
 						}
 					}
+				}
+				if($this->tile !== null){
+					$level->setBlockEntity($x, $y, $z, $this->tile);
 				}
 				return true;
 			}

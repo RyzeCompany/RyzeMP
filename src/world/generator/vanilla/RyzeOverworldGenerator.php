@@ -41,7 +41,8 @@ final class RyzeOverworldGenerator extends Generator{
 		parent::__construct($seed, $preset);
 		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter(
 			$seed, $dataDir, "overworld", VanillaDataIdentity::expectedHash($preset),
-			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset)
+			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset),
+			VanillaDataIdentity::hasStructureContent($preset)
 		) : null;
 		$this->sampler = new OverworldTerrainSampler($seed);
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();

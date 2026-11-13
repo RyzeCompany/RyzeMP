@@ -57,7 +57,16 @@ final class VanillaDensityChunkWriter{
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false, bool $useCompiledTerrain = false, bool $enableStructures = false){
+	public function __construct(
+		int $seed,
+		string $dataDir,
+		private string $dimension = "overworld",
+		private ?string $pinnedHash = null,
+		bool $enablePlacedFeatures = false,
+		bool $useCompiledTerrain = false,
+		bool $enableStructures = false,
+		bool $enableStructureContent = false
+	){
 		$this->terrainDataDir = $dataDir;
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($dataDir, $this->pinnedHash);
@@ -104,7 +113,8 @@ final class VanillaDensityChunkWriter{
 				$names,
 				$sample,
 				null,
-				$dimension === "end" ? TheEndBiomeSource::NAMES : FeatureRegistry::multiNoiseBiomes($data, $dimension)
+				$dimension === "end" ? TheEndBiomeSource::NAMES : FeatureRegistry::multiNoiseBiomes($data, $dimension),
+				$enableStructureContent
 			);
 			$this->features->regionRandomFactory = $router->random->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
 			$this->features->featuresEnabled = $enablePlacedFeatures;
@@ -148,7 +158,7 @@ final class VanillaDensityChunkWriter{
 			// Preserve the old unpinned core-v1 preset verbatim for existing
 			// experimental worlds; never upgrade their algorithm silently.
 			if(!str_starts_with($preset, self::PRESET_PREFIX)){
-				throw new InvalidGeneratorOptionsException("Expected core-v1 or a pinned core-v2 through core-v5 preset");
+				throw new InvalidGeneratorOptionsException("Expected core-v1 or a pinned core-v2 through core-v6 preset");
 			}
 			$dir = substr($preset, strlen(self::PRESET_PREFIX));
 			if($dir === "" || str_contains($dir, ";") || str_contains($dir, "\0") || !Path::isAbsolute($dir)){

@@ -18,6 +18,7 @@ use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\format\io\WorldProvider;
 use pocketmine\world\format\io\data\BedrockWorldData;
 use pocketmine\world\format\io\leveldb\LevelDB;
+use pocketmine\world\Position;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
 use function copy;
@@ -104,6 +105,10 @@ final class DimensionManager{
 
 	public function touchEndPortal(Entity $entity) : void{
 		$this->portalTravel->touchEndPortal($entity);
+	}
+
+	public function touchEndGateway(Entity $entity, Position $position) : void{
+		$this->portalTravel->touchEndGateway($entity, $position);
 	}
 
 	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{

@@ -69,7 +69,7 @@ def main():
     parser.add_argument("php", help="PHP 8.4 ZTS executable")
     parser.add_argument("phar", type=Path)
     parser.add_argument("cache", type=Path)
-    parser.add_argument("profiles", nargs="*", default=["core-v1", "core-v4", "core-v5"])
+    parser.add_argument("profiles", nargs="*", default=["core-v1", "core-v4", "core-v5", "core-v6"])
     args = parser.parse_args()
     fixture = Path(__file__).resolve().parent / "fixtures/worldgen"
     for profile in args.profiles:
