@@ -12,6 +12,7 @@ use pocketmine\entity\animal\Sheep;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
+use pocketmine\entity\SpawnerEntityRegistry;
 use pocketmine\entity\SpawnReason;
 use pocketmine\entity\Squid;
 use pocketmine\entity\Zombie;
@@ -144,8 +145,11 @@ final class NaturalMobSpawner{
 				$pre->call();
 				if($pre->isCancelled()){continue;}
 			}
-			/** @var Living $mob */
-			$mob=new $class($location);
+			$mob=SpawnerEntityRegistry::getInstance()->spawn($identifier,$location);
+			if(!$mob instanceof Living){
+				$mob?->close();
+				continue;
+			}
 			$mob->setCanSaveWithChunk(false);
 			if(EntityNaturalSpawnEvent::hasHandlers()){
 				$event=new EntityNaturalSpawnEvent($mob,EntityNaturalSpawnEvent::CAUSE_NATURAL,$surface);

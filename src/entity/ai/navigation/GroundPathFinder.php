@@ -4,6 +4,7 @@ namespace pocketmine\entity\ai\navigation;
 
 use pocketmine\math\Vector3;
 use pocketmine\world\World;
+use pocketmine\utils\Utils;
 
 /** Bounded, no-chunk-load walking A*; never treats unloaded terrain as air. */
 final class GroundPathFinder{
@@ -28,7 +29,7 @@ final class GroundPathFinder{
 		$visited=0;
 		while($open!==[] && $visited++<max(16,min(1024,$maxNodes))){
 			$best="";$score=PHP_INT_MAX;
-			foreach($open as $key=>$node){ if($node["f"]<$score){$best=$key;$score=$node["f"];} }
+			foreach(Utils::stringifyKeys($open) as $key=>$node){ if($node["f"]<$score){$best=$key;$score=$node["f"];} }
 			if($best===""){break;}
 			$current=$open[$best];unset($open[$best]);
 			if($best===$goal){
