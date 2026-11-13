@@ -25,6 +25,7 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\AnalogRedstoneSignalEmitter;
 use pocketmine\block\utils\AnalogRedstoneSignalEmitterTrait;
+use pocketmine\block\utils\RedstonePowerSource;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
@@ -37,8 +38,16 @@ use function max;
 use function round;
 use const M_PI;
 
-class DaylightSensor extends Transparent implements AnalogRedstoneSignalEmitter{
+class DaylightSensor extends Transparent implements AnalogRedstoneSignalEmitter, RedstonePowerSource{
 	use AnalogRedstoneSignalEmitterTrait;
+
+	public function getWeakPower(int $face) : int{
+		return $this->signalStrength;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return 0;
+	}
 
 	protected bool $inverted = false;
 
@@ -101,3 +110,4 @@ class DaylightSensor extends Transparent implements AnalogRedstoneSignalEmitter{
 
 	//TODO
 }
+
