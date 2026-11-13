@@ -17,11 +17,12 @@ final class GameRules{
 	public const DO_WEATHER_CYCLE = "doweathercycle";
 	public const DO_FIRE_TICK = "dofiretick";
 	public const DO_MOB_SPAWNING = "domobspawning";
+	public const MOB_GRIEFING = "mobgriefing";
 	/** @var array<string, bool> */
 	private array $values;
 
 	public function __construct(private string $path, bool $defaultShowCoordinates = false){
-		$this->values = [self::SHOW_COORDINATES => $defaultShowCoordinates, self::DO_WEATHER_CYCLE => true, self::DO_FIRE_TICK => true, self::DO_MOB_SPAWNING => true];
+		$this->values = [self::SHOW_COORDINATES => $defaultShowCoordinates, self::DO_WEATHER_CYCLE => true, self::DO_FIRE_TICK => true, self::DO_MOB_SPAWNING => true, self::MOB_GRIEFING => true];
 		if(is_file($path)){
 			$config = new Config($path, Config::YAML);
 			foreach($this->values as $name => $default){
@@ -60,7 +61,8 @@ final class GameRules{
 			self::SHOW_COORDINATES => new BoolGameRule($this->getBool(self::SHOW_COORDINATES), false),
 			self::DO_WEATHER_CYCLE => new BoolGameRule($this->getBool(self::DO_WEATHER_CYCLE), false),
 			self::DO_FIRE_TICK => new BoolGameRule($this->getBool(self::DO_FIRE_TICK), false),
-			self::DO_MOB_SPAWNING => new BoolGameRule($this->getBool(self::DO_MOB_SPAWNING), false)
+			self::DO_MOB_SPAWNING => new BoolGameRule($this->getBool(self::DO_MOB_SPAWNING), false),
+			self::MOB_GRIEFING => new BoolGameRule($this->getBool(self::MOB_GRIEFING), false)
 		];
 	}
 }
