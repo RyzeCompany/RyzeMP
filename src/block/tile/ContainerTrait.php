@@ -30,7 +30,9 @@ use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\UnexpectedTagTypeException;
+use pocketmine\utils\Utils;
 use pocketmine\world\Position;
 
 /**
@@ -40,9 +42,21 @@ trait ContainerTrait{
 	/** @var string|null */
 	private $lock = null;
 
+	/** @var array<string, Tag> Unopened loot data preserved alongside the saved inventory. */
+	private array $lootTableNBT = [];
+
 	abstract public function getRealInventory() : Inventory;
 
 	protected function loadItems(CompoundTag $tag) : void{
+		$this->lootTableNBT = [];
+		if(($lootTable = $tag->getTag(Container::TAG_LOOT_TABLE)) instanceof StringTag && $lootTable->getValue() !== ""){
+			$this->lootTableNBT[Container::TAG_LOOT_TABLE] = clone $lootTable;
+			foreach([Container::TAG_LOOT_TABLE_SEED, Container::TAG_LOOT_TABLE_SEED_LONG] as $key){
+				if(($seed = $tag->getTag($key)) !== null){
+					$this->lootTableNBT[$key] = clone $seed;
+				}
+			}
+		}
 		try{
 			$inventoryTag = $tag->getListTag(Container::TAG_ITEMS, CompoundTag::class);
 		}catch(UnexpectedTagTypeException){
@@ -77,6 +91,9 @@ trait ContainerTrait{
 		}
 
 		$tag->setTag(Container::TAG_ITEMS, new ListTag($items, NBT::TAG_Compound));
+		foreach(Utils::stringifyKeys($this->lootTableNBT) as $key => $value){
+			$tag->setTag($key, clone $value);
+		}
 
 		if($this->lock !== null){
 			$tag->setString(Container::TAG_LOCK, $this->lock);

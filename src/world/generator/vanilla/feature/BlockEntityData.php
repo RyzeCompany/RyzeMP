@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\feature;
 
+use pocketmine\block\tile\Container;
 use pocketmine\block\tile\Tile;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
@@ -89,9 +90,9 @@ final class BlockEntityData{
 	public static function lootContainer(string $tileId, string $javaLootTable, int $seed) : CompoundTag{
 		return CompoundTag::create()
 			->setString(Tile::TAG_ID, $tileId)
-			->setString("LootTable", self::toBedrockPath($javaLootTable))
-			->setInt("LootTableSeed", self::int32($seed))
-			->setLong("LootTableSeedLong", $seed);
+			->setString(Container::TAG_LOOT_TABLE, self::toBedrockPath($javaLootTable))
+			->setInt(Container::TAG_LOOT_TABLE_SEED, self::int32($seed))
+			->setLong(Container::TAG_LOOT_TABLE_SEED_LONG, $seed);
 	}
 
 	/**

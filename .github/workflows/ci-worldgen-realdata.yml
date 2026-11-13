@@ -5,7 +5,12 @@ on:
     paths:
       - '.github/workflows/ci-worldgen-realdata.yml'
       - 'src/world/generator/vanilla/**'
+      - 'src/world/format/**'
+      - 'src/world/World.php'
+      - 'src/block/tile/**'
       - 'tests/phpunit/world/generator/vanilla/**'
+      - 'tests/fixtures/worldgen/**'
+      - 'tests/worldgen-phar-smoke.py'
       - 'tools/prepare-vanillamine-worldgen.php'
   workflow_dispatch:
 
@@ -37,10 +42,16 @@ jobs:
       - name: Compare VanillaMine carvers and dimensions to independent Java reference
         timeout-minutes: 12
         run: |
-          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning \
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --fail-on-skipped \
             tests/phpunit/world/generator/vanilla/CarverTest.php \
             tests/phpunit/world/generator/vanilla/VanillaRealDataReferenceTest.php \
             tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php
+      - name: Build the PHAR and restart three opt-in LevelDB worlds
+        timeout-minutes: 12
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out="$RUNNER_TEMP/RyzeMP-worldgen.phar"
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
       - name: Erase downloaded Minecraft data (never upload artifacts)
         if: always()
         run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"

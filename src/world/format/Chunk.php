@@ -29,6 +29,7 @@ namespace pocketmine\world\format;
 use pocketmine\block\Block;
 use pocketmine\block\tile\Tile;
 use pocketmine\data\bedrock\BiomeIds;
+use pocketmine\nbt\tag\CompoundTag;
 use function array_map;
 
 class Chunk{
@@ -62,6 +63,9 @@ class Chunk{
 	 * @phpstan-var array<int, Tile>
 	 */
 	protected array $tiles = [];
+
+	/** @var array<int, CompoundTag> Generated block entities awaiting installation on the world thread. */
+	private array $pendingTileNBT = [];
 
 	protected HeightArray $heightMap;
 
@@ -228,6 +232,36 @@ class Chunk{
 	 */
 	public function getTile(int $x, int $y, int $z) : ?Tile{
 		return $this->tiles[Chunk::blockHash($x, $y, $z)] ?? null;
+	}
+
+	/** @internal */
+	public function addPendingTileNBT(CompoundTag $nbt) : void{
+		$hash = self::blockHash($nbt->getInt(Tile::TAG_X), $nbt->getInt(Tile::TAG_Y), $nbt->getInt(Tile::TAG_Z));
+		$this->pendingTileNBT[$hash] = clone $nbt;
+		$this->terrainDirtyFlags |= self::DIRTY_FLAG_BLOCKS;
+	}
+
+	/** @internal */
+	public function getPendingTileNBTAt(int $x, int $y, int $z) : ?CompoundTag{
+		return $this->pendingTileNBT[self::blockHash($x, $y, $z)] ?? null;
+	}
+
+	/** @internal */
+	public function removePendingTileNBT(int $x, int $y, int $z) : void{
+		unset($this->pendingTileNBT[self::blockHash($x, $y, $z)]);
+	}
+
+	/**
+	 * @internal
+	 * @return array<int, CompoundTag>
+	 */
+	public function getPendingTileNBT() : array{
+		return $this->pendingTileNBT;
+	}
+
+	/** @internal */
+	public function clearPendingTileNBT() : void{
+		$this->pendingTileNBT = [];
 	}
 
 	/**

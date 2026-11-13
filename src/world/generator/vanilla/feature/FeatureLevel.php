@@ -68,6 +68,8 @@ final class FeatureLevel{
 	private array $chunks = [];
 	/** @phpstan-var array<int, true> */
 	private array $dirty = [];
+	/** @var array<int, true> */
+	private array $pendingTileChunks = [];
 	/** See {@link FeatureLevel::begin()}. */
 	private bool $copyOnWrite = false;
 	/** @phpstan-var array<int, true> subchunk indexes already copied in copy-on-write mode */
@@ -139,6 +141,7 @@ final class FeatureLevel{
 		$this->subChunks = [];
 		$this->chunks = [];
 		$this->dirty = [];
+		$this->pendingTileChunks = [];
 		$this->written = [];
 		$this->heightmaps = [];
 		$this->terrainHeights = [];
@@ -149,6 +152,9 @@ final class FeatureLevel{
 				$chunk = $world->getChunk($chunkX + $dx, $chunkZ + $dz) ?? throw new \InvalidArgumentException("Chunk " . ($chunkX + $dx) . " " . ($chunkZ + $dz) . " is not available for decoration");
 				$index = ($dx + 1) * 3 + ($dz + 1);
 				$this->chunks[$index] = $chunk;
+				if($chunk->getPendingTileNBT() !== []){
+					$this->pendingTileChunks[$index] = true;
+				}
 				for($s = 0; $s < $this->sections; ++$s){
 					$this->subChunks[$index * $this->sections + $s] = $chunk->getSubChunk($minSection + $s);
 				}
@@ -165,6 +171,7 @@ final class FeatureLevel{
 			$this->chunks[$index]->setTerrainDirtyFlag(Chunk::DIRTY_FLAG_BLOCKS, true);
 		}
 		$this->written = [];
+		$this->pendingTileChunks = [];
 		$this->subChunks = [];
 		$this->chunks = [];
 	}
@@ -225,6 +232,13 @@ final class FeatureLevel{
 		$key = (($y - $this->minY) * self::SIZE + $dz) * self::SIZE + $dx;
 		$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
 		$blocks = $this->blocks;
+		if(isset($this->pendingTileChunks[$chunkIndex])){
+			$chunk = $this->chunks[$chunkIndex];
+			if($chunk->getPendingTileNBTAt($x & 15, $y, $z & 15) !== null &&
+				$blocks->blockOf[$this->getState($x, $y, $z)] !== $blocks->blockOf[$state]){
+				$chunk->removePendingTileNBT($x & 15, $y, $z & 15);
+			}
+		}
 		$pm = $blocks->toPm($state);
 		$water = $blocks->pmNeedsWater($state);
 		if($this->logWrites){
@@ -262,6 +276,9 @@ final class FeatureLevel{
 		}
 		$key = (($y - $this->minY) * self::SIZE + $dz) * self::SIZE + $dx;
 		$chunkIndex = ($dx >> 4) * 3 + ($dz >> 4);
+		if(isset($this->pendingTileChunks[$chunkIndex])){
+			$this->chunks[$chunkIndex]->removePendingTileNBT($x & 15, $y, $z & 15);
+		}
 		unset($this->written[$key]);
 		if($this->logWrites){
 			$this->writeLog[] = $key | 0x80000000;
@@ -327,9 +344,15 @@ final class FeatureLevel{
 	 * world, see Chunk::addPendingTileNBT()). Returns false if the position cannot be written.
 	 */
 	public function setBlockEntity(int $x, int $y, int $z, CompoundTag $nbt) : bool{
-		// RyzeMP's worker chunk API has no pending-tile NBT persistence.
-		// Fail closed instead of silently losing loot, inventories or NBT.
-		throw new \RuntimeException("Worldgen block entities require a RyzeMP chunk/LevelDB persistence adapter");
+		if(!$this->ensureCanWrite($x, $y, $z)){
+			return false;
+		}
+		$chunkIndex = (($x - $this->minX) >> 4) * 3 + (($z - $this->minZ) >> 4);
+		$tag = (clone $nbt)->setInt(Tile::TAG_X, $x)->setInt(Tile::TAG_Y, $y)->setInt(Tile::TAG_Z, $z);
+		$this->chunks[$chunkIndex]->addPendingTileNBT($tag);
+		$this->pendingTileChunks[$chunkIndex] = true;
+		$this->dirty[$chunkIndex] = true;
+		return true;
 	}
 
 	public function addEntity(int $x, int $z, CompoundTag $nbt) : bool{

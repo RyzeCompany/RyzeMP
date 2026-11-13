@@ -124,15 +124,22 @@ final class TileFactory{
 
 	/**
 	 * @internal
+	 * @phpstan-return class-string<Tile>|null
+	 */
+	public function getClassFromSaveId(string $saveId) : ?string{
+		return $this->knownTiles[$saveId] ?? null;
+	}
+
+	/**
+	 * @internal
 	 * @throws SavedDataLoadingException
 	 */
 	public function createFromData(World $world, CompoundTag $nbt) : ?Tile{
 		try{
-			$type = $nbt->getString(Tile::TAG_ID, "");
-			if(!isset($this->knownTiles[$type])){
+			$class = $this->getClassFromSaveId($nbt->getString(Tile::TAG_ID, ""));
+			if($class === null){
 				return null;
 			}
-			$class = $this->knownTiles[$type];
 			assert(is_a($class, Tile::class, true));
 			/**
 			 * @var Tile $tile

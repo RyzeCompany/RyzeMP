@@ -2800,6 +2800,9 @@ class World implements ChunkManager{
 		unset($this->blockCollisionBoxCache[$chunkHash]);
 		unset($this->changedBlocks[$chunkHash]);
 		$chunk->setTerrainDirty();
+		if($chunk->getPendingTileNBT() !== []){
+			$this->createPendingTiles($chunkX, $chunkZ, $chunk);
+		}
 		$this->markTickingChunkForRecheck($chunkX, $chunkZ); //this replacement chunk may not meet the conditions for ticking
 
 		if(!$this->isChunkInUse($chunkX, $chunkZ)){
@@ -2825,6 +2828,44 @@ class World implements ChunkManager{
 				foreach($this->getChunkEntities($chunkX + $cX, $chunkZ + $cZ) as $entity){
 					$entity->onNearbyBlockChange();
 				}
+			}
+		}
+	}
+
+	/** Installs generated tiles only after the chunk has passed the population lock checks. */
+	private function createPendingTiles(int $chunkX, int $chunkZ, Chunk $chunk) : void{
+		$pending = $chunk->getPendingTileNBT();
+		$chunk->clearPendingTileNBT();
+		$tileFactory = TileFactory::getInstance();
+		foreach($pending as $nbt){
+			$x = $nbt->getInt(Tile::TAG_X);
+			$y = $nbt->getInt(Tile::TAG_Y);
+			$z = $nbt->getInt(Tile::TAG_Z);
+			if(($x >> Chunk::COORD_BIT_SIZE) !== $chunkX || ($z >> Chunk::COORD_BIT_SIZE) !== $chunkZ || !$this->isInWorld($x, $y, $z)){
+				$this->logger->warning("Generated tile is outside its chunk at $x,$y,$z");
+				continue;
+			}
+			$localX = $x & Chunk::COORD_MASK;
+			$localZ = $z & Chunk::COORD_MASK;
+			if($chunk->getTile($localX, $y, $localZ) !== null){
+				continue; // Keep the saved inventory of a tile already present at this position.
+			}
+			$block = $this->blockStateRegistry->fromStateId($chunk->getBlockStateId($localX, $y, $localZ));
+			$expectedClass = $block->getIdInfo()->getTileClass();
+			$id = $nbt->getTag(Tile::TAG_ID);
+			$tileClass = $id instanceof StringTag ? $tileFactory->getClassFromSaveId($id->getValue()) : null;
+			if($expectedClass === null || $tileClass === null || !is_a($tileClass, $expectedClass, true)){
+				$name = $id instanceof StringTag ? $id->getValue() : "<missing id>";
+				$this->logger->debug("Generated tile $name has no compatible block at $x,$y,$z");
+				continue;
+			}
+			try{
+				$tile = $tileFactory->createFromData($this, $nbt);
+				if($tile !== null){
+					$this->addTile($tile);
+				}
+			}catch(SavedDataLoadingException $e){
+				$this->logger->error("Invalid generated tile at $x,$y,$z: " . $e->getMessage());
 			}
 		}
 	}

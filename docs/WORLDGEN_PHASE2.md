@@ -149,3 +149,26 @@ Village, temple, mineshaft, mansion, bastion, fortress, trial chamber, End City 
 Set POCKETMINE_VANILLA_WORLDGEN_DATA to the prepared authentic cache path, then run PHPUnit tests under tests/phpunit/world/generator/vanilla. CarverTest compares original cave masks, and VanillaRealDataReferenceTest compares Nether and End block/material and biome hashes against independently produced numerical Java 26.3 reference fixtures. Tests skip when real data is unavailable. Imported feature RNG and seed reference tests run without Mojang assets. A green CI result without the environment variable proves only synthetic/reference-numeric unit stages, not full Java world parity.
 
 Actual PHAR startup with opt-in worlds, LevelDB restart, real Bedrock clients, mixed-protocol sessions, data-driven structures and production TPS benchmarks remain acceptance blockers. Keep PR #60 Draft and use offline LevelDB backup / previous build for rollback.
+
+## PHAR restart coverage and generated block entities
+
+The real-data workflow builds the PHAR and starts it twice per profile with
+`core-v1` and `core-v4`, using Java 26.3 data and dedicated LevelDB folders for all
+three dimensions. It checks the selected generator, seed, preset, dimension,
+block and biome snapshots, and new chunk population after restart. The
+`core-v4` test also checks the natural dungeon at seed 12345, chunk (0, 3).
+
+Supported generated tiles travel with their chunk from the population worker
+to the world thread. The test verifies a dungeon chest's loot-table metadata,
+64-bit seed and stored inventory, and a skeleton spawner's identifier after
+reopening the world. Existing tiles retain their inventories when population
+touches a neighbouring chunk. Chest loot-table rolling, unsupported block
+entities and structure entity spawning still need runtime integration.
+
+To repeat the two-boot check with an already prepared cache and a locally
+built PHAR, run:
+
+    python3 tests/worldgen-phar-smoke.py /path/to/php RyzeMP.phar /path/to/cache
+
+The fixture creates fresh worlds and uses the real asynchronous population
+pipeline. It runs on loopback without a game client.

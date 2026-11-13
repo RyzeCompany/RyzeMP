@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\vanilla\feature;
 
 use PHPUnit\Framework\TestCase;
+use pocketmine\block\tile\Tile;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\data\bedrock\BiomeIds;
 use pocketmine\world\format\Chunk;
-use pocketmine\world\format\PalettedBlockArray;
-use pocketmine\world\format\SubChunk;
+use pocketmine\world\format\io\FastChunkSerializer;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
 
 /**
- * Tests the RyzeMP adaptation of VanillaMine's second block layer without
- * mutating or extending core Chunk/SubChunk API.
+ * Tests VanillaMine feature writes through the RyzeMP chunk representation.
  */
 final class FeatureLayerBridgeTest extends TestCase{
 
@@ -50,9 +49,30 @@ final class FeatureLayerBridgeTest extends TestCase{
 		self::assertSame($air, $sub->getBlockLayers()[1]->get(3, 7, 12));
 	}
 
-	public function testPendingTileNbtIsRejectedInsteadOfSilentlyLost() : void{
+	public function testPendingTileNbtTravelsWithNeighbourChunk() : void{
 		$level = (new ReflectionClass(FeatureLevel::class))->newInstanceWithoutConstructor();
-		$this->expectException(\RuntimeException::class);
-		$level->setBlockEntity(1, 64, 1, \pocketmine\nbt\tag\CompoundTag::create());
+		$neighbour = new Chunk([], true);
+		$neighbour->clearTerrainDirtyFlags();
+		$level->minX = -16;
+		$level->minZ = -16;
+		(new ReflectionProperty(FeatureLevel::class, 'minY'))->setValue($level, -64);
+		(new ReflectionProperty(FeatureLevel::class, 'maxY'))->setValue($level, 320);
+		(new ReflectionProperty(FeatureLevel::class, 'chunks'))->setValue($level, [1 => $neighbour]);
+
+		$nbt = BlockEntityData::lootContainer("Chest", "minecraft:chests/simple_dungeon", -4172144997902289642);
+		self::assertFalse($level->setBlockEntity(-17, -20, 3, $nbt));
+		self::assertTrue($level->setBlockEntity(-7, -20, 3, $nbt));
+		$level->finish();
+		self::assertNull($nbt->getTag(Tile::TAG_X));
+		self::assertTrue($neighbour->isTerrainDirty());
+
+		$result = FastChunkSerializer::deserializeTerrain(FastChunkSerializer::serializeTerrain($neighbour));
+		self::assertTrue($result->isPopulated());
+		$tag = $result->getPendingTileNBTAt(9, -20, 3);
+		self::assertNotNull($tag);
+		self::assertSame(-7, $tag->getInt(Tile::TAG_X));
+		self::assertSame(-20, $tag->getInt(Tile::TAG_Y));
+		self::assertSame(3, $tag->getInt(Tile::TAG_Z));
+		self::assertSame(-4172144997902289642, $tag->getLong("LootTableSeedLong"));
 	}
 }
