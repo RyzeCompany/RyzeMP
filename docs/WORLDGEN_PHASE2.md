@@ -225,3 +225,37 @@ It also encodes the Trial Chamber chunk and live block updates for every
 accepted protocol. When a client lacks a block state, it receives the safe
 `info_update` block without the corresponding block entity. LevelDB retains
 the original block and NBT.
+
+## Concurrent PHAR benchmark
+
+Run the loopback benchmark on Linux with the compiled PHP profile:
+
+    python3 tests/worldgen-phar-smoke.py /path/to/php RyzeMP.phar /path/to/cache --benchmark
+
+Each run starts a fresh server with two async workers and requests 16 new
+chunks in each of the three dimensions in the same batch. Seed 12345 uses
+regions with a village, fortress and End City. The negative seed uses
+different regions. The log reports p50 and p95 time from batch submission
+until each populated chunk reaches the server, including queue delays. It
+also reports observed biome IDs, process CPU time during population, peak
+process RSS (including startup), server TPS and the peak sampled number of
+async tasks. LevelDB is saved at the end of the batch. Timings exclude that
+save and network traffic from players.
+
+### Retail Bedrock acceptance
+
+- Create fresh core-v6 worlds with the pinned cache. Connect using RakNet
+  on 1.20.0 and using RyzeRTC/NetherNet on 1.26.60. Repeat with 1.26.40,
+  including both older and newer players connected together.
+- Use seed 12345 and explore the village near (164, 100, 882), a dungeon at
+  (8, -39, 48), and the Trial Chamber at (4, -10, 215). Check underground
+  biomes, caves, ore, trees, inventories and block actors while crossing
+  chunk boundaries. Verify that legacy clients stay connected near blocks
+  their protocol cannot render.
+- Check travel to the Nether and back, the fortress near (117, 75, 681),
+  the End island and spikes, the ship at (-164, 142, 1284), and the return
+  gateway at (-3793, 69, -407). Walk and teleport across already populated
+  and fresh chunks in each dimension.
+- Save and stop the server. Start the same build again and revisit those
+  locations with both protocol families. Compare inventories, changed
+  blocks, structure boundaries, spawn and portal destinations.

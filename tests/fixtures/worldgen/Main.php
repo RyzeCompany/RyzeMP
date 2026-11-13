@@ -61,6 +61,8 @@ final class Main extends PluginBase{
 		if($cache === false || !in_array($profile, ["core-v1", "core-v4", "core-v5", "core-v6"], true)){
 			throw new \RuntimeException("Worldgen fixture requires a data cache and a test profile");
 		}
+		$benchmarkSeed = getenv("RYZE_WORLDGEN_BENCHMARK_SEED");
+		$seed = $benchmarkSeed === false ? self::SEED : (int) $benchmarkSeed;
 		$preset = "$profile;data=$cache";
 		if($profile !== "core-v1"){
 			$preset .= ";sha256=" . VanillaDataIdentity::fingerprint($cache);
@@ -75,12 +77,99 @@ final class Main extends PluginBase{
 				LevelDB::generate($server->getDataPath() . "worlds/$name", $name, WorldCreationOptions::create()
 					->setGeneratorClass($entry->getGeneratorClass())
 					->setGeneratorOptions($preset)
-					->setSeed(self::SEED));
+					->setSeed($seed));
 			}
 		}
-		$this->getScheduler()->scheduleDelayedTask(new ClosureTask(function() use ($profile, $preset, $snapshotPath, $reopen) : void{
-			$this->exerciseWorlds($profile, $preset, $snapshotPath, $reopen);
+		$this->getScheduler()->scheduleDelayedTask(new ClosureTask(function() use ($profile, $preset, $snapshotPath, $reopen, $benchmarkSeed, $seed) : void{
+			if($benchmarkSeed !== false){
+				$this->benchmark($seed);
+			}else{
+				$this->exerciseWorlds($profile, $preset, $snapshotPath, $reopen);
+			}
 		}), 1);
+	}
+
+	private function benchmark(int $seed) : void{
+		$server = $this->getServer();
+		$regionWidth = 4;
+		$remaining = count(self::WORLDS) * $regionWidth ** 2;
+		$latency = [];
+		$biomes = [];
+		$worlds = [];
+		$tps = [];
+		$peakQueue = 0;
+		$sample = function() use ($server, &$tps, &$peakQueue) : void{
+			$tps[] = $server->getTicksPerSecondAverage();
+			$peakQueue = max($peakQueue, array_sum($server->getAsyncPool()->getTaskQueueSizes()));
+		};
+		$metrics = $this->getScheduler()->scheduleRepeatingTask(new ClosureTask($sample), 4);
+		$cpuSeconds = static function() : float{
+			$usage = getrusage();
+			return $usage["ru_utime.tv_sec"] + $usage["ru_stime.tv_sec"] +
+				($usage["ru_utime.tv_usec"] + $usage["ru_stime.tv_usec"]) / 1_000_000;
+		};
+		$cpuStart = $cpuSeconds();
+		$start = hrtime(true);
+		foreach(self::WORLDS as $name => $_){
+			$world = $server->getWorldManager()->getWorldByName($name) ?? throw new \RuntimeException("Benchmark world $name is unavailable");
+			$worlds[$name] = $world;
+			[$originX, $originZ] = $seed === self::SEED ? self::STRUCTURE_CHUNKS[$name] : [-33, -17];
+			for($dx = 0; $dx < $regionWidth; ++$dx){
+				for($dz = 0; $dz < $regionWidth; ++$dz){
+					$x = $originX + $dx;
+					$z = $originZ + $dz;
+					if($world->loadChunk($x, $z)?->isPopulated()){
+						throw new \RuntimeException("Expected a cold benchmark chunk in $name at $x,$z");
+					}
+					$world->requestChunkPopulation($x, $z, null)->onCompletion(
+						function(Chunk $chunk) use ($name, $seed, $start, $cpuStart, $cpuSeconds, $sample, $metrics, &$worlds, &$remaining, &$latency, &$biomes, &$tps, &$peakQueue) : void{
+							if(!$chunk->isPopulated()){
+								throw new \RuntimeException("Unpopulated benchmark result in $name");
+							}
+							$latency[$name][] = (hrtime(true) - $start) / 1_000_000;
+							foreach($chunk->getSubChunks() as $section){
+								foreach($section->getBiomeArray()->getPalette() as $biome){
+									$biomes[$name][$biome] = true;
+								}
+							}
+							if(--$remaining !== 0){
+								return;
+							}
+							$sample();
+							$metrics->cancel();
+							$elapsed = (hrtime(true) - $start) / 1_000_000;
+							$cpu = $cpuSeconds() - $cpuStart;
+							$results = [];
+							foreach($worlds as $worldName => $loadedWorld){
+								$times = $latency[$worldName];
+								sort($times);
+								$n = count($times);
+								$results[$worldName] = [
+									"chunks" => $n,
+									"p50_ms" => round($times[(int) ceil($n * 0.50) - 1], 1),
+									"p95_ms" => round($times[(int) ceil($n * 0.95) - 1], 1),
+									"biome_ids" => array_keys($biomes[$worldName])
+								];
+								$loadedWorld->save(true);
+							}
+							$this->getLogger()->info("BENCHMARK: " . json_encode([
+								"seed" => $seed,
+								"dimensions" => $results,
+								"elapsed_ms" => round($elapsed, 1),
+								"cpu_s" => round($cpu, 2),
+								"peak_rss_kib" => getrusage()["ru_maxrss"],
+								"mean_tps" => round(array_sum($tps) / count($tps), 2),
+								"min_sampled_tps" => min($tps),
+								"peak_worker_tasks" => $peakQueue
+							], JSON_THROW_ON_ERROR));
+							$this->getServer()->shutdown();
+						},
+						self::populationFailure("benchmark $name $x,$z")
+					);
+				}
+			}
+		}
+		$sample();
 	}
 
 	private function exerciseWorlds(string $profile, string $preset, string $snapshotPath, bool $reopen) : void{

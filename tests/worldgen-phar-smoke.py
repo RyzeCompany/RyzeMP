@@ -9,7 +9,7 @@ import subprocess
 from tempfile import TemporaryDirectory
 
 
-def test_profile(php, phar, cache, fixture, profile):
+def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None):
     with TemporaryDirectory(prefix=f"ryze-worldgen-{profile}-") as directory:
         data = Path(directory)
         plugins = data / "plugins"
@@ -44,13 +44,19 @@ def test_profile(php, phar, cache, fixture, profile):
             "POCKETMINE_VANILLA_WORLDGEN_DATA": str(cache),
             "RYZE_WORLDGEN_TEST_PROFILE": profile,
         }
-        for outcome in ("generated and saved", "reopened and extended"):
+        if benchmark_seed is None:
+            markers = [f"PASS: {profile} {outcome} all three dimensions"
+                       for outcome in ("generated and saved", "reopened and extended")]
+        else:
+            env["RYZE_WORLDGEN_BENCHMARK_SEED"] = str(benchmark_seed)
+            markers = [f'BENCHMARK: {{"seed":{benchmark_seed},']
+        for marker in markers:
             with (data / "console.log").open("w+") as log:
                 try:
                     process = subprocess.run(
                         [php, phar, "--no-wizard", "--disable-ansi", f"--data={data}", f"--plugins={plugins}"],
                         env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                        timeout=150,
+                        timeout=150 if benchmark_seed is None else 480,
                     )
                 finally:
                     log.seek(0)
@@ -58,10 +64,10 @@ def test_profile(php, phar, cache, fixture, profile):
                     print(output, end="")
             if (
                 process.returncode
-                or f"PASS: {profile} {outcome} all three dimensions" not in output
+                or marker not in output
                 or any(marker in output for marker in ("Fatal error", "Uncaught", "CRITICAL", "EMERGENCY"))
             ):
-                raise RuntimeError(f"PHAR failed to prove {profile} {outcome}")
+                raise RuntimeError(f"PHAR did not report {marker}")
 
 
 def main():
@@ -69,11 +75,18 @@ def main():
     parser.add_argument("php", help="PHP 8.4 ZTS executable")
     parser.add_argument("phar", type=Path)
     parser.add_argument("cache", type=Path)
+    parser.add_argument("--benchmark", action="store_true", help="Run the Linux core-v6 concurrency benchmark")
     parser.add_argument("profiles", nargs="*", default=["core-v1", "core-v4", "core-v5", "core-v6"])
     args = parser.parse_args()
     fixture = Path(__file__).resolve().parent / "fixtures/worldgen"
-    for profile in args.profiles:
-        test_profile(args.php, str(args.phar.resolve()), args.cache.resolve(), fixture, profile)
+    phar = str(args.phar.resolve())
+    cache = args.cache.resolve()
+    if args.benchmark:
+        for seed in (12345, -987654321):
+            test_profile(args.php, phar, cache, fixture, "core-v6", benchmark_seed=seed)
+    else:
+        for profile in args.profiles:
+            test_profile(args.php, phar, cache, fixture, profile)
 
 
 if __name__ == "__main__":
