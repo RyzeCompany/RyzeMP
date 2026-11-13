@@ -48,6 +48,12 @@ jobs:
           cd "$GITHUB_WORKSPACE/dist"
           sha256sum vanillagen-linux-amd64 | tee SHA256SUMS
           printf '%s\n' 'VanillaMine source commit: 4dd2228b47d64c8015c28138c846e6c4acb28345' > SOURCE.txt
+          # Exercise the exact schema-2 release manifest consumed by the Egg.
+          truncate -s 2000000 "$RUNNER_TEMP/RyzeMP_test.phar"
+          python3 "$GITHUB_WORKSPACE/tools/release-manifest.py" --release v1.0.0-beta.go-preview --channel pruebas \
+            --phar "$RUNNER_TEMP/RyzeMP_test.phar" --go "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" \
+            --out "$RUNNER_TEMP/ryzemp-update.json"
+          python3 -c 'import json,os; m=json.load(open(os.environ["RUNNER_TEMP"]+"/ryzemp-update.json")); assert m["schema"]==2 and m["vanillagen"]["protocol"]==7 and m["vanillagen"]["algorithm"]==4 and m["vanillagen"]["stage"]=="full"'
       - uses: actions/upload-artifact@v4
         with:
           name: RyzeMP-vanillagen-linux-amd64
