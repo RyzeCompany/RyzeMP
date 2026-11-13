@@ -5,196 +5,220 @@ namespace pocketmine\world\mobs;
 
 use pocketmine\block\Water;
 use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
+use pocketmine\entity\ai\navigation\GroundPathFinder;
 use pocketmine\entity\animal\Animal;
 use pocketmine\entity\animal\Chicken;
 use pocketmine\entity\animal\Cow;
 use pocketmine\entity\animal\Pig;
 use pocketmine\entity\animal\Sheep;
-use pocketmine\entity\ai\navigation\GroundPathFinder;
-use pocketmine\entity\Entity;
+use pocketmine\entity\Creeper;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
-use pocketmine\entity\SpawnerEntityRegistry;
 use pocketmine\entity\Skeleton;
 use pocketmine\entity\SpawnReason;
+use pocketmine\entity\SpawnerEntityRegistry;
 use pocketmine\entity\Squid;
 use pocketmine\entity\Zombie;
-use pocketmine\entity\Creeper;
 use pocketmine\event\entity\EntityNaturalSpawnEvent;
 use pocketmine\event\entity\MobPreSpawnEvent;
+use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
 use pocketmine\world\GameRules;
+use pocketmine\world\mobs\spawn\MobSpawningSettings;
 use pocketmine\world\mobs\spawn\NaturalSpawnPolicy as Policy;
 use pocketmine\world\World;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
-use pocketmine\math\Vector3;
 
 /**
- * Conservative Bedrock-style natural population around loaded players.
+ * Bounded natural spawning of RyzeMP's currently supported mobs.
  *
- * No async tasks, chunk loads or terrain population are triggered. Work, player
- * distance and group populations are bounded. All spawned mobs may be vetoed
- * by PM5 plugins BEFORE and AFTER entity creation.
- *
- * This initial slice supports cows, sheep, pigs, chickens, zombies and squid.
- * It does not pretend to provide all VanillaMine biome/structure spawn rules.
+ * The "vanilla" config mode samples ticking chunks at the configured
+ * Bedrock-style chance and enforces surface/cave 9x9 population caps.
+ * Full VanillaMine rules, structure spawns and the complete mob catalog
+ * are NOT implemented here and are never falsely claimed.
  */
 final class NaturalMobSpawner{
-	/** @var \WeakMap<Living, int> Naturally created mob => ticks spent far from players */
+	/** @var \WeakMap<Living, int> Natural mob => ticks spent far away */
 	private \WeakMap $natural;
+	/** @var \WeakMap<Living, bool> Natural mob => on surface */
+	private \WeakMap $naturalSurface;
 	private int $attempted = 0;
 	private int $spawned = 0;
 
 	public function __construct(
 		private World $world,
-		private bool $enabled,
-		private int $maxTotal = Policy::DEFAULT_TOTAL_CAP,
-		private int $maxMonsters = Policy::DEFAULT_MONSTER_CAP,
-		private int $maxAnimals = Policy::DEFAULT_ANIMAL_CAP,
-		private int $maxWater = Policy::DEFAULT_WATER_CAP,
-		private int $interval = 20,
-		private int $maxAttempts = 6
+		private MobSpawningSettings $settings
 	){
 		$this->natural = new \WeakMap();
+		$this->naturalSurface = new \WeakMap();
 	}
 
 	public function getAttemptCount() : int{ return $this->attempted; }
 	public function getSpawnCount() : int{ return $this->spawned; }
 
 	public function tick(int $currentTick) : void{
-		if(!$this->enabled || $currentTick % max(1,$this->interval)!==0){return;}
-		$this->despawnFar();
-		$w = $this->world;
-		if(!$w->getGameRules()->getBool(GameRules::DO_MOB_SPAWNING)){
-			return;
-		}
-		// Nether and End entity lists are not yet ported; do not spawn
-		// Overworld animals in non-Overworld dimensions.
-		if($w->getServer()->getDimensionManager()->getDimension($w) !== DimensionIds::OVERWORLD){
+		if(!$this->settings->enabled){return;}
+		if($currentTick % 20 === 0){$this->despawnFar();}
+		$world = $this->world;
+		if(!$world->getGameRules()->getBool(GameRules::DO_MOB_SPAWNING) ||
+			$world->getServer()->getDimensionManager()->getDimension($world) !== DimensionIds::OVERWORLD){
 			return;
 		}
 		$players = [];
-		foreach($w->getPlayers() as $player){
-			if($player->isAlive() && !$player->isSpectator() && !$player->isCreative()){
+		foreach($world->getPlayers() as $player){
+			if($player->isAlive() && !$player->isSpectator()){
 				$players[] = $player;
 			}
 		}
-		if($players === []){return;}
+		if($players === [] || $this->settings->globalCap === 0){return;}
 
-		$counts = ["total"=>0,"monster"=>0,"animal"=>0,"water"=>0];
-		/** @var array<string, int> $populationByChunk */
-		$populationByChunk = [];
-		foreach($w->getEntities() as $entity){
-			if($entity->isClosed() || $entity->isFlaggedForDespawn()){continue;}
-			if($entity instanceof Zombie || $entity instanceof Skeleton || $entity instanceof Creeper){ ++$counts["monster"]; }
-			elseif($entity instanceof Animal){ ++$counts["animal"]; }
-			elseif($entity instanceof Squid){ ++$counts["water"]; }
-			else{ continue; }
-			++$counts["total"];
-			$entityPosition = $entity->getPosition();
-			$key = ($entityPosition->getFloorX() >> 4) . ":" . ($entityPosition->getFloorZ() >> 4);
-			$populationByChunk[$key] = ($populationByChunk[$key] ?? 0) + 1;
+		/** @var list<array{int, int}> $columns */
+		$columns = [];
+		$allowAnimals = true;
+		$allowMonsters = true;
+		if($this->settings->mode === MobSpawningSettings::MODE_VANILLA){
+			$ticking = $world->getTickingChunks();
+			foreach(Policy::selectTickingChunks(count($ticking), $this->settings->chunkChance, $this->settings->maxAttempts) as $index){
+				World::getXZ($ticking[$index], $cx, $cz);
+				$columns[] = [($cx << 4) + mt_rand(0, 15), ($cz << 4) + mt_rand(0, 15)];
+			}
+		}else{
+			$allowAnimals = $currentTick % $this->settings->passiveInterval === 0;
+			$allowMonsters = $currentTick % $this->settings->hostileInterval === 0;
+			if(!$allowAnimals && !$allowMonsters){return;}
+			$attempts = min($this->settings->maxAttempts, count($players) * 3);
+			for($i = 0; $i < $attempts; ++$i){
+				$p = $players[mt_rand(0, count($players) - 1)]->getPosition();
+				$distance = $this->settings->maxDistance;
+				$columns[] = [$p->getFloorX() + mt_rand(-$distance, $distance),
+					$p->getFloorZ() + mt_rand(-$distance, $distance)];
+			}
 		}
-		if(!Policy::underCap($counts["total"],$this->maxTotal)){return;}
-		$created = 0;
-		for($i=0;$i<max(0,min(32,$this->maxAttempts)) && $created<2;++$i){
-			++$this->attempted;
-			$player = $players[mt_rand(0,count($players)-1)];
-			$p=$player->getPosition();
-			$x=$p->getFloorX()+mt_rand(-48,48);
-			$z=$p->getFloorZ()+mt_rand(-48,48);
-			$distance=($x+0.5-$p->x)**2+($z+0.5-$p->z)**2;
-			if(!Policy::withinPlayerRange($distance)){continue;}
-			$chunk=$w->getChunk($x>>4,$z>>4);
-			if($chunk===null || !$chunk->isPopulated() || $chunk->isLightPopulated()!==true ||
-				$w->isChunkLocked($x>>4,$z>>4)){
-				continue;
-			}
-			$spawn=$w->getSpawnLocation();
-			if(($x-$spawn->x)**2+($z-$spawn->z)**2<16**2){continue;}
-			// Keep the 9x9 chunk neighbourhood from becoming saturated even
-			// when several players gather in the same area.
-			if(Policy::populationInChunkRadius($populationByChunk, $x >> 4, $z >> 4) >= 32){
-				continue;
-			}
-			$height=$w->getHighestBlockAt($x,$z);
-			if($height===null || $height<$w->getMinY()+2 || $height>$w->getMaxY()-3){continue;}
+		if($columns === []){return;}
 
-			$isWater=$w->getBlockAt($x,$height,$z) instanceof Water;
-			if($isWater){
-				if(!Policy::underCap($counts["water"],$this->maxWater)){continue;}
-				$y=$height-2;
-				if(!($w->getBlockAt($x,$y,$z) instanceof Water)){continue;}
+		/** @var array<string, array<string, int>> $byChunk */
+		$byChunk = [];
+		/** @var list<Living> $counted */
+		$counted = [];
+		$count = 0;
+		foreach($world->getEntities() as $entity){
+			if(!$entity instanceof Living || $entity->isClosed() || $entity->isFlaggedForDespawn()){
+				continue;
+			}
+			$category = self::category($entity);
+			if($category === null || (!$this->settings->countAll && !isset($this->natural[$entity]))){
+				continue;
+			}
+			$counted[] = $entity;
+			++$count;
+			$p = $entity->getPosition();
+			$key = ($p->getFloorX() >> 4) . ":" . ($p->getFloorZ() >> 4);
+			$surface = $this->naturalSurface[$entity] ?? true;
+			$group = $category . ($surface ? ":surface" : ":cave");
+			$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
+		}
+		if($count >= $this->settings->globalCap){return;}
+
+		$created = 0;
+		foreach($columns as [$x, $z]){
+			if($created >= 2 || $count >= $this->settings->globalCap){break;}
+			++$this->attempted;
+			$chunk = $world->getChunk($x >> 4, $z >> 4);
+			if($chunk === null || !$chunk->isPopulated() || $chunk->isLightPopulated() !== true ||
+				$world->isChunkLocked($x >> 4, $z >> 4)){continue;}
+			$spawn = $world->getSpawnLocation();
+			if(($x - $spawn->x) ** 2 + ($z - $spawn->z) ** 2 < 16 ** 2){continue;}
+			$height = $world->getHighestBlockAt($x, $z);
+			if($height === null || $height < $world->getMinY() + 2 ||
+				$height > $world->getMaxY() - 3){continue;}
+
+			$identifier = null;
+			$surface = true;
+			$category = "animal";
+			$y = $height + 1;
+			if($world->getBlockAt($x, $height, $z) instanceof Water){
+				$y = $height - 2;
+				if(!($world->getBlockAt($x, $y, $z) instanceof Water)){continue;}
 				$biome = LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
 					$chunk->getBiomeId($x & 15, $y, $z & 15)
 				);
-				if(!Policy::canSpawnSquidBiome($biome)){ continue; }
-				$identifier=Squid::getNetworkTypeId();
-				$surface=true;$group="water";
-			}else{
-				$underground=mt_rand(0,3)===0;
+				if(!Policy::canSpawnSquidBiome($biome)){continue;}
+				$category = "water_animal";
+				$identifier = Squid::getNetworkTypeId();
+			}elseif($allowMonsters || $allowAnimals){
+				$underground = mt_rand(0, 3) === 0;
 				if($underground){
-					$maxY=$height-3;
-					if($maxY<=$w->getMinY()+2){continue;}
-					$y=mt_rand($w->getMinY()+2,$maxY);
-				}else{
-					$y=$height+1;
+					$maxY = $height - 3;
+					if($maxY <= $world->getMinY() + 2){continue;}
+					$y = mt_rand($world->getMinY() + 2, $maxY);
 				}
-				// Share the pathfinder's two-block clearance and hazard checks:
-				// no spawn inside lava, fire, berries or on unsafe footing.
-				if(!$w->isInWorld($x,$y,$z) || !GroundPathFinder::walkable($w,$x,$y,$z)){
-					continue;
-				}
-				$light=$w->getFullLightAt($x,$y,$z);
-				if(Policy::canSpawnZombie($w->getDifficulty(),$light) &&
-					Policy::underCap($counts["monster"],$this->maxMonsters)){
+				$surface = !$underground;
+				if(!$world->isInWorld($x, $y, $z) ||
+					!GroundPathFinder::walkable($world, $x, $y, $z)){continue;}
+				$light = $world->getFullLightAt($x, $y, $z);
+				if($allowMonsters && Policy::canSpawnZombie($world->getDifficulty(), $light)){
+					$category = "monster";
 					$identifier = match(mt_rand(0, 4)){
 						0 => Skeleton::getNetworkTypeId(),
 						1 => Creeper::getNetworkTypeId(),
 						default => Zombie::getNetworkTypeId()
 					};
-					$surface=!$underground;$group="monster";
-				}elseif(!$underground && Policy::canSpawnAnimal($light) &&
-					Policy::underCap($counts["animal"],$this->maxAnimals) &&
+				}elseif($allowAnimals && !$underground && Policy::canSpawnAnimal($light) &&
 					Policy::canSpawnFarmAnimalBiome(LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
 						$chunk->getBiomeId($x & 15, $y, $z & 15)
 					))){
-					$class=match(mt_rand(0,3)){
-						0=>Cow::class,1=>Pig::class,2=>Sheep::class,default=>Chicken::class
+					$type = match(mt_rand(0, 3)){
+						0 => Cow::class, 1 => Pig::class, 2 => Sheep::class,
+						default => Chicken::class
 					};
-					$identifier=$class::getNetworkTypeId();$surface=true;$group="animal";
-				}else{continue;}
+					$identifier = $type::getNetworkTypeId();
+				}
 			}
-
-			// The range is measured in 3D against every eligible player. Never
-			// spawn inside another player's safe radius in a mixed session.
-			$canSpawnNearPlayer = false;
-			$spawnPosition = new Vector3($x + 0.5, $y, $z + 0.5);
-			foreach($players as $viewer){
-				$actualDistance = $viewer->getPosition()->distanceSquared($spawnPosition);
-				if($actualDistance < Policy::MIN_PLAYER_DISTANCE ** 2){
-					$canSpawnNearPlayer = false;
+			if($identifier === null){continue;}
+			$pos = new Vector3($x + 0.5, $y, $z + 0.5);
+			$eligible = false;
+			foreach($players as $player){
+				$distanceSquared = $player->getPosition()->distanceSquared($pos);
+				if($distanceSquared < Policy::MIN_PLAYER_DISTANCE ** 2){
+					$eligible = false;
 					break;
 				}
-				if(Policy::withinPlayerRange($actualDistance)){
-					$canSpawnNearPlayer = true;
+				if(Policy::withinPlayerRange($distanceSquared, $this->settings->maxDistance)){
+					$eligible = true;
 				}
 			}
-			if(!$canSpawnNearPlayer){ continue; }
-			$location=new Location($x+0.5,$y,$z+0.5,$w,0.0,0.0);
-			if(MobPreSpawnEvent::hasHandlers()){
-				$pre=new MobPreSpawnEvent($identifier,$location,SpawnReason::NATURAL);
-				$pre->call();
-				if($pre->isCancelled()){continue;}
+			if(!$eligible){continue;}
+
+			$localCap = $this->settings->populationCap($category, $surface);
+			if($this->settings->mode === MobSpawningSettings::MODE_LEGACY){
+				// Legacy caps are per player, measured within 64 blocks.
+				$nearCount = 0;
+				foreach($counted as $existing){
+					if(self::category($existing) === $category &&
+						$existing->getPosition()->distanceSquared($pos) <= 64 ** 2){
+						++$nearCount;
+					}
+				}
+			}else{
+				$nearCount = Policy::populationInChunkRadiusForGroup($byChunk,
+					$x >> 4, $z >> 4, $category, $surface);
 			}
-			$mob=SpawnerEntityRegistry::getInstance()->spawn($identifier,$location);
+			if(!Policy::underCap($nearCount, $localCap)){continue;}
+
+			$location = new Location($x + 0.5, $y, $z + 0.5, $world, 0.0, 0.0);
+			if(MobPreSpawnEvent::hasHandlers()){
+				$event = new MobPreSpawnEvent($identifier, $location, SpawnReason::NATURAL);
+				$event->call();
+				if($event->isCancelled()){continue;}
+			}
+			$mob = SpawnerEntityRegistry::getInstance()->spawn($identifier, $location);
 			if(!$mob instanceof Living){
 				$mob?->close();
 				continue;
 			}
 			$mob->setCanSaveWithChunk(false);
 			if(EntityNaturalSpawnEvent::hasHandlers()){
-				$event=new EntityNaturalSpawnEvent($mob,EntityNaturalSpawnEvent::CAUSE_NATURAL,$surface);
+				$event = new EntityNaturalSpawnEvent($mob, EntityNaturalSpawnEvent::CAUSE_NATURAL, $surface);
 				$event->call();
 				if($event->isCancelled()){
 					$mob->close();
@@ -202,37 +226,51 @@ final class NaturalMobSpawner{
 				}
 			}
 			$mob->spawnToAll();
-			$this->natural[$mob]=0;
-			++$counts["total"];++$counts[$group];
+			$this->natural[$mob] = 0;
+			$this->naturalSurface[$mob] = $surface;
+			$counted[] = $mob;
 			$key = ($x >> 4) . ":" . ($z >> 4);
-			$populationByChunk[$key] = ($populationByChunk[$key] ?? 0) + 1;
-			++$created;++$this->spawned;
+			$group = $category . ($surface ? ":surface" : ":cave");
+			$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
+			++$count;
+			++$created;
+			++$this->spawned;
 		}
 	}
 
+	private static function category(Living $entity) : ?string{
+		return match(true){
+			$entity instanceof Animal => "animal",
+			$entity instanceof Squid => "water_animal",
+			$entity instanceof Zombie || $entity instanceof Skeleton ||
+				$entity instanceof Creeper => "monster",
+			default => null
+		};
+	}
+
 	private function despawnFar() : void{
-		$players=$this->world->getPlayers();
-		foreach($this->natural as $mob=>$farTicks){
+		$players = $this->world->getPlayers();
+		foreach($this->natural as $mob => $farTicks){
 			if($mob->isClosed() || $mob->isFlaggedForDespawn()){
-				unset($this->natural[$mob]);continue;
-			}
-			$nearest=PHP_INT_MAX;
-			foreach($players as $player){
-				if($player->isSpectator()){continue;}
-				$nearest=min($nearest,$mob->getPosition()->distanceSquared($player->getPosition()));
-			}
-			$instant=$this->world->getChunkTickRadius()<=4?48:128;
-			if($nearest>$instant*$instant){
-				$mob->flagForDespawn();
-				unset($this->natural[$mob]);
+				unset($this->natural[$mob], $this->naturalSurface[$mob]);
 				continue;
 			}
-			$farTicks=$nearest>32*32?$farTicks+max(1,$this->interval):0;
-			if($farTicks>=600 && mt_rand(0,39)===0){
+			$nearest = PHP_INT_MAX;
+			foreach($players as $player){
+				if($player->isSpectator()){continue;}
+				$nearest = min($nearest, $mob->getPosition()->distanceSquared($player->getPosition()));
+			}
+			if($nearest > $this->settings->despawnDistance ** 2){
 				$mob->flagForDespawn();
-				unset($this->natural[$mob]);
+				unset($this->natural[$mob], $this->naturalSurface[$mob]);
+				continue;
+			}
+			$farTicks = $nearest > 32 ** 2 ? $farTicks + 20 : 0;
+			if($farTicks >= 600 && mt_rand(0, 39) === 0){
+				$mob->flagForDespawn();
+				unset($this->natural[$mob], $this->naturalSurface[$mob]);
 			}else{
-				$this->natural[$mob]=$farTicks;
+				$this->natural[$mob] = $farTicks;
 			}
 		}
 	}

@@ -15,9 +15,36 @@ final class NaturalSpawnPolicy{
 	public const DEFAULT_WATER_CAP = 12;
 	private function __construct(){}
 
-	public static function withinPlayerRange(float $distanceSquared) : bool{
+	public static function withinPlayerRange(float $distanceSquared, int $maxDistance = self::MAX_PLAYER_DISTANCE) : bool{
 		return $distanceSquared >= self::MIN_PLAYER_DISTANCE ** 2 &&
-			$distanceSquared <= self::MAX_PLAYER_DISTANCE ** 2;
+			$distanceSquared <= $maxDistance ** 2;
+	}
+
+	/**
+	 * Bounded geometric skipping samples the same independent probability per
+	 * ticking chunk as an explicit 11-in-2000 Bernoulli trial, without a loop
+	 * over thousands of non-selected chunks every tick.
+	 *
+	 * @return list<int> indices into World::getTickingChunks()
+	 */
+	public static function selectTickingChunks(int $chunkCount, int $chance, int $maxAttempts) : array{
+		if($chunkCount <= 0 || $chance <= 0 || $maxAttempts <= 0){return [];}
+		$chance = min(2000, $chance);
+		$p = $chance / 2000;
+		$logQ = $p >= 1.0 ? 0.0 : log(1.0 - $p);
+		$result = [];
+		$index = -1;
+		while(count($result) < $maxAttempts){
+			if($logQ === 0.0){
+				++$index;
+			}else{
+				$u = (mt_rand() + 1) / (mt_getrandmax() + 2);
+				$index += 1 + (int) floor(log($u) / $logQ);
+			}
+			if($index >= $chunkCount){break;}
+			$result[] = $index;
+		}
+		return $result;
 	}
 	public static function underCap(int $count, int $cap) : bool{
 		return $cap > 0 && $count < $cap;
@@ -61,5 +88,21 @@ final class NaturalSpawnPolicy{
 			}
 		}
 		return $result;
+	}
+	/**
+	 * Populations are counted per 9x9 chunks and surface/cave category,
+	 * rather than as one shared cap for unrelated animal and monster groups.
+	 *
+	 * @param array<string, array<string, int>> $counts
+	 */
+	public static function populationInChunkRadiusForGroup(array $counts, int $cx, int $cz, string $group, bool $surface) : int{
+		$sum = 0;
+		$key = $group . ($surface ? ":surface" : ":cave");
+		for($x = $cx - 4; $x <= $cx + 4; ++$x){
+			for($z = $cz - 4; $z <= $cz + 4; ++$z){
+				$sum += $counts[$x . ":" . $z][$key] ?? 0;
+			}
+		}
+		return $sum;
 	}
 }

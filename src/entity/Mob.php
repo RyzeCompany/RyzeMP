@@ -81,8 +81,8 @@ abstract class Mob extends Living{
 			return $changed;
 		}
 		$this->aiTicks += $tickDiff;
-		if(!$this->aiEnabled || !AiBudget::isEnabled()){ return $changed; }
 		$w = $this->getWorld();
+		if(!$this->aiEnabled || !AiBudget::isEnabledInWorld($w->getFolderName())){ return $changed; }
 		if($this->aiTicks % 20 === 0){$this->tickDaylightBurn();}
 		if($w->getPlayers() === []){
 			if($this->navigation->isNavigating()){ $this->navigation->stop(); }

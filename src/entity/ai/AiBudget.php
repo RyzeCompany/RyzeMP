@@ -8,6 +8,8 @@ final class AiBudget{
 	private static ?FairTickBudget $paths = null;
 	private static int $pathNodes = 160;
 	private static bool $enabled = true;
+	/** @var list<string> */
+	private static array $disabledWorlds = [];
 	private function __construct(){}
 	public static function initialize(int $goals = 120, int $paths = 8, int $nodes = 160, bool $enabled = true) : void{
 		if(self::$goals === null){ self::configure($goals,$paths,$nodes,$enabled); }
@@ -19,6 +21,13 @@ final class AiBudget{
 		self::$pathNodes = max(16,min(1024,$nodes));
 	}
 	public static function isEnabled() : bool{ return self::$enabled; }
+	/** @param list<string> $worldFolders */
+	public static function setDisabledWorlds(array $worldFolders) : void{
+		self::$disabledWorlds = $worldFolders;
+	}
+	public static function isEnabledInWorld(string $worldFolder) : bool{
+		return self::$enabled && !in_array($worldFolder, self::$disabledWorlds, true);
+	}
 	public static function getPathNodeLimit() : int{ return self::$pathNodes; }
 	public static function takeGoalUpdate(int $tick,int &$waitingSince) : bool{
 		return self::take(self::$goals ??= new FairTickBudget(120),$tick,$waitingSince);

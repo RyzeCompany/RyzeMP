@@ -122,6 +122,7 @@ use pocketmine\world\sound\Sound;
 use pocketmine\world\utils\SubChunkExplorer;
 use pocketmine\world\weather\Weather;
 use pocketmine\world\mobs\NaturalMobSpawner;
+use pocketmine\world\mobs\spawn\MobSpawningSettings;
 use pocketmine\YmlServerProperties;
 use function abs;
 use function array_filter;
@@ -584,22 +585,18 @@ class World implements ChunkManager{
 		$this->tickedBlocksPerSubchunkPerTick = $cfg->getPropertyInt(YmlServerProperties::CHUNK_TICKING_BLOCKS_PER_SUBCHUNK_PER_TICK, self::DEFAULT_TICKED_BLOCKS_PER_SUBCHUNK_PER_TICK);
 		$this->maxConcurrentChunkPopulationTasks = $cfg->getPropertyInt(YmlServerProperties::CHUNK_GENERATION_POPULATION_QUEUE_SIZE, 2);
 
+		$mobSettings = MobSpawningSettings::fromConfig($cfg, $this->folderName, $this->chunkTickRadius);
 		AiBudget::initialize(
-			$cfg->getPropertyInt("mobs.max-ai-updates-per-tick", 120),
-			$cfg->getPropertyInt("mobs.max-path-searches-per-tick", 8),
-			$cfg->getPropertyInt("mobs.max-path-nodes", 160),
-			$cfg->getPropertyBool("mobs.enabled", false)
+			$cfg->getPropertyInt("mobs.max-ai-updates-per-tick", 200),
+			$cfg->getPropertyInt("mobs.max-path-searches-per-tick", 10),
+			$cfg->getPropertyInt("mobs.max-path-nodes", 400),
+			$mobSettings->aiEnabled
 		);
-		$this->naturalMobSpawner = new NaturalMobSpawner(
-			$this,
-			$cfg->getPropertyBool("mobs.enabled", false) && $cfg->getPropertyBool("mobs.spawning.enabled", true),
-			$cfg->getPropertyInt("mobs.spawning.max-total", 72),
-			$cfg->getPropertyInt("mobs.spawning.max-monsters", 40),
-			$cfg->getPropertyInt("mobs.spawning.max-animals", 24),
-			$cfg->getPropertyInt("mobs.spawning.max-aquatic", 12),
-			$cfg->getPropertyInt("mobs.spawning.interval-ticks", 20),
-			$cfg->getPropertyInt("mobs.spawning.max-attempts", 6)
-		);
+		AiBudget::setDisabledWorlds($mobSettings->disabledWorlds);
+		$this->naturalMobSpawner = new NaturalMobSpawner($this, $mobSettings);
+		foreach($mobSettings->warnings as $warning){
+			$this->logger->warning("[Mob spawning] $warning");
+		}
 
 		$this->initRandomTickBlocksFromConfig($cfg);
 

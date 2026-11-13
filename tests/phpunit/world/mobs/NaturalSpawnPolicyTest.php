@@ -44,6 +44,29 @@ final class NaturalSpawnPolicyTest extends TestCase{
 		self::assertSame(3, Policy::populationInChunkRadius($counts, 0, 0, 0));
 		self::assertSame(16, Policy::populationInChunkRadius($counts, 4, 0, 1));
 	}
+	public function testVanillaChunkSamplingHonorsExactProbabilityLimits() : void{
+		self::assertSame([], Policy::selectTickingChunks(200, 0, 30));
+		self::assertSame([], Policy::selectTickingChunks(0, 2000, 30));
+		self::assertSame([0, 1, 2], Policy::selectTickingChunks(100, 2000, 3));
+		self::assertSame([0, 1], Policy::selectTickingChunks(2, 2000, 30));
+		self::assertSame([], Policy::selectTickingChunks(200, 2000, 0));
+	}
+	public function testConfigurablePlayerDistance() : void{
+		self::assertFalse(Policy::withinPlayerRange(64 ** 2));
+		self::assertTrue(Policy::withinPlayerRange(64 ** 2, 96));
+		self::assertFalse(Policy::withinPlayerRange(97 ** 2, 96));
+	}
+	public function testSurfaceAndCaveCategoryCapsRemainIndependent() : void{
+		$counts = [
+			"0:0" => ["animal:surface" => 3, "monster:surface" => 5, "monster:cave" => 9],
+			"4:0" => ["animal:surface" => 1],
+			"5:0" => ["animal:surface" => 7]
+		];
+		self::assertSame(4, Policy::populationInChunkRadiusForGroup($counts, 0, 0, "animal", true));
+		self::assertSame(5, Policy::populationInChunkRadiusForGroup($counts, 0, 0, "monster", true));
+		self::assertSame(9, Policy::populationInChunkRadiusForGroup($counts, 0, 0, "monster", false));
+		self::assertSame(0, Policy::populationInChunkRadiusForGroup($counts, 0, 0, "animal", false));
+	}
 	public function testPeacefulAndLightConstraints() : void{
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_PEACEFUL,0));
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_NORMAL,8));
