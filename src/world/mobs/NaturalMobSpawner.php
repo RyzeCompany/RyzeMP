@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace pocketmine\world\mobs;
 
 use pocketmine\block\Water;
+use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
 use pocketmine\entity\animal\Animal;
 use pocketmine\entity\animal\Chicken;
 use pocketmine\entity\animal\Cow;
@@ -72,18 +73,25 @@ final class NaturalMobSpawner{
 		}
 		$players = [];
 		foreach($w->getPlayers() as $player){
-			if($player->isAlive() && !$player->isSpectator()){
+			if($player->isAlive() && !$player->isSpectator() && !$player->isCreative()){
 				$players[] = $player;
 			}
 		}
 		if($players === []){return;}
 
 		$counts = ["total"=>0,"monster"=>0,"animal"=>0,"water"=>0];
+		/** @var array<string, int> $populationByChunk */
+		$populationByChunk = [];
 		foreach($w->getEntities() as $entity){
 			if($entity->isClosed() || $entity->isFlaggedForDespawn()){continue;}
-			if($entity instanceof Zombie){ ++$counts["monster"]; ++$counts["total"]; }
-			elseif($entity instanceof Animal){ ++$counts["animal"]; ++$counts["total"]; }
-			elseif($entity instanceof Squid){ ++$counts["water"]; ++$counts["total"]; }
+			if($entity instanceof Zombie){ ++$counts["monster"]; }
+			elseif($entity instanceof Animal){ ++$counts["animal"]; }
+			elseif($entity instanceof Squid){ ++$counts["water"]; }
+			else{ continue; }
+			++$counts["total"];
+			$entityPosition = $entity->getPosition();
+			$key = ($entityPosition->getFloorX() >> 4) . ":" . ($entityPosition->getFloorZ() >> 4);
+			$populationByChunk[$key] = ($populationByChunk[$key] ?? 0) + 1;
 		}
 		if(!Policy::underCap($counts["total"],$this->maxTotal)){return;}
 		$created = 0;
@@ -102,6 +110,11 @@ final class NaturalMobSpawner{
 			}
 			$spawn=$w->getSpawnLocation();
 			if(($x-$spawn->x)**2+($z-$spawn->z)**2<16**2){continue;}
+			// Keep the 9x9 chunk neighbourhood from becoming saturated even
+			// when several players gather in the same area.
+			if(Policy::populationInChunkRadius($populationByChunk, $x >> 4, $z >> 4) >= 32){
+				continue;
+			}
 			$height=$w->getHighestBlockAt($x,$z);
 			if($height===null || $height<$w->getMinY()+2 || $height>$w->getMaxY()-3){continue;}
 
@@ -110,8 +123,11 @@ final class NaturalMobSpawner{
 				if(!Policy::underCap($counts["water"],$this->maxWater)){continue;}
 				$y=$height-2;
 				if(!($w->getBlockAt($x,$y,$z) instanceof Water)){continue;}
+				$biome = LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
+					$chunk->getBiomeId($x & 15, $y, $z & 15)
+				);
+				if(!Policy::canSpawnSquidBiome($biome)){ continue; }
 				$identifier=Squid::getNetworkTypeId();
-				$class=Squid::class;
 				$surface=true;$group="water";
 			}else{
 				$underground=mt_rand(0,3)===0;
@@ -130,10 +146,13 @@ final class NaturalMobSpawner{
 				$light=$w->getFullLightAt($x,$y,$z);
 				if(Policy::canSpawnZombie($w->getDifficulty(),$light) &&
 					Policy::underCap($counts["monster"],$this->maxMonsters)){
-					$class=Zombie::class;$identifier=Zombie::getNetworkTypeId();
+					$identifier=Zombie::getNetworkTypeId();
 					$surface=!$underground;$group="monster";
 				}elseif(!$underground && Policy::canSpawnAnimal($light) &&
-					Policy::underCap($counts["animal"],$this->maxAnimals)){
+					Policy::underCap($counts["animal"],$this->maxAnimals) &&
+					Policy::canSpawnFarmAnimalBiome(LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
+						$chunk->getBiomeId($x & 15, $y, $z & 15)
+					))){
 					$class=match(mt_rand(0,3)){
 						0=>Cow::class,1=>Pig::class,2=>Sheep::class,default=>Chicken::class
 					};
@@ -179,6 +198,8 @@ final class NaturalMobSpawner{
 			$mob->spawnToAll();
 			$this->natural[$mob]=0;
 			++$counts["total"];++$counts[$group];
+			$key = ($x >> 4) . ":" . ($z >> 4);
+			$populationByChunk[$key] = ($populationByChunk[$key] ?? 0) + 1;
 			++$created;++$this->spawned;
 		}
 	}

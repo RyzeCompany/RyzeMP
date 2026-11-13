@@ -28,4 +28,38 @@ final class NaturalSpawnPolicy{
 	public static function canSpawnAnimal(int $light) : bool{
 		return $light >= 9;
 	}
+
+	/**
+	 * Current catalog has only squid as an aquatic natural mob. Avoid inventing
+	 * squids on land or in unrelated water features.
+	 */
+	public static function canSpawnSquidBiome(?string $biomeName) : bool{
+		return $biomeName !== null &&
+			(str_contains($biomeName, "ocean") || str_contains($biomeName, "river"));
+	}
+
+	/**
+	 * Cows, pigs, sheep and chickens should not replace missing habitat-specific
+	 * mobs in deserts, oceans, mushroom islands, beaches or other dimensions.
+	 * Unknown biome IDs are rejected until data is available for them.
+	 */
+	public static function canSpawnFarmAnimalBiome(?string $biomeName) : bool{
+		if($biomeName === null){return false;}
+		foreach(["ocean", "river", "desert", "mesa", "badlands", "mushroom", "beach", "hell", "the_end", "nether", "basalt"] as $excluded){
+			if(str_contains($biomeName, $excluded)){return false;}
+		}
+		return true;
+	}
+
+	/** @param array<string, int> $populationByChunk */
+	public static function populationInChunkRadius(array $populationByChunk, int $cx, int $cz, int $radius = 4) : int{
+		$result = 0;
+		$radius = max(0, min(4, $radius));
+		for($x = $cx - $radius; $x <= $cx + $radius; ++$x){
+			for($z = $cz - $radius; $z <= $cz + $radius; ++$z){
+				$result += $populationByChunk[$x . ":" . $z] ?? 0;
+			}
+		}
+		return $result;
+	}
 }

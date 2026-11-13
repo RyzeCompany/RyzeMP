@@ -24,6 +24,26 @@ final class NaturalSpawnPolicyTest extends TestCase{
 		self::assertFalse(Policy::withinPlayerRange(24**2 + 48**2));
 		self::assertTrue(Policy::withinPlayerRange(30**2 + 20**2));
 	}
+	public function testBiomeHabitatRules() : void{
+		self::assertTrue(Policy::canSpawnSquidBiome("ocean"));
+		self::assertTrue(Policy::canSpawnSquidBiome("deep_cold_ocean"));
+		self::assertTrue(Policy::canSpawnSquidBiome("frozen_river"));
+		self::assertFalse(Policy::canSpawnSquidBiome("plains"));
+		self::assertFalse(Policy::canSpawnSquidBiome(null));
+		self::assertTrue(Policy::canSpawnFarmAnimalBiome("plains"));
+		self::assertTrue(Policy::canSpawnFarmAnimalBiome("birch_forest"));
+		self::assertTrue(Policy::canSpawnFarmAnimalBiome("savanna"));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiome("desert"));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiome("mushroom_island"));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiome("deep_ocean"));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiome(null));
+	}
+	public function testNineByNineChunkDensityCapAccounting() : void{
+		$counts = ["0:0"=>3, "4:0"=>5, "-4:0"=>7, "5:0"=>11, "0:5"=>13];
+		self::assertSame(15, Policy::populationInChunkRadius($counts, 0, 0));
+		self::assertSame(3, Policy::populationInChunkRadius($counts, 0, 0, 0));
+		self::assertSame(16, Policy::populationInChunkRadius($counts, 4, 0, 1));
+	}
 	public function testPeacefulAndLightConstraints() : void{
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_PEACEFUL,0));
 		self::assertFalse(Policy::canSpawnZombie(World::DIFFICULTY_NORMAL,8));
