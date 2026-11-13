@@ -32,6 +32,7 @@ use pocketmine\item\PotterySherdType;
 use function strtolower;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
+use pocketmine\math\Facing;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 
@@ -85,10 +86,24 @@ final class ArchaeologyContent{
 		}
 		$pot = self::newDecoratedPot();
 		RuntimeBlockStateRegistry::getInstance()->register($pot);
+		//Bedrock decorated_pot has the numeric "direction" state, NOT
+		//"minecraft:cardinal_direction". Using the wrong property prevents
+		//the login crafting-data cache from serializing decorated-pot items.
 		GlobalBlockStateHandlers::getDeserializer()->map(BlockTypeNames::DECORATED_POT, static fn(BlockStateReader $in) : DecoratedPot =>
-			(clone $pot)->setFacing($in->readCardinalHorizontalFacing()));
+			(clone $pot)->setFacing(match($in->readBoundedInt(BlockStateNames::DIRECTION, 0, 3)){
+				0 => Facing::EAST,
+				1 => Facing::SOUTH,
+				2 => Facing::WEST,
+				3 => Facing::NORTH
+			}));
 		GlobalBlockStateHandlers::getSerializer()->map($pot, static fn(DecoratedPot $state) : BlockStateWriter =>
-			BlockStateWriter::create(BlockTypeNames::DECORATED_POT)->writeCardinalHorizontalFacing($state->getFacing()));
+			BlockStateWriter::create(BlockTypeNames::DECORATED_POT)->writeInt(BlockStateNames::DIRECTION, match($state->getFacing()){
+				Facing::EAST => 0,
+				Facing::SOUTH => 1,
+				Facing::WEST => 2,
+				Facing::NORTH => 3,
+				default => throw new \InvalidArgumentException("Decorated pot has non-horizontal facing")
+			}));
 		self::$decoratedPotRegistered = true;
 	}
 
