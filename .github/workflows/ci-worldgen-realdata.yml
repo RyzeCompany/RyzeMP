@@ -25,6 +25,8 @@ on:
       - 'tests/fixtures/worldgen/**'
       - 'tests/worldgen-phar-smoke.py'
       - 'tools/prepare-vanillamine-worldgen.php'
+      - 'src/PocketMine.php'
+      - 'tests/worldgen-egg-bootstrap-smoke.py'
   workflow_dispatch:
 
 permissions:
@@ -61,12 +63,19 @@ jobs:
             tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php \
             tests/phpunit/world/generator/vanilla/StructureTest.php \
             tests/phpunit/world/generator/vanilla/FreeSpaceTest.php
+      - name: Check vanilla one-shot bootstrap with real Java 26.3 data
+        timeout-minutes: 5
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --fail-on-skipped tests/phpunit/world/generator/vanilla/VanillaWorldgenSetupTest.php
       - name: Build the PHAR and restart three opt-in LevelDB worlds
         timeout-minutes: 12
         run: |
           composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
           php -d phar.readonly=0 build/server-phar.php --out="$RUNNER_TEMP/RyzeMP-worldgen.phar"
           python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Boot the packaged PHAR in Egg auto-Vanilla mode, preserve previous worlds
+        timeout-minutes: 5
+        run: python3 tests/worldgen-egg-bootstrap-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
       - name: Reject changed worldgen data without losing stored chunks
         timeout-minutes: 4
         run: python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --cache-failure
