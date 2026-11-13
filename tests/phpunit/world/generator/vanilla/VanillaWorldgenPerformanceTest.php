@@ -41,6 +41,16 @@ final class VanillaWorldgenPerformanceTest extends TestCase{
             FastChunkSerializer::serializeTerrain($optimized));
     }
 
+    public function testPopulationTaskRemainsConstructibleInPhpZts() : void{
+        // Detect forbidden non-thread-safe property defaults before shipping a
+        // PHAR: this regression previously crashed the real server at startup.
+        $task = new \pocketmine\world\generator\PopulationTask(
+            1, 0, 0, null, [],
+            static function(Chunk $chunk, array $adjacentChunks) : void{}
+        );
+        self::assertInstanceOf(\pocketmine\world\generator\PopulationTask::class, $task);
+    }
+
     public function testProfilerDisabledAndResetSafely() : void{
         $key = "RYZEMP_WORLDGEN_PROFILE";
         $was = getenv($key);
