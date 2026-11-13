@@ -498,18 +498,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	protected function sendSpawnPacket(Player $player) : void{
 		$networkSession = $player->getNetworkSession();
 		$typeConverter = $networkSession->getTypeConverter();
-		$sourceProtocol = $this instanceof Player ? $this->getNetworkSession()->getProtocolId() : null;
 		$targetProtocol = $networkSession->getProtocolId();
-		$crossVersionPlayerSpawn = $this instanceof Player && $sourceProtocol !== $targetProtocol;
-		if($crossVersionPlayerSpawn){
-			$networkSession->getLogger()->debug(
-				"CrossVersion[remote-spawn-begin] source=" . $this->getName() .
-				" game=" . ($this->getNetworkSession()->getGameVersion() ?? "unknown") .
-				" protocol=$sourceProtocol -> target=" . $player->getName() .
-				" game=" . ($networkSession->getGameVersion() ?? "unknown") .
-				" protocol=$targetProtocol"
-			);
-		}
 		$isNpc = !($this instanceof Player);
 		if($isNpc && !$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]))){
 			$this->markSpawnPacketRejected();
@@ -559,7 +548,6 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 							$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
 						}
 						$this->despawnFrom($player, false);
-						$networkSession->getLogger()->debug("Failed to deliver human spawn to " . $player->getName() . "; cleared viewer state for retry");
 					}
 				}
 			);
@@ -570,22 +558,12 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			}
 			return;
 		}
-		if($crossVersionPlayerSpawn){
-			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-add-player-queued] source=" . $this->getName());
-		}
-
 		//TODO: Hack for MCPE 1.2.13: DATA_NAMETAG is useless in AddPlayerPacket, so it has to be sent separately
 		$this->sendData([$player], [EntityMetadataProperties::NAMETAG => new StringMetadataProperty($this->getNameTag())]);
-		if($crossVersionPlayerSpawn){
-			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-metadata-queued] source=" . $this->getName());
-		}
 
 		$entityEventBroadcaster = $networkSession->getEntityEventBroadcaster();
 		$entityEventBroadcaster->onMobArmorChange([$networkSession], $this);
 		$entityEventBroadcaster->onMobOffHandItemChange([$networkSession], $this);
-		if($crossVersionPlayerSpawn){
-			$networkSession->getLogger()->debug("CrossVersion[remote-spawn-equipment-queued] source=" . $this->getName());
-		}
 
 		if($isNpc && $targetProtocol >= ProtocolInfo::PROTOCOL_1_26_40){
 			$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));

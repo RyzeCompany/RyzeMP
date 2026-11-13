@@ -1070,7 +1070,6 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		$this->usedChunks[$hash] = UsedChunkStatus::NEEDED;
 		$this->loadQueue[$hash] = 0;
 		$this->nextChunkOrderRun = 0;
-		$this->logger->debug("Retrying unacknowledged legacy chunk $chunkX,$chunkZ");
 	}
 
 	/**
