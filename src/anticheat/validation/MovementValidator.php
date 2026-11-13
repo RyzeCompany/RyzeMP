@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace pocketmine\anticheat\validation;
 
 use pocketmine\anticheat\AntiCheatSession;
+use pocketmine\anticheat\timeline\InputFrame;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\player\Player;
 use function count;
-use function max;
 use function number_format;
 use function sqrt;
 
@@ -19,8 +19,8 @@ use function sqrt;
  * of single packet deltas so network batching/jitter doesn't become a flag.
  */
 final class MovementValidator{
-	private const TIMER_WINDOW_FRAMES = 20;
-	private const TIMER_MIN_SECONDS = 0.45;
+	private const TIMER_WINDOW_FRAMES = 40;
+	private const TIMER_MIN_SECONDS = 1.10;
 	private const TIMER_OBSERVE_TPS = 28.0;
 
 	private const SPEED_OBSERVE_PER_TICK = 0.90;
@@ -52,6 +52,13 @@ final class MovementValidator{
 		$dz = $latest->z - $previous->z;
 		$horizontal = sqrt(($dx * $dx) + ($dz * $dz));
 		$distance3d = sqrt(($dx * $dx) + ($dy * $dy) + ($dz * $dz));
+
+		// Player::actuallyHandleMovement rejects jumps larger than 15 blocks.
+		// Do not treat a rejected, stale or resynchronizing position as player speed.
+		if($distance3d > 15.0){
+			$session->resetMovementState();
+			return;
+		}
 
 		$horizontalPerTick = $horizontal / $tickDelta;
 		$verticalPerTick = $dy / $tickDelta;
@@ -116,24 +123,35 @@ final class MovementValidator{
 		}
 	}
 
-	private function observeTimerWindow(AntiCheatSession $session) : void{
-		$frames = $session->getInputTimeline()->getFrames();
+	/**
+	 * Use a sustained window, not a single subsecond packet burst.
+	 *
+	 * @param list<InputFrame> $frames
+	 */
+	public static function calculateClientTicksPerSecond(array $frames) : ?float{
 		$count = count($frames);
 		if($count < self::TIMER_WINDOW_FRAMES){
-			return;
+			return null;
 		}
-
 		$latest = $frames[$count - 1];
 		$oldest = $frames[$count - self::TIMER_WINDOW_FRAMES];
 		$tickDelta = $latest->clientTick - $oldest->clientTick;
 		$timeDelta = $latest->receivedAt - $oldest->receivedAt;
-
 		if($tickDelta <= 0 || $timeDelta < self::TIMER_MIN_SECONDS){
-			return;
+			return null;
 		}
+		return $tickDelta / $timeDelta;
+	}
 
-		$clientTicksPerSecond = $tickDelta / $timeDelta;
-		if($clientTicksPerSecond > self::TIMER_OBSERVE_TPS){
+	private function observeTimerWindow(AntiCheatSession $session) : void{
+		$frames = $session->getInputTimeline()->getFrames();
+		$clientTicksPerSecond = self::calculateClientTicksPerSecond($frames);
+		if($clientTicksPerSecond !== null && $clientTicksPerSecond > self::TIMER_OBSERVE_TPS){
+			$count = count($frames);
+			$latest = $frames[$count - 1];
+			$oldest = $frames[$count - self::TIMER_WINDOW_FRAMES];
+			$tickDelta = $latest->clientTick - $oldest->clientTick;
+			$timeDelta = $latest->receivedAt - $oldest->receivedAt;
 			$session->addViolation(
 				"movement.timer_observation",
 				0.15,
