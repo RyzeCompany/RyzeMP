@@ -46,7 +46,10 @@ final class VanillaNativeBackend{
 	private static ?self $instance = null;
 	private static bool $attempted = false;
 
-	/** @param resource $process @param resource $stdin */
+	/**
+	 * @param resource $process
+	 * @param resource $stdin
+	 */
 	private function __construct(
 		private $process,
 		private $stdin,

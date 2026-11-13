@@ -97,7 +97,7 @@ final class VanillaDensityChunkWriter{
 		$flags = $stage === "full" ?
 			NativeTerrainClient::FLAG_MATERIALS | NativeTerrainClient::FLAG_CARVERS : 0;
 		$this->terrain = $useCompiledTerrain ?
-			(NativeTerrainFiller::connect($dataDir, $seed, $names, $router->minY, $router->height,
+			(NativeTerrainFiller::connect($dataDir, $seed, $tree->getBiomeNames(), $router->minY, $router->height,
 				$fallback, $flags, $dimension) ?? $fallback()) :
 			$fallback();
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
