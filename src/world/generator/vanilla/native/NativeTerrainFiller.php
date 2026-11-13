@@ -35,6 +35,7 @@ use function realpath;
  */
 final class NativeTerrainFiller implements TerrainFiller{
 	private ?TerrainFiller $fallback = null;
+	private static bool $reportedNativeConnection = false;
 
 	/**
 	 * @phpstan-param \Closure() : TerrainFiller $fallbackFactory
@@ -71,6 +72,11 @@ final class NativeTerrainFiller implements TerrainFiller{
 			$client->close();
 			\GlobalLogger::get()->warning("Vanilla generator: the native terrain core reads different worldgen data than PHP, using the PHP implementation");
 			return null;
+		}
+		if(!self::$reportedNativeConnection){
+			self::$reportedNativeConnection = true;
+			\GlobalLogger::get()->info("[Worldgen Go] Native terrain session verified (protocol " . VanillaNativeBackend::PROTOCOL_VERSION .
+				", dimension " . $settings . ", material/carver flags " . $flags . ")");
 		}
 		return new self($client, $fallbackFactory);
 	}

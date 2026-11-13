@@ -68,8 +68,14 @@ try{
 						throw new RuntimeException("Go/PHP terrain mismatch for $dimension seed=$seed chunk=$chunkX,$chunkZ cell=$i PHP=" . ($a ?? "NULL") . " Go=" . ($b ?? "NULL"));
 					}
 				}
-				if($result->getCarvingMask() !== $reference->getCarvingMask()){
-					throw new RuntimeException("Go/PHP carver mask mismatch for $dimension seed=$seed chunk $chunkX,$chunkZ");
+				//CarvingRun records visited positions in insertion order, whereas
+				//Go sends ascending RLE ranges. The same carved positions are
+				//equivalent regardless of PHP hash-table insertion order.
+				$nativeMask = $result->getCarvingMask();
+				$referenceMask = $reference->getCarvingMask();
+				if(count($nativeMask) !== count($referenceMask) || array_diff_key($nativeMask, $referenceMask) !== [] ||
+					array_diff_key($referenceMask, $nativeMask) !== []){
+					throw new RuntimeException("Go/PHP carved cell mismatch for $dimension seed=$seed chunk=$chunkX,$chunkZ go=" . count($nativeMask) . " php=" . count($referenceMask));
 				}
 				++$cases;
 				echo "GO_PHP_PARITY_OK dimension=$dimension seed=$seed chunk=$chunkX,$chunkZ\n";
@@ -77,6 +83,14 @@ try{
 		}
 	}
 	echo "GO_PHP_PARITY_COMPLETE chunks=$cases dimensions=3 seeds=2 stages=terrain+material+carvers\n";
+	//A dead native process must recover to the original compiled PHP filler,
+	//without changing a world preset or leaving workers unusable.
+	$backend->stop();
+	$fallbackChunk = $native->fill(8, -8);
+	if($native->getClient() !== null || $fallbackChunk->materials === []){
+		throw new RuntimeException("Native process failure did not recover to PHP");
+	}
+	echo "GO_PHP_FAILURE_RECOVERY_OK\n";
 }finally{
 	$backend->stop();
 }

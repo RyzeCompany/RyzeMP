@@ -85,6 +85,8 @@ def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None, cache_
                     print(output, end="")
             if (
                 process.returncode
+                or (env.get("RYZEMP_VANILLAGEN_BINARY") and
+                    "[Worldgen Go] Native terrain session verified" not in output)
                 or marker not in output
                 or any(marker in output for marker in ("Fatal error", "Uncaught", "CRITICAL", "EMERGENCY"))
             ):
