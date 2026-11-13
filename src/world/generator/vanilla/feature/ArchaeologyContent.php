@@ -10,6 +10,8 @@ use pocketmine\block\BlockIdentifier;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\block\BlockTypeInfo;
 use pocketmine\block\BrushableBlock;
+use pocketmine\block\DecoratedPot;
+use pocketmine\block\tile\DecoratedPot as DecoratedPotTile;
 use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\tile\BrushableBlock as BrushableBlockTile;
 use pocketmine\block\VanillaBlocks;
@@ -46,6 +48,7 @@ final class ArchaeologyContent{
 		GlobalItemDataHandlers::getSerializer()->map($brush, static fn() : SavedItemData => new SavedItemData(ItemTypeNames::BRUSH));
 		StringToItemParser::getInstance()->register("brush", static fn() : Brush => clone $brush);
 		self::registerSherds();
+		self::registerDecoratedPot();
 	}
 
 
@@ -70,6 +73,27 @@ final class ArchaeologyContent{
 		GlobalItemDataHandlers::getSerializer()->map($prototype, static fn(PotterySherd $item) : SavedItemData =>
 			new SavedItemData("minecraft:" . strtolower($item->getSherdType()->name) . "_pottery_sherd"));
 		self::$sherdsRegistered = true;
+	}
+
+
+	private static bool $decoratedPotRegistered = false;
+
+	/** Register native decorated-pot block states and their LevelDB tile. */
+	private static function registerDecoratedPot() : void{
+		if(self::$decoratedPotRegistered){
+			return;
+		}
+		$pot = new DecoratedPot(
+			new BlockIdentifier(BlockTypeIds::DECORATED_POT, DecoratedPotTile::class),
+			"Decorated Pot",
+			new BlockTypeInfo(BlockBreakInfo::instant())
+		);
+		RuntimeBlockStateRegistry::getInstance()->register($pot);
+		GlobalBlockStateHandlers::getDeserializer()->map(BlockTypeNames::DECORATED_POT, static fn(BlockStateReader $in) : DecoratedPot =>
+			(clone $pot)->setFacing($in->readCardinalHorizontalFacing()));
+		GlobalBlockStateHandlers::getSerializer()->map($pot, static fn(DecoratedPot $state) : BlockStateWriter =>
+			BlockStateWriter::create(BlockTypeNames::DECORATED_POT)->writeCardinalHorizontalFacing($state->getFacing()));
+		self::$decoratedPotRegistered = true;
 	}
 
 	/** @internal */

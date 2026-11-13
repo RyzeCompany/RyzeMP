@@ -85,6 +85,7 @@ final class TileFactory{
 		$this->register(TrialSpawner::class, ["TrialSpawner", "minecraft:trial_spawner"]);
 		$this->register(Vault::class, ["Vault", "minecraft:vault"]);
 		$this->register(BrushableBlock::class, ["BrushableBlock", "minecraft:brushable_block"]);
+		$this->register(DecoratedPot::class, ["DecoratedPot", "minecraft:decorated_pot"]);
 
 		//TODO: ChalkboardBlock
 		//TODO: ChemistryTable

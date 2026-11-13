@@ -863,7 +863,9 @@ final class BlockTypeIds{
 	public const SUSPICIOUS_SAND = 10830;
 	public const SUSPICIOUS_GRAVEL = 10831;
 
-	public const FIRST_UNUSED_BLOCK_ID = 10832;
+	public const DECORATED_POT = 10832;
+
+	public const FIRST_UNUSED_BLOCK_ID = 10833;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_BLOCK_ID;
 
