@@ -264,7 +264,11 @@ final class VanillaDensityChunkWriter{
 
 	private function checkData() : void{
 		if($this->pinnedHash !== null){
+			$start = VanillaWorldgenProfiler::active() ? microtime(true) : 0.0;
 			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
+			if($start !== 0.0){
+				VanillaWorldgenProfiler::add("verify", (microtime(true) - $start) * 1000);
+			}
 		}
 	}
 
@@ -280,6 +284,8 @@ final class VanillaDensityChunkWriter{
 	}
 
 	private function writeTerrain(Chunk $chunk, int $chunkX, int $chunkZ) : void{
+		$profile = VanillaWorldgenProfiler::active();
+		$stageStarted = $profile ? microtime(true) : 0.0;
 		$terrain = $this->terrain->fill($chunkX, $chunkZ, $this->structures?->getBeardifier($chunkX, $chunkZ));
 		$terrain->unpackBiomes();
 		if($this->endBiomes !== null){
@@ -292,6 +298,10 @@ final class VanillaDensityChunkWriter{
 		}
 		if($terrain->stage < TerrainChunk::STAGE_CARVED){
 			$this->carvers?->apply($terrain);
+		}
+		if($profile){
+			VanillaWorldgenProfiler::add("terrain", (microtime(true) - $stageStarted) * 1000);
+			$stageStarted = microtime(true);
 		}
 		$height = $terrain->height;
 		$quartsY = $height >> 2;
@@ -357,6 +367,9 @@ final class VanillaDensityChunkWriter{
 		if($this->features !== null){
 			$this->features->recordTerrain($chunkX, $chunkZ, $chunk);
 		}
+		if($profile){
+			VanillaWorldgenProfiler::add("blocks", (microtime(true) - $stageStarted) * 1000);
+		}
 	}
 
 	/** Runs decoration enabled by the world's preset. */
@@ -368,10 +381,15 @@ final class VanillaDensityChunkWriter{
 		if(!$this->checkedPopulationCache){
 			$this->checkData();
 		}
+		$profile = VanillaWorldgenProfiler::active();
+		$stageStarted = $profile ? microtime(true) : 0.0;
 		if($this->deterministicDecoration !== null){
 			$this->deterministicDecoration->decorate($world, $chunkX, $chunkZ);
 		}else{
 			$features->decorate($world, $chunkX, $chunkZ);
+		}
+		if($profile){
+			VanillaWorldgenProfiler::add("decoration", (microtime(true) - $stageStarted) * 1000);
 		}
 	}
 

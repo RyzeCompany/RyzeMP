@@ -29,6 +29,7 @@ use pocketmine\world\format\Chunk;
 use pocketmine\world\format\io\FastChunkSerializer;
 use pocketmine\world\generator\executor\ThreadLocalGeneratorContext;
 use pocketmine\world\generator\vanilla\InvalidVanillaDataException;
+use pocketmine\world\generator\vanilla\VanillaWorldgenProfiler;
 use function array_map;
 use function igbinary_serialize;
 use function igbinary_unserialize;
@@ -53,6 +54,13 @@ class PopulationTask extends AsyncTask{
 
 	private string $adjacentChunks;
 
+	private float $queuedAt;
+	private float $startedAt = 0.0;
+	private float $queueDelayMs = 0.0;
+	private float $workerDurationMs = 0.0;
+	/** @var array<string, float> */
+	private array $worldgenStages = [];
+
 	/**
 	 * @param Chunk[]|null[] $adjacentChunks
 	 * @phpstan-param array<int, Chunk|null> $adjacentChunks
@@ -68,6 +76,7 @@ class PopulationTask extends AsyncTask{
 		\Closure $onCompletion,
 		?\Closure $onDataFailure = null
 	){
+		$this->queuedAt = microtime(true);
 		$this->handlesDataFailure = $onDataFailure !== null;
 		if($onDataFailure !== null){
 			$this->storeLocal(self::TLS_KEY_ON_DATA_FAILURE, $onDataFailure);
@@ -83,6 +92,12 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onRun() : void{
+		$profile = VanillaWorldgenProfiler::enabled();
+		if($profile){
+			$this->startedAt = microtime(true);
+			$this->queueDelayMs = ($this->startedAt - $this->queuedAt) * 1000;
+			VanillaWorldgenProfiler::begin();
+		}
 		try{
 			$this->generate();
 		}catch(InvalidVanillaDataException $e){
@@ -90,6 +105,11 @@ class PopulationTask extends AsyncTask{
 				throw $e;
 			}
 			$this->dataFailure = $e->getMessage();
+		}finally{
+			if($profile){
+				$this->worldgenStages = VanillaWorldgenProfiler::finish();
+				$this->workerDurationMs = (microtime(true) - $this->startedAt) * 1000;
+			}
 		}
 	}
 
@@ -138,6 +158,10 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onCompletion() : void{
+		if($this->worldgenStages !== []){
+			VanillaWorldgenProfiler::report($this->worldgenStages, $this->queueDelayMs,
+				$this->workerDurationMs, (microtime(true) - $this->queuedAt) * 1000);
+		}
 		if($this->dataFailure !== null){
 			/** @phpstan-var \Closure(string) : void $onDataFailure */
 			$onDataFailure = $this->fetchLocal(self::TLS_KEY_ON_DATA_FAILURE);
