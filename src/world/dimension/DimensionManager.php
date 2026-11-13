@@ -25,6 +25,7 @@ use pocketmine\world\WorldCreationOptions;
 use function copy;
 use function file_exists;
 use function is_file;
+use function is_link;
 
 final class DimensionManager{
 
@@ -157,7 +158,7 @@ final class DimensionManager{
 		}
 		if($preset !== null){
 			$path = $this->server->getDataPath() . "worlds/" . $name;
-			if(file_exists($path)){
+			if(file_exists($path) || is_link($path)){
 				$this->server->getLogger()->error("Native dimensions: choose a fresh folder for $name");
 				return;
 			}

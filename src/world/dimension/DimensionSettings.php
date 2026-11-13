@@ -111,7 +111,10 @@ final class DimensionSettings{
 		}
 	}
 
-	/** @param mixed[] $config @return mixed[] */
+	/**
+	 * @param mixed[] $config
+	 * @return mixed[]
+	 */
 	private static function section(array $config, string $key) : array{
 		$value = $config[$key] ?? [];
 		if(!is_array($value)){

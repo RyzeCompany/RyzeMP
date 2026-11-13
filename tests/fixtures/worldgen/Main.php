@@ -58,6 +58,7 @@ final class Main extends PluginBase{
 	];
 	private const END_GATEWAY = [-3793, 69, -407];
 	private const END_SHIP_FRAME = [-164, 142, 1284];
+	private const DESERT_PYRAMID_START = [-320, -304];
 	private const VAULT_REWARD_UUID = "90f3ea7f-d374-4f16-a350-e085218df5fd";
 
 	protected function onEnable() : void{
@@ -436,21 +437,20 @@ final class Main extends PluginBase{
 			return;
 		}
 
+		[$startX, $startZ] = self::DESERT_PYRAMID_START;
 		$manager = (new RyzeOverworldGenerator(self::SEED, $preset))->getStructureManager();
-		$found = $manager?->locate("minecraft:desert_pyramid", 0, 0, radius: 24);
-		if($found === null || $manager === null){
-			throw new \RuntimeException("Seed " . self::SEED . " has no nearby desert pyramid");
-		}
-		$start = $manager->getStart("minecraft:desert_pyramids", $found[1], $found[2]);
+		$start = $manager?->getStart("minecraft:desert_pyramids", $startX, $startZ);
 		if($start === null){
 			throw new \RuntimeException("Desert pyramid has no structure start");
 		}
 		$box = $start->getPiecesBoundingBox();
-		$this->getLogger()->info("Testing desert pyramid archaeology at chunk " . $found[1] . "," . $found[2]);
-		$requests = [];
+		$this->getLogger()->info("Testing desert pyramid archaeology at chunk $startX,$startZ");
+		$requests = [[$startX, $startZ]];
 		for($x = $box->minX >> 4; $x <= $box->maxX >> 4; ++$x){
 			for($z = $box->minZ >> 4; $z <= $box->maxZ >> 4; ++$z){
-				$requests[] = [$x, $z];
+				if($x !== $startX || $z !== $startZ){
+					$requests[] = [$x, $z];
+				}
 			}
 		}
 		$inspect = static function(Chunk $chunk) use ($world, $recordPath, $brush) : bool{
