@@ -62,6 +62,7 @@ jobs:
             tests/phpunit/world/generator/vanilla/VanillaRealDataReferenceTest.php \
             tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php \
             tests/phpunit/world/generator/vanilla/StructureTest.php \
+            tests/phpunit/world/generator/vanilla/VaultLootCoverageTest.php \
             tests/phpunit/world/generator/vanilla/FreeSpaceTest.php
       - name: Check vanilla one-shot bootstrap with real Java 26.3 data
         timeout-minutes: 5
