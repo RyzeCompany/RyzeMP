@@ -15,6 +15,7 @@ use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
 use pocketmine\entity\SpawnerEntityRegistry;
+use pocketmine\entity\Skeleton;
 use pocketmine\entity\SpawnReason;
 use pocketmine\entity\Squid;
 use pocketmine\entity\Zombie;
@@ -84,7 +85,7 @@ final class NaturalMobSpawner{
 		$populationByChunk = [];
 		foreach($w->getEntities() as $entity){
 			if($entity->isClosed() || $entity->isFlaggedForDespawn()){continue;}
-			if($entity instanceof Zombie){ ++$counts["monster"]; }
+			if($entity instanceof Zombie || $entity instanceof Skeleton){ ++$counts["monster"]; }
 			elseif($entity instanceof Animal){ ++$counts["animal"]; }
 			elseif($entity instanceof Squid){ ++$counts["water"]; }
 			else{ continue; }
@@ -146,7 +147,7 @@ final class NaturalMobSpawner{
 				$light=$w->getFullLightAt($x,$y,$z);
 				if(Policy::canSpawnZombie($w->getDifficulty(),$light) &&
 					Policy::underCap($counts["monster"],$this->maxMonsters)){
-					$identifier=Zombie::getNetworkTypeId();
+					$identifier = mt_rand(0, 3) === 0 ? Skeleton::getNetworkTypeId() : Zombie::getNetworkTypeId();
 					$surface=!$underground;$group="monster";
 				}elseif(!$underground && Policy::canSpawnAnimal($light) &&
 					Policy::underCap($counts["animal"],$this->maxAnimals) &&

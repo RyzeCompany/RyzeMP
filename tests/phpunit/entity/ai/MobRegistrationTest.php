@@ -11,6 +11,7 @@ use pocketmine\entity\animal\Sheep;
 use pocketmine\entity\EntityFactory;
 use pocketmine\entity\SpawnerEntityRegistry;
 use pocketmine\entity\Zombie;
+use pocketmine\entity\Skeleton;
 
 final class MobRegistrationTest extends TestCase{
 	public function testNewMobsHavePersistentIdsAndSpawnerFactories() : void{
@@ -21,7 +22,8 @@ final class MobRegistrationTest extends TestCase{
 			Pig::class=>"minecraft:pig",
 			Chicken::class=>"minecraft:chicken",
 			Sheep::class=>"minecraft:sheep",
-			Zombie::class=>"minecraft:zombie"
+			Zombie::class=>"minecraft:zombie",
+			Skeleton::class=>"minecraft:skeleton"
 		] as $class=>$id){
 			self::assertTrue($factory->isRegistered($class),$class." must save/reload in LevelDB");
 			self::assertTrue($spawn->isRegistered($id),$id." must be spawnable");

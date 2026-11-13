@@ -6,9 +6,9 @@ Tracking: [issue #59](https://github.com/RyzeCompany/RyzeMP/issues/59). Source a
 
 - Server-side Mob goal runtime and fair per-server update/path-search quotas.
 - A bounded ground A* pathfinder limited to populated, loaded terrain, never initiating chunk generation, rejecting water/lava/fire/cactus/magma/berry hazards, plus an abort-on-stuck path follower.
-- Zombie pursuit/melee of survival players, passive wandering for villagers, chickens, cows, pigs, sheep, and existing squid swimming.
+- Zombie pursuit/melee of survival players; skeleton ranged AI with native arrow projectiles, clear-line-of-sight targeting, difficulty cooldown and cancellable launch events; passive wandering for villagers, chickens, cows, pigs, sheep, and existing squid swimming.
 - PM5 EntityFactory registration/persisted NBT for four additional animals and built-in block spawner factories. Existing Zombie, Villager, Squid save IDs retained.
-- Natural Overworld population of animals/zombies/squid with light, biome-aware farm-animal/squid habitat filters, surface/underground, minimum/maximum player distance, global/category and 9x9 nearby chunk density caps and rate checks; two spawn events allow plugins to cancel before/after entity creation. No automatic edits to saved worlds.
+- Natural Overworld population of animals/zombies/skeletons/squid with light, biome-aware farm-animal/squid habitat filters, surface/underground, minimum/maximum player distance, global/category and 9x9 nearby chunk density caps and rate checks; two spawn events allow plugins to cancel before/after entity creation. No automatic edits to saved worlds.
 - Optional natural despawn; generated mobs do not persist with chunks. Manually spawned/plugin mobs are not flagged for natural despawn.
 - Per-world \`/gamerule domobspawning\` saved in gamerules.yml and synchronized over the existing multiversion session protocol.
 
