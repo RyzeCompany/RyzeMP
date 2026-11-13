@@ -77,7 +77,17 @@ final class Main extends PluginBase{
 		$snapshotPath = $server->getDataPath() . "worldgen-snapshot.json";
 		$reopen = is_file($snapshotPath);
 		if(!$reopen){
-			foreach(self::WORLDS as $name => [$generator]){
+			if($profile === "core-v6"){
+				$dimensions = $server->getDimensionManager()->getSettings();
+				if($dimensions->getWorldgenPreset(DimensionIds::NETHER) !== $preset ||
+					$dimensions->getWorldgenPreset(DimensionIds::THE_END) !== $preset){
+					throw new \RuntimeException("Dimension configuration did not retain the pinned preset");
+				}
+			}
+			foreach(self::WORLDS as $name => [$generator, $dimension]){
+				if($profile === "core-v6" && $dimension !== DimensionIds::OVERWORLD){
+					continue; // The server creates both configured dimensions through DimensionManager.
+				}
 				$entry = GeneratorManager::getInstance()->getGenerator($generator) ?? throw new \RuntimeException("Missing generator $generator");
 				$entry->validateGeneratorOptions($preset);
 				LevelDB::generate($server->getDataPath() . "worlds/$name", $name, WorldCreationOptions::create()

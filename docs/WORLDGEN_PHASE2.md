@@ -2,6 +2,47 @@
 
 **Baseline:** RyzeMP `main` @ `aa6d91b8070eef31b756c8332acd6848760c5ee7`; VanillaMine `vanilla-content` @ `4dd2228b47d64c8015c28138c846e6c4acb28345` (audited 2026-11-11). Scope tracked by [#59](https://github.com/RyzeCompany/RyzeMP/issues/59). Independent from weather [#58](https://github.com/RyzeCompany/RyzeMP/pull/58).
 
+## Estado actual
+
+El perfil experimental más completo es `core-v6;data=/absolute/cache;sha256=HEX`.
+Usa Java 26.3, formato de caché 5, y el backend PHP compilado. Añade a los
+tres generadores los placed features, las estructuras con Beardifier y los
+bloques de estructura descritos más abajo. Las secciones de auditoría e
+integraciones previas conservan el estado histórico de cada perfil.
+
+### Crear un servidor de prueba
+
+Prepara el caché en el checkout de RyzeMP y copia el SHA-256 que imprime la
+segunda orden. La CLI obtiene los insumos verificados y deja el caché fuera
+del PHAR.
+
+    php tools/prepare-vanillamine-worldgen.php /absolute/new/vanillamine-cache
+    php tools/worldgen-data-fingerprint.php /absolute/new/vanillamine-cache
+
+En un directorio nuevo de servidor, usa estas propiedades:
+
+    level-name=world
+    level-seed=12345
+    level-type=ryze_vanilla_overworld
+    generator-settings=core-v6;data=/absolute/new/vanillamine-cache;sha256=HEX
+
+Para crear Nether y End desde la configuración del servidor, usa el mismo
+preset en ambas secciones de `dimensions.yml`:
+
+    nether:
+      world: world_nether
+      source-dimension: nether
+      worldgen-preset: 'core-v6;data=/absolute/new/vanillamine-cache;sha256=HEX'
+    end:
+      world: world_the_end
+      source-dimension: end
+      worldgen-preset: 'core-v6;data=/absolute/new/vanillamine-cache;sha256=HEX'
+
+DimensionManager crea las carpetas nuevas con la semilla del Overworld y
+conserva el preset en sus metadatos. Las carpetas existentes usan el
+generador guardado. Para repetir la prueba automática de reinicio, ejecuta
+`tests/worldgen-phar-smoke.py` con el PHP de RyzeMP, el PHAR y el caché.
+
 ## Architecture and audit
 
 - RyzeMP registers `normal`, `flat`, `nether`, and dimension-specific `vanilla_nether` / `vanilla_end`. `DimensionManager` owns `dimensions.yml`, LevelDB source dimension mapping, portals and world preparation. Preserve all of these.
@@ -124,7 +165,7 @@ The prior empty-preset 2D generator and historical core-v1 profiles stay untouch
 
 In both cases, HEX is the 64-character lowercase SHA-256 printed by tools/worldgen-data-fingerprint.php. The entire generator-options string persists in the existing level.dat. Fingerprints cover all file bytes and relative names in the VanillaMine cache (data, reports, trees, Java blocks/items, Geyser mappings and the version stamp), not timestamps or absolute location. A changed cache makes the generator throw before writing any new chunk. Symlinked cache inputs are rejected. Full hashing per chunk can be expensive and has not been benchmarked on the real 26.3 dataset.
 
-### Authentic Java data preparation: implemented but not run in this session
+### Authentic Java data preparation
 
 From an Internet-connected, trusted machine with rights to use Minecraft Java Edition server files, run these commands in the RyzeMP repository:
 
@@ -134,7 +175,7 @@ From an Internet-connected, trusted machine with rights to use Minecraft Java Ed
 
 The first CLI refuses nonempty/symlink directories and only runs with explicit operator action. It uses VanillaMine's original VanillaDataFetcher at commit 4dd2228b47d64c8015c28138c846e6c4acb28345, not an approximate generator. That fetcher resolves Java 26.3 using Mojang's version manifest, checks the server JAR against its published SHA-1, uses a SHA-256-verified Eclipse Temurin JRE if required, runs the official Minecraft data generator and verifies pinned GeyserMC mapping files using their SHA-256 checksums (revision 81700ab543c1f4e9f9041f58dac4154ecb0d0c8b). It emits Minecraft version 26.3 and cache format 5. The generated asset cache contains density/noise settings, material rules, biome lists and R-trees, features, placed features, tags, structures and templates. Do not commit or redistribute Mojang assets; observe the Minecraft EULA.
 
-This session's container could not resolve Mojang domain names and had Go 1.23.2, below the audited native Go 1.24 requirement. No real data was downloaded or executed here. The procedure is reproducible but NOT itself proof of real-data parity.
+The real-data workflow rebuilds this cache, runs the Java reference tests and removes the assets afterward. See the latest workflow run for the verified results.
 
 ### Placed features and shortcomings
 
@@ -153,7 +194,7 @@ Actual PHAR startup with opt-in worlds, LevelDB restart, real Bedrock clients, m
 ## PHAR restart coverage and generated block entities
 
 The real-data workflow builds the PHAR and starts it twice per profile with
-`core-v1` and `core-v4`, using Java 26.3 data and dedicated LevelDB folders for all
+`core-v1`, `core-v4`, `core-v5` and `core-v6`, using Java 26.3 data and dedicated LevelDB folders for all
 three dimensions. It checks the selected generator, seed, preset, dimension,
 block and biome snapshots, and new chunk population after restart. The
 `core-v4` test also checks the natural dungeon at seed 12345, chunk (0, 3).
@@ -162,8 +203,7 @@ Supported generated tiles travel with their chunk from the population worker
 to the world thread. The test verifies a dungeon chest's loot-table metadata,
 64-bit seed and stored inventory, and a skeleton spawner's identifier after
 reopening the world. Existing tiles retain their inventories when population
-touches a neighbouring chunk. Chest loot-table rolling, unsupported block
-entities and structure entity spawning still need runtime integration.
+touches a neighbouring chunk. The structure and loot section describes the subsequent container update.
 
 To repeat the two-boot check with an already prepared cache and a locally
 built PHAR, run:

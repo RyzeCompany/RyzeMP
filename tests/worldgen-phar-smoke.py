@@ -32,19 +32,32 @@ def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None, cache_
         config = config.replace("enable-dev-builds: false", "enable-dev-builds: true")
         config = config.replace("async-workers: auto", "async-workers: 2")
         (data / "pocketmine.yml").write_text(config)
-        (data / "dimensions.yml").write_text(
-            "nether:\n  source-dimension: nether\nend:\n  source-dimension: end\n"
-        )
+        dimensions = "nether:\n  source-dimension: nether\nend:\n  source-dimension: end\n"
+        if profile == "core-v6":
+            if cache_failure:
+                source_cache = cache
+                cache = data / "private-worldgen-cache"
+                shutil.copytree(source_cache, cache, ignore=shutil.ignore_patterns("compiled"))
+            report = subprocess.check_output(
+                [php, str(fixture.parents[2] / "tools/worldgen-data-fingerprint.php"), str(cache)],
+                text=True,
+            )
+            fingerprint = next((line.removeprefix("sha256: ") for line in report.splitlines()
+                                if line.startswith("sha256: ")), "")
+            if len(fingerprint) != 64 or any(c not in "0123456789abcdef" for c in fingerprint):
+                raise RuntimeError(f"Invalid data fingerprint {fingerprint!r}")
+            preset = f"core-v6;data={cache};sha256={fingerprint}".replace("'", "''")
+            dimensions = "".join(
+                f"{dimension}:\n  source-dimension: {dimension}\n  worldgen-preset: '{preset}'\n"
+                for dimension in ("nether", "end")
+            )
+        (data / "dimensions.yml").write_text(dimensions)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reservation:
             reservation.bind(("127.0.0.1", 0))
             port = reservation.getsockname()[1]
         (data / "server.properties").write_text(
             f"server-ip=127.0.0.1\nserver-port={port}\nenable-ipv6=off\n"
         )
-        if cache_failure:
-            source_cache = cache
-            cache = data / "private-worldgen-cache"
-            shutil.copytree(source_cache, cache, ignore=shutil.ignore_patterns("compiled"))
         env = os.environ | {
             "POCKETMINE_VANILLA_WORLDGEN_DATA": str(cache),
             "RYZE_WORLDGEN_TEST_PROFILE": profile,

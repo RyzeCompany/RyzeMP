@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/world/generator/vanilla/**'
       - 'src/world/dimension/generator/VanillaGenerators.php'
+      - 'src/world/dimension/DimensionSettings.php'
       - 'src/world/dimension/generator/end/**'
       - 'src/world/dimension/portal/**'
       - 'src/world/World.php'
@@ -46,6 +47,7 @@ jobs:
           php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
             src/world/generator/vanilla \
             src/world/dimension/generator/VanillaGenerators.php \
+            src/world/dimension/DimensionSettings.php \
             src/world/dimension/generator/end/EndCrystalSpawner.php src/world/dimension/generator/end/object/EndGateway.php \
             src/world/dimension/portal/PortalContent.php src/world/dimension/portal/PortalTravel.php src/world/dimension/portal/block/EndGateway.php \
             src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
