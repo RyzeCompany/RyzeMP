@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\loot\LootContext;
 use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootTables;
+use pocketmine\world\generator\vanilla\feature\ArchaeologyContent;
 use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use function array_keys;
 use function getenv;
@@ -16,6 +17,31 @@ use function is_dir;
 
 /** Checks actual Trial Chamber rewards against the pinned Java data and Bedrock item mappings. */
 final class VaultLootCoverageTest extends TestCase{
+	public function testArchaeologyLootItemsRemainRepresentable() : void{
+		$directory = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
+		if($directory === false || !is_dir($directory . "/data/minecraft/loot_table")){
+			self::markTestSkipped("Authentic Minecraft loot data required");
+		}
+		ArchaeologyContent::registerSherds();
+		$tables = new LootTables($directory);
+		$missing = [];
+		foreach([
+			"desert_pyramid", "desert_well", "cold_ocean_ruins", "warm_ocean_ruins",
+			"trail_ruins_common", "trail_ruins_rare"
+		] as $name){
+			$table = $tables->get("minecraft:archaeology/$name");
+			self::assertNotNull($table, "Missing archaeology table $name");
+			for($seed = 1; $seed <= 128; ++$seed){
+				foreach($table->getRandomItems(LootContext::seeded($seed)) as $stack){
+					if(!$stack->isEmpty() && LootItemConverter::toItem($stack, $directory) === null){
+						$missing[$name . ":" . $stack->id] = true;
+					}
+				}
+			}
+		}
+		self::assertSame([], array_keys($missing), "Unrepresented archaeology loot items");
+	}
+
 	public function testOminousVaultRewardsRemainRepresentable() : void{
 		$directory = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
 		if($directory === false || !is_dir($directory . "/data/minecraft/loot_table")){
