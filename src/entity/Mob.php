@@ -60,7 +60,7 @@ abstract class Mob extends Living{
 			$world->getServer()->getDimensionManager()->getDimension($world) === DimensionIds::OVERWORLD,
 			$world->getSkyLightReduction(),
 			$world->getPotentialBlockSkyLightAt($x, $y, $z),
-			$this->isInWater() || $this->isUnderwater(),
+			$this->isUnderwater(),
 			$world->getWeather()->isRainingAt($x, $y, $z)
 		)){return;}
 		$inventory = $this->getArmorInventory();
