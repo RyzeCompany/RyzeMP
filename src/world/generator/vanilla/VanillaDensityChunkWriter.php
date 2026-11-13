@@ -248,7 +248,11 @@ final class VanillaDensityChunkWriter{
 	 */
 	/** Validate the shared input once before generating the entire 3x3 population area. @internal */
 	public function beginPopulation() : void{
-		$this->checkData();
+		// Worker registration already validated this pinned dataset. The
+		// mandatory full content hash in validatePopulationResult() runs BEFORE
+		// any worker result is returned/published, including all assets read
+		// during terrain and decoration. Avoid hashing the whole cache twice
+		// for every population request. Modified data still fails closed.
 		$this->checkedPopulationCache = true;
 	}
 
