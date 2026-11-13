@@ -261,6 +261,13 @@ the world's pinned loot tables and save the rewarded player IDs and pending
 ejections. Trial spawner mob waves and other structure entities still need
 the corresponding entity runtime.
 
+The pinned ominous vault reward table is checked against the item converter
+with reproducible random seeds. Its wind charge, heavy core, crossbow, Flow
+template, ominous bottle and Flow banner pattern have persistent item IDs;
+the ominous bottle amplifier and crossbow damage survive item NBT. This
+establishes loot representation, not projectile, crossbow firing, or block
+placement mechanics for these items.
+
 The restart fixture generates both vault variants, a Breeze trial spawner
 and the End Ship Elytra. It verifies the key, reward table and spawner NBT.
 It also encodes the Trial Chamber chunk and live block updates for every
@@ -325,8 +332,9 @@ and feature loot data. Their seeds and revealed items persist in LevelDB.
 The server supports brushing with a Brush and translates block actors and
 sounds for each receiving client. The PHAR fixture locates a desert
 pyramid, brushes a naturally placed suspicious block and checks the
-revealed item after restarting. Decorated pot contents and some pottery
-sherds still require their runtime items.
+revealed item after restarting. All 23 pottery sherd variants and decorated
+pot item and tile storage have runtime representations; patterned pot
+crafting still requires a dynamic special recipe.
 
 ## Upstream Go evaluation
 

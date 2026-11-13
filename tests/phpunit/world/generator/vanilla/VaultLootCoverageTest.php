@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\loot\LootContext;
 use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootTables;
+use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use function array_keys;
 use function getenv;
 use function implode;
@@ -20,6 +21,7 @@ final class VaultLootCoverageTest extends TestCase{
 		if($directory === false || !is_dir($directory . "/data/minecraft/loot_table")){
 			self::markTestSkipped("Authentic Minecraft loot data required");
 		}
+		TrialChamberContent::registerRewardItems();
 		$table = (new LootTables($directory))->get("minecraft:chests/trial_chambers/reward_ominous");
 		self::assertNotNull($table, "Ominous vault loot table is missing from the pinned cache");
 		$missing = [];

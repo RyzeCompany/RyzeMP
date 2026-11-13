@@ -33,6 +33,7 @@ use pocketmine\world\format\io\GlobalItemDataHandlers;
 /** Registers the runtime blocks and keys on both the world and chunk workers. */
 final class TrialChamberContent{
 	private static bool $registered = false;
+	private static bool $rewardItemsRegistered = false;
 
 	private function __construct(){}
 
@@ -71,13 +72,22 @@ final class TrialChamberContent{
 
 		self::registerKey(self::trialKey(), ItemTypeNames::TRIAL_KEY);
 		self::registerKey(self::trialKey(ominous: true), ItemTypeNames::OMINOUS_TRIAL_KEY);
+		self::registerRewardItems();
+		self::$registered = true;
+	}
+
+	/** Registers the additional loot items independently of world block registration. */
+	public static function registerRewardItems() : void{
+		if(self::$rewardItemsRegistered){
+			return;
+		}
 		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::WIND_CHARGE), "Wind Charge"), ItemTypeNames::WIND_CHARGE);
 		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::HEAVY_CORE), "Heavy Core"), BlockTypeNames::HEAVY_CORE);
 		self::registerKey(new Crossbow(new ItemIdentifier(ItemTypeIds::CROSSBOW), "Crossbow", [ItemEnchantmentTags::CROSSBOW]), ItemTypeNames::CROSSBOW);
 		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::FLOW_ARMOR_TRIM_SMITHING_TEMPLATE), "Flow Armor Trim Smithing Template"), ItemTypeNames::FLOW_ARMOR_TRIM_SMITHING_TEMPLATE);
 		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::OMINOUS_BOTTLE), "Ominous Bottle"), ItemTypeNames::OMINOUS_BOTTLE);
 		self::registerKey(new Item(new ItemIdentifier(ItemTypeIds::FLOW_BANNER_PATTERN), "Flow Banner Pattern"), ItemTypeNames::FLOW_BANNER_PATTERN);
-		self::$registered = true;
+		self::$rewardItemsRegistered = true;
 	}
 
 	public static function trialKey(bool $ominous = false) : Item{
