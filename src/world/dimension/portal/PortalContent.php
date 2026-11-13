@@ -34,6 +34,7 @@ use pocketmine\scheduler\AsyncTask;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
+use pocketmine\world\generator\vanilla\feature\ArchaeologyContent;
 use InvalidArgumentException;
 
 /**
@@ -73,6 +74,7 @@ final class PortalContent{
 		self::registerGateway($gatewayId);
 		self::registerElytra();
 		TrialChamberContent::register();
+		ArchaeologyContent::register();
 		self::registerItem();
 		self::registerRecipe($craftingManager);
 
@@ -89,6 +91,7 @@ final class PortalContent{
 					PortalContent::registerGateway($this->gatewayId);
 					PortalContent::registerElytra();
 					TrialChamberContent::register();
+					ArchaeologyContent::register();
 				}
 			}, $worker);
 		});

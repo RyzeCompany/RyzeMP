@@ -273,3 +273,13 @@ stamp in a private copy of the real cache and verifies that the server
 preserves the existing chunk while rejecting new and queued requests.
 
     python3 tests/worldgen-phar-smoke.py /path/to/php RyzeMP.phar /path/to/cache --cache-failure
+
+## Archaeology blocks
+
+Core-v6 places suspicious sand and gravel using the original structure
+and feature loot data. Their seeds and revealed items persist in LevelDB.
+The server supports brushing with a Brush and translates block actors and
+sounds for each receiving client. The PHAR fixture locates a desert
+pyramid, brushes a naturally placed suspicious block and checks the
+revealed item after restarting. Decorated pot contents and some pottery
+sherds still require their runtime items.

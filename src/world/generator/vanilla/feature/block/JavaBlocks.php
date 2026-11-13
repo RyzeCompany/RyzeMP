@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\vanilla\feature\block;
 
 use pocketmine\block\Block;
+use pocketmine\block\BrushableBlock;
 use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\TrialSpawner;
 use pocketmine\block\VanillaBlocks;
@@ -49,6 +50,7 @@ use function array_values;
 use function count;
 use function explode;
 use function implode;
+use function in_array;
 use function intdiv;
 use function is_array;
 use function is_dir;
@@ -877,9 +879,9 @@ final class JavaBlocks{
 				$pm = $this->pmAir;
 			}
 		}
-		if(!$this->hasStructureContent && ($name === "minecraft:end_gateway" || $name === "minecraft:trial_spawner" || $name === "minecraft:vault")){
+		if(!$this->hasStructureContent && in_array($name, ["minecraft:end_gateway", "minecraft:trial_spawner", "minecraft:vault", "minecraft:suspicious_sand", "minecraft:suspicious_gravel"], true)){
 			$block = RuntimeBlockStateRegistry::getInstance()->fromStateId($pm);
-			if($block instanceof EndGateway || $block instanceof TrialSpawner || $block instanceof Vault){
+			if($block instanceof EndGateway || $block instanceof TrialSpawner || $block instanceof Vault || $block instanceof BrushableBlock){
 				$pm = $this->pmAir;
 			}
 		}

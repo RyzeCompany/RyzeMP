@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RyzeTests\Worldgen;
 
+use pocketmine\block\BrushableBlock;
+use pocketmine\block\tile\BrushableBlock as BrushableBlockTile;
 use pocketmine\block\tile\Chest;
 use pocketmine\block\tile\EndGateway;
 use pocketmine\block\tile\ItemFrame;
@@ -18,9 +20,11 @@ use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\entity\Location;
 use pocketmine\entity\object\EndCrystal;
 use pocketmine\entity\object\ItemEntity;
+use pocketmine\item\Brush;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
 use pocketmine\item\ItemTypeIds;
+use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
@@ -35,6 +39,7 @@ use pocketmine\world\format\Chunk;
 use pocketmine\world\format\io\leveldb\LevelDB;
 use pocketmine\world\dimension\portal\block\EndGateway as EndGatewayBlock;
 use pocketmine\world\generator\GeneratorManager;
+use pocketmine\world\generator\vanilla\RyzeOverworldGenerator;
 use pocketmine\world\generator\vanilla\VanillaDataIdentity;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
@@ -225,7 +230,7 @@ final class Main extends PluginBase{
 	private function exerciseWorlds(string $profile, string $preset, string $snapshotPath, bool $reopen) : void{
 		$server = $this->getServer();
 		$remaining = count(self::WORLDS) + (VanillaDataIdentity::hasStructures($preset) ? count(self::STRUCTURE_CHUNKS) : 0)
-			+ (VanillaDataIdentity::hasStructureContent($preset) ? 4 : 0);
+			+ (VanillaDataIdentity::hasStructureContent($preset) ? 5 : 0);
 		$record = [];
 		$expected = $reopen ? json_decode(file_get_contents($snapshotPath), true, flags: JSON_THROW_ON_ERROR) : [];
 		$start = hrtime(true);
@@ -316,6 +321,7 @@ final class Main extends PluginBase{
 			$this->checkEndGateway($end, $reopen, $complete);
 			$this->checkEndShip($end, $reopen, $complete);
 			$this->checkTrialChamber($overworld, $reopen, $complete);
+			$this->checkArchaeology($overworld, $preset, $snapshotPath, $reopen, $complete);
 		}
 	}
 
@@ -397,6 +403,72 @@ final class Main extends PluginBase{
 		}else{
 			$world->requestChunkPopulation($x >> 4, $z >> 4, null)->onCompletion($check, self::populationFailure("End Ship"));
 		}
+	}
+
+	private function checkArchaeology(World $world, string $preset, string $snapshotPath, bool $reopen, \Closure $complete) : void{
+		$recordPath = $snapshotPath . ".archaeology";
+		$brush = StringToItemParser::getInstance()->parse("brush");
+		if(!$brush instanceof Brush){
+			throw new \RuntimeException("Brush is not available");
+		}
+		if($reopen){
+			[$x, $y, $z, $itemHash] = json_decode(file_get_contents($recordPath), true, flags: JSON_THROW_ON_ERROR);
+			$world->loadChunk($x >> 4, $z >> 4) ?? throw new \RuntimeException("The archaeology chunk did not reopen");
+			$tile = $world->getTileAt($x, $y, $z);
+			if(!$tile instanceof BrushableBlockTile || !($tile->getBlock() instanceof BrushableBlock) ||
+				$tile->getLootTable() !== null || $tile->getItem() === null ||
+				hash("sha256", $tile->getItem()->nbtSerialize()->toString()) !== $itemHash){
+				throw new \RuntimeException("Archaeology block or its revealed item changed after restart");
+			}
+			$complete();
+			return;
+		}
+
+		$manager = (new RyzeOverworldGenerator(self::SEED, $preset))->getStructureManager();
+		$found = $manager?->locate("minecraft:desert_pyramid", 0, 0, radius: 24);
+		if($found === null || $manager === null){
+			throw new \RuntimeException("Seed " . self::SEED . " has no nearby desert pyramid");
+		}
+		$start = $manager->getStart("minecraft:desert_pyramids", $found[1], $found[2]);
+		if($start === null){
+			throw new \RuntimeException("Desert pyramid has no structure start");
+		}
+		$box = $start->getPiecesBoundingBox();
+		$requests = [];
+		for($x = $box->minX >> 4; $x <= $box->maxX >> 4; ++$x){
+			for($z = $box->minZ >> 4; $z <= $box->maxZ >> 4; ++$z){
+				$requests[] = $world->requestChunkPopulation($x, $z, null);
+			}
+		}
+		\pocketmine\promise\Promise::all($requests)->onCompletion(function(array $chunks) use ($world, $recordPath, $brush, $complete) : void{
+			foreach($chunks as $chunk){
+				foreach($chunk->getTiles() as $tile){
+					if(!$tile instanceof BrushableBlockTile || $tile->getLootTable() !== "loot_tables/entities/desert_pyramid_brushable_block.json" ||
+						!(($block = $tile->getBlock()) instanceof BrushableBlock)){
+						continue;
+					}
+					$pos = $tile->getPosition();
+					if(!$block->onInteract($brush, Facing::UP, Vector3::zero())){
+						throw new \RuntimeException("Generated suspicious sand cannot be brushed");
+					}
+					$item = $tile->getItem();
+					if($item === null){
+						continue; // Some Java loot items lack a runtime representation.
+					}
+					if($tile->getLootTable() !== null || $tile->getBrushCount() !== 1){
+						throw new \RuntimeException("The generated loot seed was not consumed exactly once");
+					}
+					file_put_contents($recordPath, json_encode([
+						$pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(),
+						hash("sha256", $item->nbtSerialize()->toString())
+					], JSON_THROW_ON_ERROR));
+					$world->save(true);
+					$complete();
+					return;
+				}
+			}
+			throw new \RuntimeException("No generated desert pyramid archaeology block produced supported loot");
+		}, self::populationFailure("desert pyramid"));
 	}
 
 	private function checkTrialChamber(World $world, bool $reopen, \Closure $complete) : void{

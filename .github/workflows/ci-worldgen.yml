@@ -11,6 +11,9 @@ on:
       - 'src/world/format/Chunk.php'
       - 'src/world/format/io/FastChunkSerializer.php'
       - 'src/block/tile/**'
+      - 'src/block/BrushableBlock.php'
+      - 'src/item/Brush.php'
+      - 'src/world/sound/BrushSound.php'
       - 'src/block/TrialSpawner.php'
       - 'src/block/Vault.php'
       - 'src/block/vault/**'
@@ -48,5 +51,6 @@ jobs:
             src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
             src/world/generator/PopulationTask.php src/world/generator/executor \
             src/block/tile src/loot src/world/locate/LocateTimeoutException.php \
+            src/block/BrushableBlock.php src/item/Brush.php src/world/sound/BrushSound.php \
             src/block/TrialSpawner.php src/block/Vault.php src/block/vault src/network/mcpe/serializer/ChunkSerializer.php \
             tests/phpunit/world/generator/vanilla

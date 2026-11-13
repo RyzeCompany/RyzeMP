@@ -371,7 +371,9 @@ final class ItemTypeIds{
 	public const TRIAL_KEY = 20330;
 	public const OMINOUS_TRIAL_KEY = 20331;
 
-	public const FIRST_UNUSED_ITEM_ID = 20332;
+	public const BRUSH = 20332;
+
+	public const FIRST_UNUSED_ITEM_ID = 20333;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_ITEM_ID;
 
