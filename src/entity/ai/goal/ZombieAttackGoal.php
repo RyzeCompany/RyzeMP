@@ -6,6 +6,7 @@ use pocketmine\entity\Zombie;
 use pocketmine\event\entity\EntityDamageByEntityEvent;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\player\Player;
+use pocketmine\math\VoxelRayTrace;
 use pocketmine\world\World;
 
 /** Zombie pursues and attacks an eligible survival player, never a plugin NPC. */
@@ -50,7 +51,7 @@ final class ZombieAttackGoal extends Goal{
 		$distance=$player->getPosition()->distanceSquared($this->zombie->getPosition());
 		if($distance<3.0){
 			$this->zombie->getNavigation()->stop();
-			if($this->attackCooldown===0){
+			if($this->attackCooldown===0 && $this->hasLineOfSight($player)){
 				$this->attackCooldown=20;
 				$player->attack(new EntityDamageByEntityEvent($this->zombie,$player,EntityDamageEvent::CAUSE_ENTITY_ATTACK,3.0));
 			}
@@ -58,6 +59,20 @@ final class ZombieAttackGoal extends Goal{
 			$this->repathCooldown=16;
 			$this->zombie->getNavigation()->moveTo($player->getPosition(),0.16);
 		}
+	}
+
+	/** Avoid attacking through walls even when the bounding boxes are close. */
+	private function hasLineOfSight(Player $player) : bool{
+		$from = $this->zombie->getEyePos();
+		$to = $player->getEyePos();
+		$world = $this->zombie->getWorld();
+		foreach(VoxelRayTrace::betweenPoints($from, $to) as $pos){
+			if(!$world->isInLoadedTerrain($pos) ||
+				$world->getBlock($pos)->calculateIntercept($from, $to) !== null){
+				return false;
+			}
+		}
+		return true;
 	}
 	public function stop() : void{
 		$this->victim=null;$this->zombie->setTargetEntity(null);

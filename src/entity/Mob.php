@@ -18,6 +18,7 @@ abstract class Mob extends Living{
 	private GroundNavigator $navigation;
 	private int $aiWaitingSince = -1;
 	private int $aiTicks = 0;
+	private bool $aiEnabled = true;
 
 	public function __construct(Location $location, ?CompoundTag $nbt = null){
 		parent::__construct($location,$nbt);
@@ -30,6 +31,15 @@ abstract class Mob extends Living{
 	protected function registerGoals() : void{
 		$this->goals->addGoal(10,new RandomStrollGoal($this));
 	}
+	/** Allow plugins to disable AI for custom NPCs without changing their entity type. */
+	public function setAiEnabled(bool $enabled) : void{
+		$this->aiEnabled = $enabled;
+		if(!$enabled){
+			$this->goals->stopAll();
+			$this->navigation->stop();
+		}
+	}
+	public function isAiEnabled() : bool{ return $this->aiEnabled; }
 	public function getGoalSelector() : GoalSelector{ return $this->goals; }
 	public function getNavigation() : GroundNavigator{ return $this->navigation; }
 	public function getAiTicks() : int{ return $this->aiTicks; }
@@ -40,6 +50,7 @@ abstract class Mob extends Living{
 			return $changed;
 		}
 		$this->aiTicks += $tickDiff;
+		if(!$this->aiEnabled){ return $changed; }
 		$w = $this->getWorld();
 		if($w->getPlayers() === []){
 			if($this->navigation->isNavigating()){ $this->navigation->stop(); }
@@ -49,5 +60,11 @@ abstract class Mob extends Living{
 		$this->goals->tick($evaluate);
 		$this->navigation->tick();
 		return true;
+	}
+	/** Break goal/navigator links to this Mob on despawn. */
+	protected function destroyCycles() : void{
+		$this->goals->stopAll();
+		unset($this->goals, $this->navigation);
+		parent::destroyCycles();
 	}
 }
