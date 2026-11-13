@@ -6,6 +6,7 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use pocketmine\block\VanillaBlocks;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\item\PotterySherd;
@@ -38,7 +39,15 @@ final class MultiVersionArchaeologyItemTest extends TestCase{
 		foreach([PotterySherdType::ANGLER, PotterySherdType::ARCHER, PotterySherdType::FLOW, PotterySherdType::SNORT] as $type){
 			$item = (new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd"))->setSherdType($type);
 			$encoded = $converter->getItemTranslator()->toNetworkIdQuiet($item);
-			self::assertNotNull($encoded, $type->name . " unavailable for protocol $protocolId");
+			if($encoded === null){
+				//FLOW (and some later sherds) did not exist on Bedrock 1.20.0.
+				//RyzeMP represents unsupported items as INFO_UPDATE, without
+				//changing the real item stored in LevelDB/server inventory.
+				self::assertSame(589, $protocolId, "Modern protocol $protocolId must support all these sherds");
+				[$fallbackId] = $converter->getItemTranslator()->toNetworkId(VanillaBlocks::INFO_UPDATE()->asItem());
+				self::assertSame($fallbackId, $converter->coreItemStackToNet($item)->getId());
+				continue;
+			}
 			self::assertSame("minecraft:" . strtolower($type->name) . "_pottery_sherd",
 				$converter->getItemTypeDictionary()->fromIntId($encoded[0]),
 				"Incorrect client item dictionary for protocol $protocolId");
