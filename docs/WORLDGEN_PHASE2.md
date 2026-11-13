@@ -1,5 +1,7 @@
 # RyzeMP Phase 2 — Worldgen Vanilla (work in progress)
 
+**Guía Go VPS:** [instalación, activación, benchmarks y recuperación](WORLDGEN_GO_VPS.md).
+
 **Baseline:** RyzeMP `main` @ `aa6d91b8070eef31b756c8332acd6848760c5ee7`; VanillaMine `vanilla-content` @ `4dd2228b47d64c8015c28138c846e6c4acb28345` (audited 2026-11-11). Scope tracked by [#59](https://github.com/RyzeCompany/RyzeMP/issues/59). Independent from weather [#58](https://github.com/RyzeCompany/RyzeMP/pull/58).
 
 ## Estado actual
