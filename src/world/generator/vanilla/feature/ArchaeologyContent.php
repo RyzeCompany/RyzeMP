@@ -13,6 +13,9 @@ use pocketmine\block\BrushableBlock;
 use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\tile\BrushableBlock as BrushableBlockTile;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\crafting\CraftingManager;
+use pocketmine\crafting\ExactRecipeIngredient;
+use pocketmine\crafting\ShapedRecipe;
 use pocketmine\data\bedrock\block\BlockStateNames;
 use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\data\bedrock\block\convert\BlockStateReader;
@@ -23,6 +26,7 @@ use pocketmine\item\Brush;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\item\StringToItemParser;
+use pocketmine\item\VanillaItems;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 
@@ -33,10 +37,31 @@ final class ArchaeologyContent{
 	public static function register() : void{
 		self::registerBlock(BlockTypeIds::SUSPICIOUS_SAND, BlockTypeNames::SUSPICIOUS_SAND, "Suspicious Sand", VanillaBlocks::SAND(...));
 		self::registerBlock(BlockTypeIds::SUSPICIOUS_GRAVEL, BlockTypeNames::SUSPICIOUS_GRAVEL, "Suspicious Gravel", VanillaBlocks::GRAVEL(...));
-		$brush = new Brush(new ItemIdentifier(ItemTypeIds::BRUSH), "Brush");
+		$brush = self::brush();
 		GlobalItemDataHandlers::getDeserializer()->map(ItemTypeNames::BRUSH, static fn() : Brush => clone $brush);
 		GlobalItemDataHandlers::getSerializer()->map($brush, static fn() : SavedItemData => new SavedItemData(ItemTypeNames::BRUSH));
 		StringToItemParser::getInstance()->register("brush", static fn() : Brush => clone $brush);
+	}
+
+	/** @internal */
+	public static function registerRecipe(CraftingManager $craftingManager) : void{
+		$brush = self::brush();
+		if($craftingManager->matchRecipeByOutputs([$brush])->valid()){
+			return;
+		}
+		$craftingManager->registerShapedRecipe(new ShapedRecipe(
+			["F", "C", "S"],
+			[
+				"F" => new ExactRecipeIngredient(VanillaItems::FEATHER()),
+				"C" => new ExactRecipeIngredient(VanillaItems::COPPER_INGOT()),
+				"S" => new ExactRecipeIngredient(VanillaItems::STICK())
+			],
+			[$brush]
+		));
+	}
+
+	private static function brush() : Brush{
+		return new Brush(new ItemIdentifier(ItemTypeIds::BRUSH), "Brush");
 	}
 
 	/** @phpstan-param \Closure() : Block $brushedResult */

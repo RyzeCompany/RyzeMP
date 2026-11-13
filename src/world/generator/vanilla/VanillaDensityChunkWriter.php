@@ -50,6 +50,7 @@ final class VanillaDensityChunkWriter{
 	private ?FeatureDecorator $features = null;
 	private ?StructureManager $structures = null;
 	private ?DeterministicDecoration $deterministicDecoration = null;
+	private bool $checkedPopulationCache = false;
 	/** @var list<int> */
 	private array $biomes;
 
@@ -231,15 +232,34 @@ final class VanillaDensityChunkWriter{
 	 * Applies the upstream VanillaMine density and climate stages to a RyzeMP chunk.
 	 * Decoration runs separately after the neighbouring terrain is available.
 	 */
+	/** Validate the shared input once before generating the entire 3x3 population area. @internal */
+	public function beginPopulation() : void{
+		$this->checkData();
+		$this->checkedPopulationCache = true;
+	}
+
+	/** Validate again before returning worker results, including lazy feature reads. @internal */
+	public function validatePopulationResult() : void{
+		$this->checkData();
+	}
+
+	/** @internal */
+	public function endPopulation() : void{
+		$this->checkedPopulationCache = false;
+	}
+
+	private function checkData() : void{
+		if($this->pinnedHash !== null){
+			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
+		}
+	}
+
 	public function fill(Chunk $chunk, int $chunkX, int $chunkZ) : void{
 		if($chunk->isPopulated()){
 			return;
 		}
-		// Fail before ANY biome/block write if the external cache was replaced
-		// after server startup. This rehashes the complete source cache per
-		// newly generated chunk; optimize only after a proven safe cache guard.
-		if($this->pinnedHash !== null){
-			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
+		if(!$this->checkedPopulationCache){
+			$this->checkData();
 		}
 		$this->writeTerrain($chunk, $chunkX, $chunkZ);
 		$this->deterministicDecoration?->rememberTerrain($chunk, $chunkX, $chunkZ);
@@ -318,8 +338,8 @@ final class VanillaDensityChunkWriter{
 		if($this->features === null){
 			return;
 		}
-		if($this->pinnedHash !== null){
-			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
+		if(!$this->checkedPopulationCache){
+			$this->checkData();
 		}
 		if($this->deterministicDecoration !== null){
 			$this->deterministicDecoration->decorate($world, $chunkX, $chunkZ);

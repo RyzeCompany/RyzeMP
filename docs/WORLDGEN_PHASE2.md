@@ -266,7 +266,9 @@ save and network traffic from players.
 
 A fingerprint or cache-read failure in a generator worker blocks new
 population in the affected world until its cache is restored and the world
-is reopened. Existing populated chunks remain available and in-flight
+is reopened. A population task checks the full hash before preparing its
+3x3 area and again before the worker returns its result. Standalone generator
+calls also check the hash. Existing populated chunks remain available and in-flight
 results are discarded when the world is blocked. Requests for missing
 chunks are rejected with a diagnostic. The PHAR test changes the version
 stamp in a private copy of the real cache and verifies that the server

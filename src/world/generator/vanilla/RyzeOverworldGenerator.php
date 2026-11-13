@@ -19,7 +19,7 @@ use function min;
  * Only runs on chunks which the existing PM5 generation pipeline creates as new.
  * Nether/End and pre-existing world generators are not replaced.
  */
-final class RyzeOverworldGenerator extends Generator{
+final class RyzeOverworldGenerator extends Generator implements ValidatedPopulationGenerator{
 	private const SEA_LEVEL = 62;
 
 	private OverworldTerrainSampler $sampler;
@@ -51,6 +51,18 @@ final class RyzeOverworldGenerator extends Generator{
 		$this->grass = VanillaBlocks::GRASS()->getStateId();
 		$this->sand = VanillaBlocks::SAND()->getStateId();
 		$this->water = VanillaBlocks::WATER()->getStillForm()->getStateId();
+	}
+
+	public function beginPopulation() : void{
+		$this->vanillaCore?->beginPopulation();
+	}
+
+	public function validatePopulationResult() : void{
+		$this->vanillaCore?->validatePopulationResult();
+	}
+
+	public function endPopulation() : void{
+		$this->vanillaCore?->endPopulation();
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{

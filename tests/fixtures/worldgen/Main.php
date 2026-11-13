@@ -321,7 +321,9 @@ final class Main extends PluginBase{
 			$this->checkEndGateway($end, $reopen, $complete);
 			$this->checkEndShip($end, $reopen, $complete);
 			$this->checkTrialChamber($overworld, $reopen, $complete);
-			$this->checkArchaeology($overworld, $preset, $snapshotPath, $reopen, $complete);
+			$this->getScheduler()->scheduleDelayedTask(new ClosureTask(function() use ($overworld, $preset, $snapshotPath, $reopen, $complete) : void{
+				$this->checkArchaeology($overworld, $preset, $snapshotPath, $reopen, $complete);
+			}), 1);
 		}
 	}
 
@@ -408,8 +410,8 @@ final class Main extends PluginBase{
 	private function checkArchaeology(World $world, string $preset, string $snapshotPath, bool $reopen, \Closure $complete) : void{
 		$recordPath = $snapshotPath . ".archaeology";
 		$brush = StringToItemParser::getInstance()->parse("brush");
-		if(!$brush instanceof Brush){
-			throw new \RuntimeException("Brush is not available");
+		if(!$brush instanceof Brush || !$this->getServer()->getCraftingManager()->matchRecipeByOutputs([$brush])->valid()){
+			throw new \RuntimeException("Brush or its crafting recipe is not available");
 		}
 		if($reopen){
 			[$x, $y, $z, $itemHash] = json_decode(file_get_contents($recordPath), true, flags: JSON_THROW_ON_ERROR);
@@ -434,41 +436,60 @@ final class Main extends PluginBase{
 			throw new \RuntimeException("Desert pyramid has no structure start");
 		}
 		$box = $start->getPiecesBoundingBox();
+		$this->getLogger()->info("Testing desert pyramid archaeology at chunk " . $found[1] . "," . $found[2]);
 		$requests = [];
 		for($x = $box->minX >> 4; $x <= $box->maxX >> 4; ++$x){
 			for($z = $box->minZ >> 4; $z <= $box->maxZ >> 4; ++$z){
-				$requests[] = $world->requestChunkPopulation($x, $z, null);
+				$requests[] = [$x, $z];
 			}
 		}
-		\pocketmine\promise\Promise::all($requests)->onCompletion(function(array $chunks) use ($world, $recordPath, $brush, $complete) : void{
-			foreach($chunks as $chunk){
-				foreach($chunk->getTiles() as $tile){
-					if(!$tile instanceof BrushableBlockTile || $tile->getLootTable() !== "loot_tables/entities/desert_pyramid_brushable_block.json" ||
-						!(($block = $tile->getBlock()) instanceof BrushableBlock)){
-						continue;
-					}
-					$pos = $tile->getPosition();
-					if(!$block->onInteract($brush, Facing::UP, Vector3::zero())){
-						throw new \RuntimeException("Generated suspicious sand cannot be brushed");
-					}
-					$item = $tile->getItem();
-					if($item === null){
-						continue; // Some Java loot items lack a runtime representation.
-					}
-					if($tile->getLootTable() !== null || $tile->getBrushCount() !== 1){
-						throw new \RuntimeException("The generated loot seed was not consumed exactly once");
-					}
-					file_put_contents($recordPath, json_encode([
-						$pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(),
-						hash("sha256", $item->nbtSerialize()->toString())
-					], JSON_THROW_ON_ERROR));
-					$world->save(true);
-					$complete();
-					return;
+		$inspect = static function(Chunk $chunk) use ($world, $recordPath, $brush) : bool{
+			foreach($chunk->getTiles() as $tile){
+				if(!$tile instanceof BrushableBlockTile || $tile->getLootTable() !== "loot_tables/entities/desert_pyramid_brushable_block.json" ||
+					!(($block = $tile->getBlock()) instanceof BrushableBlock)){
+					continue;
 				}
+				$pos = $tile->getPosition();
+				if(!$block->onInteract($brush, Facing::UP, Vector3::zero())){
+					throw new \RuntimeException("Generated suspicious sand cannot be brushed");
+				}
+				$item = $tile->getItem();
+				if($item === null){
+					continue; // Some Java loot items lack a runtime representation.
+				}
+				if($tile->getLootTable() !== null || $tile->getBrushCount() !== 1){
+					throw new \RuntimeException("The generated loot seed was not consumed exactly once");
+				}
+				file_put_contents($recordPath, json_encode([
+					$pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(),
+					hash("sha256", $item->nbtSerialize()->toString())
+				], JSON_THROW_ON_ERROR));
+				$world->save(true);
+				return true;
 			}
-			throw new \RuntimeException("No generated desert pyramid archaeology block produced supported loot");
-		}, self::populationFailure("desert pyramid"));
+			return false;
+		};
+		$this->inspectArchaeologyChunks($world, $requests, 0, $inspect, $complete);
+	}
+
+	/**
+	 * @param list<array{int, int}> $requests
+	 * @param \Closure(Chunk): bool $inspect
+	 * @param \Closure(): void $complete
+	 */
+	private function inspectArchaeologyChunks(World $world, array $requests, int $index, \Closure $inspect, \Closure $complete) : void{
+		[$x, $z] = $requests[$index] ?? throw new \RuntimeException("Desert pyramid archaeology produced no supported loot");
+		$this->getLogger()->info("Checking archaeology in chunk $x,$z");
+		$world->requestChunkPopulation($x, $z, null)->onCompletion(
+			function(Chunk $chunk) use ($inspect, $complete, $world, $requests, $index) : void{
+				if($inspect($chunk)){
+					$complete();
+				}else{
+					$this->inspectArchaeologyChunks($world, $requests, $index + 1, $inspect, $complete);
+				}
+			},
+			self::populationFailure("desert pyramid $x,$z")
+		);
 	}
 
 	private function checkTrialChamber(World $world, bool $reopen, \Closure $complete) : void{

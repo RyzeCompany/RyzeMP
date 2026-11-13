@@ -77,6 +77,7 @@ final class PortalContent{
 		ArchaeologyContent::register();
 		self::registerItem();
 		self::registerRecipe($craftingManager);
+		ArchaeologyContent::registerRecipe($craftingManager);
 
 		$pool->addWorkerStartHook(function(int $worker) use($pool, $typeId, $gatewayId) : void{
 			$pool->submitTaskToWorker(new class($typeId, $gatewayId) extends AsyncTask{

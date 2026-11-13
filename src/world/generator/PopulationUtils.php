@@ -25,6 +25,7 @@ namespace pocketmine\world\generator;
 
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\format\Chunk;
+use pocketmine\world\generator\vanilla\ValidatedPopulationGenerator;
 use pocketmine\world\SimpleChunkManager;
 use pocketmine\world\World;
 
@@ -53,6 +54,25 @@ final class PopulationUtils{
 	 * @phpstan-return array{Chunk, array<int, Chunk>}
 	 */
 	public static function populateChunkWithAdjacents(int $minY, int $maxY, Generator $generator, int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks) : array{
+		if(!$generator instanceof ValidatedPopulationGenerator){
+			return self::populate($minY, $maxY, $generator, $chunkX, $chunkZ, $centerChunk, $adjacentChunks);
+		}
+
+		$generator->beginPopulation();
+		try{
+			$result = self::populate($minY, $maxY, $generator, $chunkX, $chunkZ, $centerChunk, $adjacentChunks);
+			$generator->validatePopulationResult();
+			return $result;
+		}finally{
+			$generator->endPopulation();
+		}
+	}
+
+	/**
+	 * @phpstan-param array<int, Chunk|null> $adjacentChunks
+	 * @phpstan-return array{Chunk, array<int, Chunk>}
+	 */
+	private static function populate(int $minY, int $maxY, Generator $generator, int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks) : array{
 		$manager = new SimpleChunkManager($minY, $maxY);
 		self::setOrGenerateChunk($manager, $generator, $chunkX, $chunkZ, $centerChunk);
 

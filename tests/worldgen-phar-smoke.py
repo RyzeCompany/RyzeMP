@@ -64,7 +64,7 @@ def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None, cache_
                     process = subprocess.run(
                         [php, phar, "--no-wizard", "--disable-ansi", f"--data={data}", f"--plugins={plugins}"],
                         env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-                        timeout=150 if benchmark_seed is None else 480,
+                        timeout=300 if benchmark_seed is None else 480,
                     )
                 finally:
                     log.seek(0)

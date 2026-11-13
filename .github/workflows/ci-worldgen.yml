@@ -49,7 +49,7 @@ jobs:
             src/world/dimension/generator/end/EndCrystalSpawner.php src/world/dimension/generator/end/object/EndGateway.php \
             src/world/dimension/portal/PortalContent.php src/world/dimension/portal/PortalTravel.php src/world/dimension/portal/block/EndGateway.php \
             src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
-            src/world/generator/PopulationTask.php src/world/generator/executor \
+            src/world/generator/PopulationTask.php src/world/generator/PopulationUtils.php src/world/generator/executor \
             src/block/tile src/loot src/world/locate/LocateTimeoutException.php \
             src/block/BrushableBlock.php src/item/Brush.php src/world/sound/BrushSound.php \
             src/block/TrialSpawner.php src/block/Vault.php src/block/vault src/network/mcpe/serializer/ChunkSerializer.php \

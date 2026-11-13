@@ -13,7 +13,7 @@ use pocketmine\world\generator\InvalidGeneratorOptionsException;
  * Does not replace RyzeMP's existing Nether/End generators, dimension IDs or portals.
  * The selected preset controls feature and structure decoration.
  */
-abstract class VanillaDimensionCoreGenerator extends Generator{
+abstract class VanillaDimensionCoreGenerator extends Generator implements ValidatedPopulationGenerator{
 	protected const DIMENSION = "";
 
 	private VanillaDensityChunkWriter $writer;
@@ -27,6 +27,18 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset),
 			VanillaDataIdentity::hasStructureContent($preset)
 		);
+	}
+
+	public function beginPopulation() : void{
+		$this->writer->beginPopulation();
+	}
+
+	public function validatePopulationResult() : void{
+		$this->writer->validatePopulationResult();
+	}
+
+	public function endPopulation() : void{
+		$this->writer->endPopulation();
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
