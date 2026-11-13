@@ -4,6 +4,10 @@ declare(strict_types=1);
 namespace pocketmine\entity;
 
 use pocketmine\entity\ai\AiBudget;
+use pocketmine\entity\ai\DaylightBurnPolicy;
+use pocketmine\item\Durable;
+use pocketmine\item\VanillaItems;
+use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\entity\ai\goal\GoalSelector;
 use pocketmine\entity\ai\goal\RandomStrollGoal;
 use pocketmine\entity\ai\navigation\GroundNavigator;
@@ -44,6 +48,33 @@ abstract class Mob extends Living{
 	public function getNavigation() : GroundNavigator{ return $this->navigation; }
 	public function getAiTicks() : int{ return $this->aiTicks; }
 
+	/** Undead burning is opt-in for mob types which actually burn in daylight. */
+	protected function burnsInDaylight() : bool{ return false; }
+
+	private function tickDaylightBurn() : void{
+		if(!$this->burnsInDaylight() || $this->isOnFire() || mt_rand(0, 4) !== 0){return;}
+		$world = $this->getWorld();
+		$eye = $this->getEyePos();
+		$x = $eye->getFloorX(); $y = $eye->getFloorY(); $z = $eye->getFloorZ();
+		if(!DaylightBurnPolicy::isExposed(
+			$world->getServer()->getDimensionManager()->getDimension($world) === DimensionIds::OVERWORLD,
+			$world->getSkyLightReduction(),
+			$world->getPotentialBlockSkyLightAt($x, $y, $z),
+			$this->isInWater() || $this->isUnderwater(),
+			$world->getWeather()->isRainingAt($x, $y, $z)
+		)){return;}
+		$inventory = $this->getArmorInventory();
+		$helmet = $inventory->getHelmet();
+		if(!$helmet->isNull()){
+			if($helmet instanceof Durable && mt_rand(0,1) === 0){
+				$helmet->applyDamage(1);
+				$inventory->setHelmet($helmet->isBroken() ? VanillaItems::AIR() : $helmet);
+			}
+			return;
+		}
+		$this->setOnFire(8);
+	}
+
 	protected function entityBaseTick(int $tickDiff = 1) : bool{
 		$changed = parent::entityBaseTick($tickDiff);
 		if($this->isClosed() || !$this->isAlive()){
@@ -52,6 +83,7 @@ abstract class Mob extends Living{
 		$this->aiTicks += $tickDiff;
 		if(!$this->aiEnabled || !AiBudget::isEnabled()){ return $changed; }
 		$w = $this->getWorld();
+		if($this->aiTicks % 20 === 0){$this->tickDaylightBurn();}
 		if($w->getPlayers() === []){
 			if($this->navigation->isNavigating()){ $this->navigation->stop(); }
 			return true;

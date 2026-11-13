@@ -18,6 +18,8 @@ class Skeleton extends Mob{
 	protected function getInitialSizeInfo() : EntitySizeInfo{ return new EntitySizeInfo(1.99, 0.6); }
 	public function getName() : string{ return "Skeleton"; }
 
+	protected function burnsInDaylight() : bool{ return true; }
+
 	protected function registerGoals() : void{
 		$this->getGoalSelector()->addGoal(1, new SkeletonRangedAttackGoal($this));
 		parent::registerGoals();

@@ -34,6 +34,8 @@ class Zombie extends Mob{
 
 	public static function getNetworkTypeId() : string{ return EntityIds::ZOMBIE; }
 
+	protected function burnsInDaylight() : bool{ return true; }
+
 	protected function registerGoals() : void{
 		$this->getGoalSelector()->addGoal(1, new ZombieAttackGoal($this));
 		parent::registerGoals();
