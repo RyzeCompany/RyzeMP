@@ -261,3 +261,15 @@ save and network traffic from players.
 - Save and stop the server. Start the same build again and revisit those
   locations with both protocol families. Compare inventories, changed
   blocks, structure boundaries, spawn and portal destinations.
+
+## Failure of the pinned cache while a world is loaded
+
+A fingerprint or cache-read failure in a generator worker blocks new
+population in the affected world until its cache is restored and the world
+is reopened. Existing populated chunks remain available and in-flight
+results are discarded when the world is blocked. Requests for missing
+chunks are rejected with a diagnostic. The PHAR test changes the version
+stamp in a private copy of the real cache and verifies that the server
+preserves the existing chunk while rejecting new and queued requests.
+
+    python3 tests/worldgen-phar-smoke.py /path/to/php RyzeMP.phar /path/to/cache --cache-failure

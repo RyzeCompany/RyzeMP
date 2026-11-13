@@ -877,7 +877,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		\asort($priority, SORT_NUMERIC);
 		// Keep the configured per-tick and in-flight limits; never add unrequested chunks.
 		foreach($priority + $this->loadQueue as $index => $distance){
-			if($count >= $limit){
+			if(!$this->isConnected() || $count >= $limit){
 				break;
 			}
 
@@ -925,8 +925,11 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 						(new PlayerPostChunkSendEvent($this, $X, $Z))->call();
 					});
 				},
-				static function() : void{
-					//NOOP: we'll re-request this if it fails anyway
+				function() use ($world, $index) : void{
+					if($world->isChunkPopulationBlocked() && $this->isConnected() && $this->getWorld() === $world &&
+						($this->usedChunks[$index] ?? null) === UsedChunkStatus::REQUESTED_GENERATION){
+						$this->disconnect("World generation is unavailable. Contact the server administrator.");
+					}
 				}
 			);
 		}

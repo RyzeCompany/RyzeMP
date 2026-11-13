@@ -28,6 +28,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\format\io\FastChunkSerializer;
 use pocketmine\world\generator\executor\ThreadLocalGeneratorContext;
+use pocketmine\world\generator\vanilla\InvalidVanillaDataException;
 use function array_map;
 use function igbinary_serialize;
 use function igbinary_unserialize;
@@ -43,6 +44,10 @@ use function igbinary_unserialize;
  */
 class PopulationTask extends AsyncTask{
 	private const TLS_KEY_ON_COMPLETION = "onCompletion";
+	private const TLS_KEY_ON_DATA_FAILURE = "onDataFailure";
+
+	private bool $handlesDataFailure;
+	private ?string $dataFailure = null;
 
 	private ?string $chunk;
 
@@ -52,6 +57,7 @@ class PopulationTask extends AsyncTask{
 	 * @param Chunk[]|null[] $adjacentChunks
 	 * @phpstan-param array<int, Chunk|null> $adjacentChunks
 	 * @phpstan-param OnCompletion $onCompletion
+	 * @phpstan-param (\Closure(string) : void)|null $onDataFailure
 	 */
 	public function __construct(
 		private int $worldId,
@@ -59,8 +65,13 @@ class PopulationTask extends AsyncTask{
 		private int $chunkZ,
 		?Chunk $chunk,
 		array $adjacentChunks,
-		\Closure $onCompletion
+		\Closure $onCompletion,
+		?\Closure $onDataFailure = null
 	){
+		$this->handlesDataFailure = $onDataFailure !== null;
+		if($onDataFailure !== null){
+			$this->storeLocal(self::TLS_KEY_ON_DATA_FAILURE, $onDataFailure);
+		}
 		$this->chunk = $chunk !== null ? FastChunkSerializer::serializeTerrain($chunk) : null;
 
 		$this->adjacentChunks = igbinary_serialize(array_map(
@@ -72,6 +83,17 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onRun() : void{
+		try{
+			$this->generate();
+		}catch(InvalidVanillaDataException $e){
+			if(!$this->handlesDataFailure){
+				throw $e;
+			}
+			$this->dataFailure = $e->getMessage();
+		}
+	}
+
+	private function generate() : void{
 		$context = ThreadLocalGeneratorContext::fetch($this->worldId);
 		if($context === null){
 			throw new AssumptionFailedError("Generator context should have been initialized before any PopulationTask execution");
@@ -116,6 +138,12 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onCompletion() : void{
+		if($this->dataFailure !== null){
+			/** @phpstan-var \Closure(string) : void $onDataFailure */
+			$onDataFailure = $this->fetchLocal(self::TLS_KEY_ON_DATA_FAILURE);
+			$onDataFailure($this->dataFailure);
+			return;
+		}
 		/**
 		 * @var \Closure $onCompletion
 		 * @phpstan-var OnCompletion $onCompletion

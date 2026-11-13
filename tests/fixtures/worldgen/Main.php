@@ -61,6 +61,7 @@ final class Main extends PluginBase{
 		if($cache === false || !in_array($profile, ["core-v1", "core-v4", "core-v5", "core-v6"], true)){
 			throw new \RuntimeException("Worldgen fixture requires a data cache and a test profile");
 		}
+		$cacheFailure = getenv("RYZE_WORLDGEN_TEST_CACHE_FAILURE") === "1";
 		$benchmarkSeed = getenv("RYZE_WORLDGEN_BENCHMARK_SEED");
 		$seed = $benchmarkSeed === false ? self::SEED : (int) $benchmarkSeed;
 		$preset = "$profile;data=$cache";
@@ -80,13 +81,62 @@ final class Main extends PluginBase{
 					->setSeed($seed));
 			}
 		}
-		$this->getScheduler()->scheduleDelayedTask(new ClosureTask(function() use ($profile, $preset, $snapshotPath, $reopen, $benchmarkSeed, $seed) : void{
-			if($benchmarkSeed !== false){
+		$this->getScheduler()->scheduleDelayedTask(new ClosureTask(function() use ($cacheFailure, $cache, $profile, $preset, $snapshotPath, $reopen, $benchmarkSeed, $seed) : void{
+			if($cacheFailure){
+				$this->checkPinnedCacheFailure($cache);
+			}elseif($benchmarkSeed !== false){
 				$this->benchmark($seed);
 			}else{
 				$this->exerciseWorlds($profile, $preset, $snapshotPath, $reopen);
 			}
 		}), 1);
+	}
+
+	private function checkPinnedCacheFailure(string $cache) : void{
+		$world = $this->getServer()->getWorldManager()->getDefaultWorld() ?? throw new \RuntimeException("Fixture world unavailable");
+		$world->requestChunkPopulation(0, 3, null)->onCompletion(function(Chunk $chunk) use ($world, $cache) : void{
+			$world->save(true);
+			$before = self::snapshot($world, $chunk, "core-v1");
+			$stamp = $cache . "/version.json";
+			$original = file_get_contents($stamp);
+			if($original === false || file_put_contents($stamp, $original . "\n") === false){
+				throw new \RuntimeException("Could not change the benchmark's private copy of version.json");
+			}
+
+			$pending = 3;
+			$onRejected = function() use ($world, $stamp, $original, $before, &$pending) : void{
+				if(--$pending !== 0){
+					return;
+				}
+				if(file_put_contents($stamp, $original) === false || !$world->isChunkPopulationBlocked()){
+					throw new \RuntimeException("Worldgen cache rejection did not block the affected world");
+				}
+				if($world->getChunk(80, 80)?->isPopulated() || $world->getChunk(81, 80)?->isPopulated() ||
+					$world->getChunk(110, 110)?->isPopulated() || $world->isChunkLocked(80, 80)){
+					throw new \RuntimeException("A rejected chunk was published or left locked");
+				}
+				$world->requestChunkPopulation(0, 3, null)->onCompletion(function(Chunk $stored) use ($world, $before) : void{
+					if(self::snapshot($world, $stored, "core-v1") !== $before){
+						throw new \RuntimeException("A stored chunk changed after cache rejection");
+					}
+					$world->requestChunkPopulation(140, 140, null)->onCompletion(self::unexpectedPopulation(), function() use ($world) : void{
+						$world->save(true);
+						$this->getLogger()->info("PASS: cache mismatch rejected new chunks and preserved stored terrain");
+						$this->getServer()->shutdown();
+					});
+				}, self::populationFailure("existing chunk after cache mismatch"));
+			};
+			foreach([[80, 80], [81, 80], [110, 110]] as [$x, $z]){
+				$world->requestChunkPopulation($x, $z, null)->onCompletion(self::unexpectedPopulation(), $onRejected);
+			}
+		}, self::populationFailure("cache failure fixture setup"));
+	}
+
+	/** @return \Closure(): void */
+	private static function unexpectedPopulation() : \Closure{
+		return static function() : void{
+			throw new \RuntimeException("A new chunk populated after a pinned cache mismatch");
+		};
 	}
 
 	private function benchmark(int $seed) : void{

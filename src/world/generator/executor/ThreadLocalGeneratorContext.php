@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\executor;
 
 use pocketmine\world\generator\Generator;
+use pocketmine\world\generator\vanilla\InvalidVanillaDataException;
 
 /**
  * Manages thread-local caches for generators and the things needed to support them
@@ -34,16 +35,27 @@ final class ThreadLocalGeneratorContext{
 	 * @phpstan-var array<int, self>
 	 */
 	private static array $contexts = [];
+	/** @var array<int, string> */
+	private static array $initializationFailures = [];
 
 	public static function register(self $context, int $worldId) : void{
 		self::$contexts[$worldId] = $context;
+		unset(self::$initializationFailures[$worldId]);
 	}
 
 	public static function unregister(int $worldId) : void{
+		unset(self::$contexts[$worldId], self::$initializationFailures[$worldId]);
+	}
+
+	public static function failInitialization(int $worldId, string $message) : void{
 		unset(self::$contexts[$worldId]);
+		self::$initializationFailures[$worldId] = $message;
 	}
 
 	public static function fetch(int $worldId) : ?self{
+		if(isset(self::$initializationFailures[$worldId])){
+			throw new InvalidVanillaDataException(self::$initializationFailures[$worldId]);
+		}
 		return self::$contexts[$worldId] ?? null;
 	}
 

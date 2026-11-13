@@ -61,6 +61,9 @@ jobs:
           composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
           php -d phar.readonly=0 build/server-phar.php --out="$RUNNER_TEMP/RyzeMP-worldgen.phar"
           python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Reject changed worldgen data without losing stored chunks
+        timeout-minutes: 4
+        run: python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --cache-failure
       - name: Measure concurrent core-v6 PHAR generation
         timeout-minutes: 18
         run: |

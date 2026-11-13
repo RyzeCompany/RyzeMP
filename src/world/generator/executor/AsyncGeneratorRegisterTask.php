@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\executor;
 
 use pocketmine\scheduler\AsyncTask;
+use pocketmine\world\generator\vanilla\InvalidVanillaDataException;
 
 class AsyncGeneratorRegisterTask extends AsyncTask{
 
@@ -34,7 +35,12 @@ class AsyncGeneratorRegisterTask extends AsyncTask{
 
 	public function onRun() : void{
 		$setupParameters = $this->setupParameters;
-		$generator = $setupParameters->createGenerator();
+		try{
+			$generator = $setupParameters->createGenerator();
+		}catch(InvalidVanillaDataException $e){
+			ThreadLocalGeneratorContext::failInitialization($this->contextId, $e->getMessage());
+			return;
+		}
 		ThreadLocalGeneratorContext::register(new ThreadLocalGeneratorContext($generator, $setupParameters->worldMinY, $setupParameters->worldMaxY), $this->contextId);
 	}
 }

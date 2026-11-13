@@ -131,10 +131,13 @@ final class VanillaDataIdentity{
 	}
 
 	public static function assertMatches(string $directory, string $expectedHash) : void{
-		if(!hash_equals($expectedHash, self::fingerprint($directory))){
-			throw new InvalidGeneratorOptionsException(
-				"VanillaMine data cache changed for pinned core-v2 world; refusing to generate new chunks"
-			);
+		try{
+			$actualHash = self::fingerprint($directory);
+		}catch(InvalidGeneratorOptionsException|\RuntimeException $e){
+			throw new InvalidVanillaDataException("Cannot verify pinned VanillaMine data: " . $e->getMessage(), 0, $e);
+		}
+		if(!hash_equals($expectedHash, $actualHash)){
+			throw new InvalidVanillaDataException("VanillaMine data cache changed for a pinned world");
 		}
 	}
 

@@ -341,6 +341,7 @@ class World implements ChunkManager{
 	 * @phpstan-var array<ChunkPosHash, bool>
 	 */
 	private array $activeChunkPopulationTasks = [];
+	private bool $chunkPopulationBlocked = false;
 	/**
 	 * @var ChunkLockId[]
 	 * @phpstan-var array<ChunkPosHash, ChunkLockId>
@@ -3542,10 +3543,14 @@ class World implements ChunkManager{
 		if($associatedChunkLoader === null){
 			$temporaryLoader = new class implements ChunkLoader{};
 			$this->registerChunkLoader($temporaryLoader, $chunkX, $chunkZ);
-			$resolver->getPromise()->onCompletion(
-				fn() => $this->unregisterChunkLoader($temporaryLoader, $chunkX, $chunkZ),
-				static function() : void{}
-			);
+			$release = function() use ($temporaryLoader, $chunkX, $chunkZ) : void{
+				$this->unregisterChunkLoader($temporaryLoader, $chunkX, $chunkZ);
+			};
+			$resolver->getPromise()->onCompletion($release, function() use ($release) : void{
+				if($this->chunkPopulationBlocked){
+					$release();
+				}
+			});
 		}
 		return $resolver->getPromise();
 	}
@@ -3598,7 +3603,18 @@ class World implements ChunkManager{
 			$resolver->resolve($chunk);
 			return [$resolver, false];
 		}
+		if($this->chunkPopulationBlocked){
+			$resolver ??= new PromiseResolver();
+			unset($this->chunkPopulationRequestMap[$chunkHash]);
+			$resolver->reject();
+			return [$resolver, false];
+		}
 		return [$resolver, true];
+	}
+
+	/** @internal Whether this world has stopped generating after a pinned-cache validation failure. */
+	public function isChunkPopulationBlocked() : bool{
+		return $this->chunkPopulationBlocked;
 	}
 
 	/**
@@ -3684,24 +3700,58 @@ class World implements ChunkManager{
 			$centerChunk = $this->loadChunk($chunkX, $chunkZ);
 			$adjacentChunks = $this->getAdjacentChunks($chunkX, $chunkZ);
 
-			$this->generatorExecutor->populate(
-				$chunkX,
-				$chunkZ,
-				$centerChunk,
-				$adjacentChunks,
-				function(Chunk $centerChunk, array $adjacentChunks) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
-					if(!$this->isLoaded()){
-						return;
-					}
-
+			$onCompletion = function(Chunk $centerChunk, array $adjacentChunks) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
+				if($this->isLoaded()){
 					$this->generateChunkCallback($chunkPopulationLockId, $chunkX, $chunkZ, $centerChunk, $adjacentChunks, $temporaryChunkLoader);
 				}
-			);
+			};
+			if($this->generatorExecutor instanceof AsyncGeneratorExecutor){
+				$this->generatorExecutor->populate($chunkX, $chunkZ, $centerChunk, $adjacentChunks, $onCompletion,
+					function(string $message) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
+						if($this->isLoaded()){
+							$this->abortChunkPopulation($message, $chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader);
+						}
+					}
+				);
+			}else{
+				$this->generatorExecutor->populate($chunkX, $chunkZ, $centerChunk, $adjacentChunks, $onCompletion);
+			}
 
 			return $resolver->getPromise();
 		}finally{
 			$timings->stopTiming();
 		}
+	}
+
+	private function abortChunkPopulation(string $reason, ChunkLockId $lock, int $x, int $z, ChunkLoader $loader) : void{
+		$this->releasePopulationArea($lock, $x, $z, $loader);
+		unset($this->activeChunkPopulationTasks[self::chunkHash($x, $z)]);
+		if($this->chunkPopulationBlocked){
+			return;
+		}
+
+		$this->chunkPopulationBlocked = true;
+		$this->logger->error("$reason. New chunk generation is disabled until the cache is restored and the world is reopened.");
+		$requests = $this->chunkPopulationRequestMap;
+		$this->chunkPopulationRequestMap = [];
+		$this->chunkPopulationRequestQueue = new \SplQueue();
+		$this->chunkPopulationRequestQueueIndex = [];
+		foreach($requests as $request){
+			$request->reject();
+		}
+	}
+
+	private function releasePopulationArea(ChunkLockId $lock, int $x, int $z, ChunkLoader $loader) : int{
+		$dirtyChunks = 0;
+		for($xx = -1; $xx <= 1; ++$xx){
+			for($zz = -1; $zz <= 1; ++$zz){
+				$this->unregisterChunkLoader($loader, $x + $xx, $z + $zz);
+				if(!$this->unlockChunk($x + $xx, $z + $zz, $lock)){
+					++$dirtyChunks;
+				}
+			}
+		}
+		return $dirtyChunks;
 	}
 
 	/**
@@ -3712,17 +3762,13 @@ class World implements ChunkManager{
 		$timings = $this->timings->chunkPopulationCompletion;
 		$timings->startTiming();
 
-		$dirtyChunks = 0;
-		for($xx = -1; $xx <= 1; ++$xx){
-			for($zz = -1; $zz <= 1; ++$zz){
-				$this->unregisterChunkLoader($temporaryChunkLoader, $x + $xx, $z + $zz);
-				if(!$this->unlockChunk($x + $xx, $z + $zz, $chunkLockId)){
-					$dirtyChunks++;
-				}
-			}
-		}
-
+		$dirtyChunks = $this->releasePopulationArea($chunkLockId, $x, $z, $temporaryChunkLoader);
 		$index = World::chunkHash($x, $z);
+		if($this->chunkPopulationBlocked){
+			unset($this->activeChunkPopulationTasks[$index]);
+			$timings->stopTiming();
+			return;
+		}
 		if(!isset($this->activeChunkPopulationTasks[$index])){
 			throw new AssumptionFailedError("This should always be set, regardless of whether the task was orphaned or not");
 		}

@@ -4,12 +4,13 @@
 import argparse
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 from tempfile import TemporaryDirectory
 
 
-def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None):
+def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None, cache_failure=False):
     with TemporaryDirectory(prefix=f"ryze-worldgen-{profile}-") as directory:
         data = Path(directory)
         plugins = data / "plugins"
@@ -40,11 +41,18 @@ def test_profile(php, phar, cache, fixture, profile, benchmark_seed=None):
         (data / "server.properties").write_text(
             f"server-ip=127.0.0.1\nserver-port={port}\nenable-ipv6=off\n"
         )
+        if cache_failure:
+            source_cache = cache
+            cache = data / "private-worldgen-cache"
+            shutil.copytree(source_cache, cache, ignore=shutil.ignore_patterns("compiled"))
         env = os.environ | {
             "POCKETMINE_VANILLA_WORLDGEN_DATA": str(cache),
             "RYZE_WORLDGEN_TEST_PROFILE": profile,
         }
-        if benchmark_seed is None:
+        if cache_failure:
+            env["RYZE_WORLDGEN_TEST_CACHE_FAILURE"] = "1"
+            markers = ["PASS: cache mismatch rejected new chunks and preserved stored terrain"]
+        elif benchmark_seed is None:
             markers = [f"PASS: {profile} {outcome} all three dimensions"
                        for outcome in ("generated and saved", "reopened and extended")]
         else:
@@ -75,13 +83,17 @@ def main():
     parser.add_argument("php", help="PHP 8.4 ZTS executable")
     parser.add_argument("phar", type=Path)
     parser.add_argument("cache", type=Path)
-    parser.add_argument("--benchmark", action="store_true", help="Run the Linux core-v6 concurrency benchmark")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--benchmark", action="store_true", help="Run the Linux core-v6 concurrency benchmark")
+    mode.add_argument("--cache-failure", action="store_true", help="Test rejection using a private cache copy")
     parser.add_argument("profiles", nargs="*", default=["core-v1", "core-v4", "core-v5", "core-v6"])
     args = parser.parse_args()
     fixture = Path(__file__).resolve().parent / "fixtures/worldgen"
     phar = str(args.phar.resolve())
     cache = args.cache.resolve()
-    if args.benchmark:
+    if args.cache_failure:
+        test_profile(args.php, phar, cache, fixture, "core-v6", cache_failure=True)
+    elif args.benchmark:
         for seed in (12345, -987654321):
             test_profile(args.php, phar, cache, fixture, "core-v6", benchmark_seed=seed)
     else:
