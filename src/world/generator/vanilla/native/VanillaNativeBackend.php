@@ -154,7 +154,7 @@ final class VanillaNativeBackend{
 		if($address === false || $token === false || $address === "" || $token === ""){
 			return null;
 		}
-		if(!preg_match('/^127\.0\.0\.1:([0-9]{1,5})$/D', $address, $match)){
+		if(preg_match('/^127\.0\.0\.1:([0-9]{1,5})$/D', $address, $match) !== 1){
 			return null;
 		}
 		$port = (int) $match[1];

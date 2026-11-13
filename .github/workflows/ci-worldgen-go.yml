@@ -44,7 +44,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/dist"
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" .
           "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" -version | tee "$GITHUB_WORKSPACE/dist/VERSION.txt"
-          test "$(awk '{print $3 " " $5}' "$GITHUB_WORKSPACE/dist/VERSION.txt")" = "7 4"
+          test "$(awk '{print $4 " " $6}' "$GITHUB_WORKSPACE/dist/VERSION.txt")" = "7 4"
           cd "$GITHUB_WORKSPACE/dist"
           sha256sum vanillagen-linux-amd64 | tee SHA256SUMS
           printf '%s\n' 'VanillaMine source commit: 4dd2228b47d64c8015c28138c846e6c4acb28345' > SOURCE.txt
