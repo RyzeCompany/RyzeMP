@@ -27,6 +27,8 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\block\utils\VaultState;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
+use pocketmine\data\bedrock\item\SavedItemData;
+use pocketmine\world\format\io\GlobalItemDataHandlers;
 use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
@@ -39,9 +41,18 @@ final class VaultLogicTest extends TestCase{
 
 	public static function setUpBeforeClass() : void{
 		parent::setUpBeforeClass();
-		//Production registers these blocks and keys at bootstrap. Tests must do the same
-		//before asserting Bedrock saved-item serialization and vanilla vault rewards.
-		TrialChamberContent::register();
+		//The standalone vault tests must register key serialization without also
+		//registering the Trial Chamber BLOCK states into the global runtime registry.
+		//Doing so would pollute the independent block round-trip suite.
+		foreach([false, true] as $ominous){
+			$id = $ominous ? "minecraft:ominous_trial_key" : "minecraft:trial_key";
+			$key = TrialChamberContent::trialKey($ominous);
+			$deserializer = GlobalItemDataHandlers::getDeserializer();
+			if($deserializer->getDeserializerForId($id) === null){
+				$deserializer->map($id, static fn() : Item => clone $key);
+				GlobalItemDataHandlers::getSerializer()->map($key, static fn() : SavedItemData => new SavedItemData($id));
+			}
+		}
 	}
 
 
