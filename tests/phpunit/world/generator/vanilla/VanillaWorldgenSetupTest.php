@@ -97,7 +97,21 @@ final class VanillaWorldgenSetupTest extends TestCase{
             self::assertSame("SENTINEL-" . $name,
                 file_get_contents($this->root . "/worlds/" . $name . "/level.dat"));
         }
-        self::assertSame("19132", (string) $props->get("server-port"));
+        self::assertEquals("19132", $props->get("server-port"));
+    }
+
+    public function testPlaceholderHashWithOlderWorldCreatesNewWorldInsteadOfBlocking() : void{
+        $data = $this->realData();
+        self::assertTrue(mkdir($this->root . "/worlds/world"));
+        file_put_contents($this->root . "/worlds/world/level.dat", "ORIGINAL-POCKETMINE");
+        $properties = new Config($this->root . "/server.properties", Config::PROPERTIES);
+        $properties->set("level-type", "ryze_vanilla_overworld");
+        $properties->set("generator-settings", "core-v6;data=" . $data["path"] . ";sha256=HASH_REAL");
+        $properties->save();
+        VanillaWorldgenSetup::configureWorlds($this->root, $data["path"], $data["hash"], $this->logger());
+        $properties->reload();
+        self::assertSame("world_vanilla_test", $properties->get("level-name"));
+        self::assertSame("ORIGINAL-POCKETMINE", file_get_contents($this->root . "/worlds/world/level.dat"));
     }
 
     public function testExistingPinnedVanillaWorldRejectsDifferentCacheIdentity() : void{
