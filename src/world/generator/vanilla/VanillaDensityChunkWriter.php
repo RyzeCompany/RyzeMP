@@ -335,7 +335,8 @@ final class VanillaDensityChunkWriter{
 
 	/** Runs decoration enabled by the world's preset. */
 	public function populate(\pocketmine\world\ChunkManager $world, int $chunkX, int $chunkZ) : void{
-		if($this->features === null){
+		$features = $this->features;
+		if($features === null){
 			return;
 		}
 		if(!$this->checkedPopulationCache){
@@ -344,7 +345,7 @@ final class VanillaDensityChunkWriter{
 		if($this->deterministicDecoration !== null){
 			$this->deterministicDecoration->decorate($world, $chunkX, $chunkZ);
 		}else{
-			$this->features->decorate($world, $chunkX, $chunkZ);
+			$features->decorate($world, $chunkX, $chunkZ);
 		}
 	}
 

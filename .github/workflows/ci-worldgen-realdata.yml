@@ -73,6 +73,33 @@ jobs:
           uname -sm
           nproc
           python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --benchmark
+      - name: Set up the upstream Go compiler
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Evaluate the pinned VanillaMine Go backend
+        timeout-minutes: 12
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: 'off'
+          VANILLAMINE_REVISION: 4dd2228b47d64c8015c28138c846e6c4acb28345
+        run: |
+          git init "$RUNNER_TEMP/vanillamine-reference"
+          git -C "$RUNNER_TEMP/vanillamine-reference" fetch --depth=1 https://gitlab.com/VanillaMine/VanillaMine.git "$VANILLAMINE_REVISION"
+          git -C "$RUNNER_TEMP/vanillamine-reference" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/vanillamine-reference" rev-parse HEAD)" = "$VANILLAMINE_REVISION"
+          cd "$RUNNER_TEMP/vanillamine-reference/native/vanillagen"
+          go version
+          go test -count=1 -v ./...
+          go build -trimpath -o "$RUNNER_TEMP/vanillagen" .
+          "$RUNNER_TEMP/vanillagen" -version
+          for dimension in overworld nether end; do
+            for seed in 12345 -987654321; do
+              printf 'Go terrain benchmark: %s seed %s\n' "$dimension" "$seed"
+              "$RUNNER_TEMP/vanillagen" -bench -stage 2 -data "$POCKETMINE_VANILLA_WORLDGEN_DATA" -settings "$dimension" -seed "$seed" -chunks 128 -workers 2
+            done
+          done
       - name: Erase downloaded Minecraft data (never upload artifacts)
         if: always()
         run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"

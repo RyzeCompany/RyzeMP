@@ -285,3 +285,14 @@ sounds for each receiving client. The PHAR fixture locates a desert
 pyramid, brushes a naturally placed suspicious block and checks the
 revealed item after restarting. Decorated pot contents and some pottery
 sherds still require their runtime items.
+
+## Upstream Go evaluation
+
+The real-data job checks out VanillaMine at its pinned revision and compiles
+vanillagen with Go 1.24. It runs the upstream reference tests with the same
+Java data cache and measures the native terrain, materials and carvers for
+all three dimensions. This measures the native kernel in isolation. It
+excludes RyzeMP structures, PHP decoration, packet conversion and LevelDB,
+which are included as applicable in the PHP server workload. The native
+wire protocol and process management still require a RyzeMP integration
+and equivalence tests before using Go on an existing pinned world.
