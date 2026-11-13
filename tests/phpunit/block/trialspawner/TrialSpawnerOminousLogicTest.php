@@ -184,10 +184,10 @@ final class TrialSpawnerOminousLogicTest extends TestCase{
 	public function testDispensedItemsAreWeightedByCount() : void{
 		$arrow = VanillaItems::ARROW();
 		$charge = VanillaItems::SNOWBALL();
-		self::assertNull(WorldTrialSpawnerHost::pickDispensedItem([]));
+		self::assertNull(TrialSpawnerMath::pickDispensedItem([]));
 		$counts = [0, 0];
 		for($i = 0; $i < 4000; ++$i){
-			$item = WorldTrialSpawnerHost::pickDispensedItem([[$arrow, 1], [$charge, 3]]);
+			$item = TrialSpawnerMath::pickDispensedItem([[$arrow, 1], [$charge, 3]]);
 			self::assertNotNull($item);
 			++$counts[$item->equals($charge) ? 1 : 0];
 		}
@@ -197,10 +197,10 @@ final class TrialSpawnerOminousLogicTest extends TestCase{
 
 	public function testSeedHelpersMatchJava() : void{
 		//BlockPos.asLong() of the low resolution positions (1, 2, 3) and (-1, -1, -1)
-		self::assertSame((1 << 38) | (3 << 12) | 2, WorldTrialSpawnerHost::lowResolutionPosition(30, 40, 90));
-		self::assertSame(-1, WorldTrialSpawnerHost::lowResolutionPosition(-1, -1, -1));
-		self::assertSame(PHP_INT_MIN, WorldTrialSpawnerHost::addLong(PHP_INT_MAX, 1));
-		self::assertSame(5, WorldTrialSpawnerHost::addLong(2, 3));
-		self::assertSame(-2, WorldTrialSpawnerHost::addLong(-1, -1));
+		self::assertSame((1 << 38) | (3 << 12) | 2, TrialSpawnerMath::lowResolutionPosition(30, 40, 90));
+		self::assertSame(-1, TrialSpawnerMath::lowResolutionPosition(-1, -1, -1));
+		self::assertSame(PHP_INT_MIN, TrialSpawnerMath::addLong(PHP_INT_MAX, 1));
+		self::assertSame(5, TrialSpawnerMath::addLong(2, 3));
+		self::assertSame(-2, TrialSpawnerMath::addLong(-1, -1));
 	}
 }

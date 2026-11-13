@@ -37,6 +37,14 @@ use function min;
 
 final class VaultLogicTest extends TestCase{
 
+	public static function setUpBeforeClass() : void{
+		parent::setUpBeforeClass();
+		//Production registers these blocks and keys at bootstrap. Tests must do the same
+		//before asserting Bedrock saved-item serialization and vanilla vault rewards.
+		TrialChamberContent::register();
+	}
+
+
 	private function host(VaultConfig $config) : FakeVaultHost{
 		$host = new FakeVaultHost();
 		$host->tables[$config->getLootTable()] = FakeVaultHost::rewardItems();
