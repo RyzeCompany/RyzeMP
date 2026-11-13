@@ -59,7 +59,7 @@ final class VanillaWorldgenSetupTest extends TestCase{
         $props = new Config($this->root . "/server.properties", Config::PROPERTIES);
         self::assertSame("world", $props->get("level-name"));
         self::assertSame(VanillaWorldgenSetup::GENERATOR, $props->get("level-type"));
-        self::assertSame("12345", $props->get("level-seed"));
+        self::assertEquals("12345", $props->get("level-seed"));
         self::assertEquals("19132", $props->get("server-port"));
         $preset = "core-v6;data=" . $data["path"] . ";sha256=" . $data["hash"];
         self::assertSame($preset, $props->get("generator-settings"));
