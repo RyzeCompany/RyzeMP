@@ -103,6 +103,20 @@ jobs:
               "$RUNNER_TEMP/vanillagen" -bench -stage 2 -data "$POCKETMINE_VANILLA_WORLDGEN_DATA" -settings "$dimension" -seed "$seed" -chunks 128 -workers 2
             done
           done
+      - name: Verify full Go versus compiled PHP for all dimensions and seeds
+        timeout-minutes: 10
+        env:
+          RYZEMP_VANILLAGEN_STAGE: full
+        run: |
+          php -d memory_limit=2G tests/native-worldgen-parity.php "$RUNNER_TEMP/vanillagen" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Exercise the actual RyzeMP PHAR with the Go backend enabled
+        timeout-minutes: 15
+        env:
+          RYZEMP_VANILLAGEN_STAGE: full
+        run: |
+          export RYZEMP_VANILLAGEN_BINARY="$RUNNER_TEMP/vanillagen"
+          export RYZEMP_VANILLAGEN_SHA256="$(sha256sum "$RUNNER_TEMP/vanillagen" | cut -d ' ' -f1)"
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
       - name: Erase downloaded Minecraft data (never upload artifacts)
         if: always()
         run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"
