@@ -206,7 +206,7 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 			'classic-login',
 			'playfab-from-client',
 			'{"geometry":{"default":"geometry.humanoid.custom"}}',
-			new SkinImage(64, 64, str_repeat("\\x12\\x34\\x56\\xff", 64 * 64)),
+			new SkinImage(64, 64, str_repeat("\x12\x34\x56\xff", 64 * 64)),
 			geometryData: '{}',
 			geometryDataEngineVersion: '1.21.0',
 			fullSkinId: '11c30e00-3432-485a-96df-79ade5434382',
