@@ -102,6 +102,31 @@ final class VanillaWorldgenSetup{
             }
         }
 
+        // Config::save(PROPERTIES) regenerates a timestamp header on every
+        // write. A repeated Egg startup should not touch a fully configured
+        // server.properties file or rewrite its world/dimension choices.
+        $dimensionsPath = $root . "/dimensions.yml";
+        if(!$worldExists && $currentType === self::GENERATOR && $currentPreset === $preset &&
+            is_file($dimensionsPath) && !is_link($dimensionsPath)){
+            $previousDimensions = (new Config($dimensionsPath, Config::YAML))->getAll();
+            $alreadyConfigured = true;
+            foreach(["nether", "end"] as $dimension){
+                $section = $previousDimensions[$dimension] ?? null;
+                $name = is_array($section) ? ($section["world"] ?? null) : null;
+                if(!is_array($section) || ($section["worldgen-preset"] ?? null) !== $preset ||
+                    ($section["source-dimension"] ?? null) !== $dimension ||
+                    !is_string($name) || !self::validName($name) || $name === $originalName){
+                    $alreadyConfigured = false;
+                    break;
+                }
+            }
+            if($alreadyConfigured){
+                DimensionSettings::fromArray($previousDimensions);
+                $logger("Existing new-world core-v6 configuration verified; keeping server.properties and dimensions.yml unchanged.");
+                return;
+            }
+        }
+
         $newName = $originalName;
         if($worldExists){
             $newName = self::nextUnusedWorld($root, "world_vanilla_test");
