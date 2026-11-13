@@ -8,6 +8,7 @@ on:
       - 'src/world/format/**'
       - 'src/world/World.php'
       - 'src/block/tile/**'
+      - 'src/loot/**'
       - 'tests/phpunit/world/generator/vanilla/**'
       - 'tests/fixtures/worldgen/**'
       - 'tests/worldgen-phar-smoke.py'
@@ -45,7 +46,9 @@ jobs:
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --fail-on-skipped \
             tests/phpunit/world/generator/vanilla/CarverTest.php \
             tests/phpunit/world/generator/vanilla/VanillaRealDataReferenceTest.php \
-            tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php
+            tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php \
+            tests/phpunit/world/generator/vanilla/StructureTest.php \
+            tests/phpunit/world/generator/vanilla/FreeSpaceTest.php
       - name: Build the PHAR and restart three opt-in LevelDB worlds
         timeout-minutes: 12
         run: |

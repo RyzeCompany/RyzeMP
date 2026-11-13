@@ -6,6 +6,7 @@ namespace RyzeTests\Worldgen;
 
 use pocketmine\block\tile\Chest;
 use pocketmine\block\tile\MonsterSpawner;
+use pocketmine\block\VanillaBlocks;
 use pocketmine\item\VanillaItems;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\plugin\PluginBase;
@@ -25,11 +26,16 @@ final class Main extends PluginBase{
 		"world_nether" => [VanillaGenerators::NETHER_CORE, DimensionIds::NETHER, -1, 0],
 		"world_the_end" => [VanillaGenerators::END_CORE, DimensionIds::THE_END, 72, 0]
 	];
+	private const STRUCTURE_CHUNKS = [
+		"world" => [10, 55],
+		"world_nether" => [7, 42],
+		"world_the_end" => [62, 24]
+	];
 
 	protected function onEnable() : void{
 		$cache = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
 		$profile = getenv("RYZE_WORLDGEN_TEST_PROFILE");
-		if($cache === false || !in_array($profile, ["core-v1", "core-v4"], true)){
+		if($cache === false || !in_array($profile, ["core-v1", "core-v4", "core-v5"], true)){
 			throw new \RuntimeException("Worldgen fixture requires a data cache and a test profile");
 		}
 		$preset = "$profile;data=$cache";
@@ -56,10 +62,24 @@ final class Main extends PluginBase{
 
 	private function exerciseWorlds(string $profile, string $preset, string $snapshotPath, bool $reopen) : void{
 		$server = $this->getServer();
-		$remaining = count(self::WORLDS);
+		$remaining = count(self::WORLDS) + ($profile === "core-v5" ? count(self::STRUCTURE_CHUNKS) : 0);
 		$record = [];
 		$expected = $reopen ? json_decode(file_get_contents($snapshotPath), true, flags: JSON_THROW_ON_ERROR) : [];
 		$start = hrtime(true);
+		$complete = function() use ($profile, $reopen, $snapshotPath, $start, &$record, &$remaining) : void{
+			if(--$remaining === 0){
+				if(!$reopen){
+					file_put_contents($snapshotPath, json_encode($record, JSON_THROW_ON_ERROR));
+				}
+				$elapsed = (hrtime(true) - $start) / 1_000_000;
+				$this->getLogger()->info(sprintf(
+					"PASS: %s %s all three dimensions in %.0f ms, average server TPS %.2f",
+					$profile, $reopen ? "reopened and extended" : "generated and saved", $elapsed,
+					$this->getServer()->getTicksPerSecondAverage()
+				));
+				$this->getServer()->shutdown();
+			}
+		};
 		foreach(self::WORLDS as $name => [$generator, $dimension, $x, $z]){
 			$world = $server->getWorldManager()->getWorldByName($name) ?? throw new \RuntimeException("Missing world $name");
 			$data = $world->getProvider()->getWorldData();
@@ -72,13 +92,16 @@ final class Main extends PluginBase{
 				if($stored === null || !$stored->isPopulated() || self::snapshot($world, $stored, $profile) !== $expected[$name]){
 					throw new \RuntimeException("Stored worldgen chunk differs after restart for $name");
 				}
+				if($name === "world" && $profile !== "core-v1"){
+					self::checkDungeonLoot($world);
+				}
 			}elseif($stored !== null){
 				throw new \RuntimeException("First boot loaded a pre-existing chunk in $name");
 			}
 
 			// On restart populate a fresh chunk beyond the saved generation region.
 			$world->requestChunkPopulation($reopen ? $x + 4 : $x, $z, null)->onCompletion(
-				function(Chunk $chunk) use ($world, $name, $profile, $snapshotPath, $reopen, $start, &$remaining, &$record) : void{
+				function(Chunk $chunk) use ($world, $name, $profile, $reopen, $complete, &$record) : void{
 					if(!$chunk->isPopulated()){
 						throw new \RuntimeException("Worldgen did not populate a chunk in $name");
 					}
@@ -94,26 +117,77 @@ final class Main extends PluginBase{
 						$record[$name] = self::snapshot($world, $chunk, $profile);
 					}
 					$world->save(true);
-					if(--$remaining === 0){
-						if(!$reopen){
-							file_put_contents($snapshotPath, json_encode($record, JSON_THROW_ON_ERROR));
-						}
-						$elapsed = (hrtime(true) - $start) / 1_000_000;
-						$this->getLogger()->info(sprintf(
-							"PASS: %s %s all three dimensions in %.0f ms, average server TPS %.2f",
-							$profile,
-							$reopen ? "reopened and extended" : "generated and saved",
-							$elapsed,
-							$this->getServer()->getTicksPerSecondAverage()
-						));
-						$this->getServer()->shutdown();
-					}
+					$complete();
 				},
 				static function() use ($name) : void{
 					throw new \RuntimeException("Worldgen population was rejected for $name");
 				}
 			);
+			if($profile === "core-v5"){
+				[$structureX, $structureZ] = self::STRUCTURE_CHUNKS[$name];
+				$key = "$name-structure";
+				if($reopen){
+					$structure = $world->loadChunk($structureX, $structureZ);
+					if($structure === null || self::checkStructure($world, $structure) !== $expected[$key]){
+						throw new \RuntimeException("Stored structure differs in $name after restart");
+					}
+					$complete();
+				}else{
+					$world->requestChunkPopulation($structureX, $structureZ, null)->onCompletion(
+						static function(Chunk $chunk) use ($world, $key, $complete, &$record) : void{
+							$record[$key] = self::checkStructure($world, $chunk);
+							$world->save(true);
+							$complete();
+						},
+						static function() use ($name) : void{
+							throw new \RuntimeException("Structure population was rejected for $name");
+						}
+					);
+				}
+			}
 		}
+	}
+
+	private static function checkDungeonLoot(World $world) : void{
+		$chest = $world->getTileAt(8, -39, 48);
+		if(!$chest instanceof Chest){
+			throw new \RuntimeException("Generated chest did not reopen");
+		}
+		$contents = $chest->getInventory()->getContents();
+		$second = $chest->getInventory()->getContents();
+		if(count($contents) < 2 || $chest->saveNBT()->getTag("LootTable") !== null || count($second) !== count($contents)){
+			throw new \RuntimeException("Dungeon loot was not rolled exactly once");
+		}
+		foreach($contents as $slot => $item){
+			if(!isset($second[$slot]) || !$item->equalsExact($second[$slot])){
+				throw new \RuntimeException("Dungeon loot changed on a second access");
+			}
+		}
+	}
+
+	/** @return array<string, mixed> */
+	private static function checkStructure(World $world, Chunk $chunk) : array{
+		switch($world->getFolderName()){
+			case "world":
+				if($world->getBlockAt(164, 100, 882)->getTypeId() !== VanillaBlocks::BELL()->getTypeId() ||
+					$world->getTileAt(164, 100, 882) === null){
+					throw new \RuntimeException("The village bell and its tile did not generate");
+				}
+				break;
+			case "world_nether":
+				$spawner = $world->getTileAt(117, 75, 681);
+				if(!$spawner instanceof MonsterSpawner || $spawner->getEntityTypeId() !== "minecraft:blaze"){
+					throw new \RuntimeException("The Nether fortress blaze spawner did not generate");
+				}
+				break;
+			case "world_the_end":
+				$chest = $world->getTileAt(997, 102, 397);
+				if(!$chest instanceof Chest || $chest->saveNBT()->getString("LootTable", "") !== "loot_tables/chests/end_city_treasure.json"){
+					throw new \RuntimeException("The End City chest did not generate");
+				}
+				break;
+		}
+		return self::snapshot($world, $chunk, "core-v1");
 	}
 
 	/** @return array<string, mixed> */

@@ -172,3 +172,29 @@ built PHAR, run:
 
 The fixture creates fresh worlds and uses the real asynchronous population
 pipeline. It runs on loopback without a game client.
+
+## Structure generation and container loot
+
+New worlds can opt into `core-v5;data=/absolute/cache;sha256=HEX`. This profile
+uses the compiled PHP terrain and adds the structure placement, Jigsaw pools,
+processors, piece templates and Beardifier from VanillaMine
+`4dd2228b47d64c8015c28138c846e6c4acb28345`. The structure positions use the Java
+26.3 algorithm. Earlier presets keep their terrain and decoration selection.
+
+The profile evaluates neighbouring decoration against fresh terrain and
+combines the writes in fixed coordinate order. Each worker publishes writes
+only in the requested chunk. This prevents a late neighbouring population
+from replacing saved blocks and makes the result independent of request order
+for the tested areas. Overlapping features can differ from Java's decoration
+order. The test suite compares Java structure starts, piece counts and boxes,
+and checks both population orders across an outpost and a Nether fortress.
+
+The PHAR test also generates a village bell, a fortress blaze spawner and an
+End City chest and verifies their terrain and block entities after restart.
+Dungeon containers roll their Java loot once on first inventory access using
+their saved seed and the world's pinned cache. Unsupported items and
+components use the runtime's available representations. Generated structure
+geometry is available for Trial Chambers, but the trial spawner and vault
+mechanics, unsupported block entities, structure mobs and minecarts, and
+complete End gameplay still need their runtime adapters. Retail Bedrock
+sessions and production-load measurements are still required.

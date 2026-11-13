@@ -174,6 +174,7 @@ final class FeatureLevel{
 		$this->pendingTileChunks = [];
 		$this->subChunks = [];
 		$this->chunks = [];
+		$this->biomes->finish();
 	}
 
 	public function isOutsideBuildHeight(int $y) : bool{
@@ -353,10 +354,6 @@ final class FeatureLevel{
 		$this->pendingTileChunks[$chunkIndex] = true;
 		$this->dirty[$chunkIndex] = true;
 		return true;
-	}
-
-	public function addEntity(int $x, int $z, CompoundTag $nbt) : bool{
-		throw new \RuntimeException("Worldgen entity NBT requires a RyzeMP chunk/LevelDB persistence adapter");
 	}
 
 	/**

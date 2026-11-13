@@ -9,6 +9,7 @@ on:
       - 'src/world/format/Chunk.php'
       - 'src/world/format/io/FastChunkSerializer.php'
       - 'src/block/tile/**'
+      - 'src/loot/**'
       - 'tests/phpunit/world/generator/vanilla/**'
       - '.github/workflows/ci-worldgen.yml'
   workflow_dispatch:
@@ -37,5 +38,5 @@ jobs:
             src/world/generator/vanilla \
             src/world/dimension/generator/VanillaGenerators.php \
             src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
-            src/block/tile \
+            src/block/tile src/loot src/world/locate/LocateTimeoutException.php \
             tests/phpunit/world/generator/vanilla

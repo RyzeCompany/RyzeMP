@@ -29,6 +29,8 @@ use pocketmine\world\generator\vanilla\BiomeMapping;
 use pocketmine\world\generator\vanilla\feature\block\BlockSurvival;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 use pocketmine\world\generator\vanilla\random\PositionalRandomFactory;
+use pocketmine\world\generator\vanilla\structure\StructureManager;
+use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
 use pocketmine\world\generator\vanilla\WorldgenData;
 use pocketmine\world\World;
 use function array_key_first;
@@ -67,6 +69,8 @@ final class FeatureDecorator{
 	public const DECORATION_STEPS = 11;
 
 	/** Structures placed at the start of each decoration step (null: no structures). */
+	public ?StructureManager $structures = null;
+
 	/** Whether the decoration features are placed (structures can be generated without them). */
 	public bool $featuresEnabled = true;
 	/**
@@ -79,8 +83,6 @@ final class FeatureDecorator{
 	 * @phpstan-var array<string, int>|null
 	 */
 	public ?array $profile = null;
-	/** Native placement of the features the native core implements (null: everything in PHP). */
-
 	/**
 	 * @param string[] $treeBiomeNames biome names of the climate tree (index = terrain biome index)
 	 * @phpstan-param list<string> $treeBiomeNames
@@ -137,6 +139,9 @@ final class FeatureDecorator{
 	 */
 	public function decorate(ChunkManager $world, int $chunkX, int $chunkZ) : void{
 		$level = $this->level;
+		$structures = $this->structures;
+		$starts = $structures?->getStartsAffecting($chunkX, $chunkZ) ?? [];
+		$structureContext = $structures !== null && $starts !== [] ? new StructurePlaceContext($this->context, $structures->env) : null;
 		$level->begin($world, $chunkX, $chunkZ);
 		$level->regionRandom = $this->regionRandomFactory?->at($chunkX << 4, 0, $chunkZ << 4);
 		try{
@@ -144,6 +149,9 @@ final class FeatureDecorator{
 			$biomes = $this->featuresEnabled ? $this->collectBiomes($world, $chunkX, $chunkZ) : [];
 			$registry = $this->registry;
 			for($step = 0; $step < self::DECORATION_STEPS; ++$step){
+				if($structures !== null && $structureContext !== null){
+					$structures->placeStep($structureContext, $starts, $step, $chunkX, $chunkZ, $decorationSeed, $this->random);
+				}
 				$features = $registry->stepFeatures[$step] ?? null;
 				if($features === null || !$this->featuresEnabled){
 					continue;
@@ -163,6 +171,7 @@ final class FeatureDecorator{
 					$this->placePhp($step, $index, $decorationSeed);
 				}
 			}
+			$structureContext?->postProcess();
 		}finally{
 			$level->finish();
 		}

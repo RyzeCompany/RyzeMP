@@ -29,6 +29,7 @@ use pocketmine\world\generator\vanilla\compiler\CompiledKernel;
 use pocketmine\world\generator\vanilla\compiler\KernelFactory;
 use pocketmine\world\generator\vanilla\compiler\KernelFunction;
 use pocketmine\world\generator\vanilla\density\DensityFunction;
+use pocketmine\world\generator\vanilla\structure\Beardifier;
 use function count;
 
 /**
@@ -64,7 +65,7 @@ final class CompiledTerrainFiller implements TerrainFiller{
 		return $this->kernel;
 	}
 
-	public function fill(int $chunkX, int $chunkZ) : TerrainChunk{
+	public function fill(int $chunkX, int $chunkZ, ?Beardifier $beardifier = null) : TerrainChunk{
 		$router = $this->router;
 		$minY = $router->minY;
 		$height = $router->height;
@@ -92,6 +93,15 @@ final class CompiledTerrainFiller implements TerrainFiller{
 			$x = $baseX + $bx;
 			for($bz = 0; $bz < 16; ++$bz){
 				$z = $baseZ + $bz;
+				//Beardifier (the final density's "beardifier" term, 0 in the kernel), for the affected part of the column
+				$beard = $beardifier?->column($x, $z, $minY, $minY + $height - 1) ?? [];
+				if(count($beard) > 0){
+					[$beardFrom, $beardValues] = $beard;
+					foreach($beardValues as $k => $value){
+						$j = $i + $beardFrom - $minY + $k;
+						$density[$j] = Beardifier::f($density[$j] + $value);
+					}
+				}
 				for($ly = 0; $ly < $height; ++$ly){
 					$d = $density[$i];
 					if($d > 0){

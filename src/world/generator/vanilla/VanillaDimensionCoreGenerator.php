@@ -22,7 +22,10 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 	public function __construct(int $seed, string $preset){
 		$path = VanillaDensityChunkWriter::validatePreset($preset, static::DIMENSION);
 		parent::__construct($seed, $preset);
-		$this->writer = new VanillaDensityChunkWriter($seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset), VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset));
+		$this->writer = new VanillaDensityChunkWriter(
+			$seed, $path, static::DIMENSION, VanillaDataIdentity::expectedHash($preset),
+			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset)
+		);
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
@@ -44,5 +47,10 @@ abstract class VanillaDimensionCoreGenerator extends Generator{
 			// Core-v3 includes spikes among the upstream placed features.
 			VanillaEndSpikePopulator::populate($world, $chunkX, $chunkZ, $this->seed);
 		}
+	}
+
+	/** @internal */
+	public function getStructureManager() : ?\pocketmine\world\generator\vanilla\structure\StructureManager{
+		return $this->writer->getStructureManager();
 	}
 }

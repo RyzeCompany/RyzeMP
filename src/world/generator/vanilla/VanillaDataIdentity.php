@@ -35,6 +35,7 @@ final class VanillaDataIdentity{
 	public const PRESET_PREFIX = "core-v2;data=";
 	public const FEATURES_PRESET_PREFIX = "core-v3;data=";
 	public const COMPILED_PRESET_PREFIX = "core-v4;data=";
+	public const STRUCTURES_PRESET_PREFIX = "core-v5;data=";
 
 	private const ASSETS = [
 		"data",
@@ -110,11 +111,10 @@ final class VanillaDataIdentity{
 	 * @phpstan-return array{directory: string, hash: string}
 	 */
 	public static function parse(string $preset) : array{
-		if(!str_starts_with($preset, self::PRESET_PREFIX) && !str_starts_with($preset, self::FEATURES_PRESET_PREFIX) && !str_starts_with($preset, self::COMPILED_PRESET_PREFIX)){
-			throw new InvalidGeneratorOptionsException("Expected core-v2, core-v3 or core-v4;data=<absolute path>;sha256=<64 lowercase hex digits>");
+		$prefix = self::pinnedPrefix($preset);
+		if($prefix === null){
+			throw new InvalidGeneratorOptionsException("Expected core-v2 through core-v5 with an absolute data path and SHA-256");
 		}
-		$prefix = str_starts_with($preset, self::COMPILED_PRESET_PREFIX) ? self::COMPILED_PRESET_PREFIX :
-			(str_starts_with($preset, self::FEATURES_PRESET_PREFIX) ? self::FEATURES_PRESET_PREFIX : self::PRESET_PREFIX);
 		$rest = substr($preset, strlen($prefix));
 		$separator = strrpos($rest, ";sha256=");
 		if($separator === false){
@@ -137,17 +137,29 @@ final class VanillaDataIdentity{
 		}
 	}
 
-	/** Returns the pinned hash for v2 presets; legacy core-v1 has no hash. */
 	public static function hasPlacedFeatures(string $preset) : bool{
-		return str_starts_with($preset, self::FEATURES_PRESET_PREFIX) || str_starts_with($preset, self::COMPILED_PRESET_PREFIX);
+		return str_starts_with($preset, self::FEATURES_PRESET_PREFIX) || self::hasCompiledTerrain($preset);
 	}
 
 	public static function hasCompiledTerrain(string $preset) : bool{
-		return str_starts_with($preset, self::COMPILED_PRESET_PREFIX);
+		return str_starts_with($preset, self::COMPILED_PRESET_PREFIX) || self::hasStructures($preset);
 	}
 
+	public static function hasStructures(string $preset) : bool{
+		return str_starts_with($preset, self::STRUCTURES_PRESET_PREFIX);
+	}
+
+	/** Historical core-v1 has no pinned hash. */
 	public static function expectedHash(string $preset) : ?string{
-		return (str_starts_with($preset, self::PRESET_PREFIX) || str_starts_with($preset, self::FEATURES_PRESET_PREFIX) ||
-			str_starts_with($preset, self::COMPILED_PRESET_PREFIX)) ? self::parse($preset)["hash"] : null;
+		return self::pinnedPrefix($preset) !== null ? self::parse($preset)["hash"] : null;
+	}
+
+	private static function pinnedPrefix(string $preset) : ?string{
+		foreach([self::PRESET_PREFIX, self::FEATURES_PRESET_PREFIX, self::COMPILED_PRESET_PREFIX, self::STRUCTURES_PRESET_PREFIX] as $prefix){
+			if(str_starts_with($preset, $prefix)){
+				return $prefix;
+			}
+		}
+		return null;
 	}
 }

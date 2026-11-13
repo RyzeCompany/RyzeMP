@@ -57,6 +57,7 @@ class Barrel extends Spawnable implements Container, Nameable{
 	}
 
 	public function getInventory() : BarrelInventory{
+		$this->unpackWorldgenLoot();
 		return $this->inventory;
 	}
 

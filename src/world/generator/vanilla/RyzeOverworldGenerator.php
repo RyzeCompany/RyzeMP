@@ -39,7 +39,10 @@ final class RyzeOverworldGenerator extends Generator{
 			$dataDir = null; // Frozen legacy experimental algorithm; never silently upgrade existing worlds.
 		}
 		parent::__construct($seed, $preset);
-		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter($seed, $dataDir, "overworld", VanillaDataIdentity::expectedHash($preset), VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset)) : null;
+		$this->vanillaCore = $dataDir !== null ? new VanillaDensityChunkWriter(
+			$seed, $dataDir, "overworld", VanillaDataIdentity::expectedHash($preset),
+			VanillaDataIdentity::hasPlacedFeatures($preset), VanillaDataIdentity::hasCompiledTerrain($preset), VanillaDataIdentity::hasStructures($preset)
+		) : null;
 		$this->sampler = new OverworldTerrainSampler($seed);
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
 		$this->stone = VanillaBlocks::STONE()->getStateId();
@@ -100,5 +103,10 @@ final class RyzeOverworldGenerator extends Generator{
 	public function populateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
 		$this->vanillaCore?->populate($world, $chunkX, $chunkZ);
 		// Historical empty preset retains its no-decoration behaviour.
+	}
+
+	/** @internal */
+	public function getStructureManager() : ?\pocketmine\world\generator\vanilla\structure\StructureManager{
+		return $this->vanillaCore?->getStructureManager();
 	}
 }

@@ -27,6 +27,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
 use pocketmine\world\generator\vanilla\density\DensityFunction;
 use pocketmine\world\generator\vanilla\density\InterpolatedFunction;
+use pocketmine\world\generator\vanilla\structure\Beardifier;
 use function intdiv;
 use function ksort;
 use function spl_object_id;
@@ -80,7 +81,7 @@ final class InterpretedTerrainFiller implements TerrainFiller{
 		}
 	}
 
-	public function fill(int $chunkX, int $chunkZ) : TerrainChunk{
+	public function fill(int $chunkX, int $chunkZ, ?Beardifier $beardifier = null) : TerrainChunk{
 		$router = $this->router;
 		$minY = $router->minY;
 		$height = $router->height;
@@ -154,6 +155,12 @@ final class InterpretedTerrainFiller implements TerrainFiller{
 										);
 									}
 									$density = $final->compute($x, $y, $z);
+									if($beardifier !== null){
+										$beard = $beardifier->column($x, $z, $y, $y);
+										if(isset($beard[1])){
+											$density = Beardifier::f($density + $beard[1][0]);
+										}
+									}
 									if($aquifer !== null){
 										$m = $aquifer->computeSubstance($x, $y, $z, $density);
 									}elseif($density > 0){

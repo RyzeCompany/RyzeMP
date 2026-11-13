@@ -26,14 +26,21 @@ namespace pocketmine\block\tile;
 use pocketmine\data\bedrock\item\SavedItemStackData;
 use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
+use pocketmine\loot\LootContext;
+use pocketmine\loot\LootData;
+use pocketmine\loot\LootTables;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\UnexpectedTagTypeException;
 use pocketmine\utils\Utils;
 use pocketmine\world\Position;
+use pocketmine\world\generator\InvalidGeneratorOptionsException;
+use pocketmine\world\generator\vanilla\VanillaDataIdentity;
 
 /**
  * This trait implements most methods in the {@link Container} interface. It should only be used by Tiles.
@@ -44,6 +51,9 @@ trait ContainerTrait{
 
 	/** @var array<string, Tag> Unopened loot data preserved alongside the saved inventory. */
 	private array $lootTableNBT = [];
+
+	/** @var array<string, LootTables> */
+	private static array $worldgenLootTables = [];
 
 	abstract public function getRealInventory() : Inventory;
 
@@ -100,6 +110,42 @@ trait ContainerTrait{
 		}
 	}
 
+	protected function unpackWorldgenLoot() : void{
+		$table = $this->lootTableNBT[Container::TAG_LOOT_TABLE] ?? null;
+		if(!$table instanceof StringTag){
+			return;
+		}
+		$position = $this->getPosition();
+		$world = $position->getWorld();
+		$preset = $world->getProvider()->getWorldData()->getGeneratorOptions();
+		if(!VanillaDataIdentity::hasPlacedFeatures($preset)){
+			return;
+		}
+		try{
+			$cache = VanillaDataIdentity::parse($preset);
+			$directory = $cache["directory"];
+			if(!LootData::isAvailable($directory)){
+				return;
+			}
+			VanillaDataIdentity::assertMatches($directory, $cache["hash"]);
+			$tables = self::$worldgenLootTables[$directory . ":" . $cache["hash"]] ??= new LootTables($directory);
+			$loot = $tables->get($table->getValue());
+			if($loot === null){
+				return;
+			}
+			$seed = $this->lootTableNBT[Container::TAG_LOOT_TABLE_SEED_LONG] ?? $this->lootTableNBT[Container::TAG_LOOT_TABLE_SEED] ?? null;
+			$context = LootContext::seeded($seed instanceof LongTag || $seed instanceof IntTag ? $seed->getValue() : 0);
+			$context->world = $world;
+			$context->origin = $position->add(0.5, 0.5, 0.5);
+			$inventory = $this->getRealInventory();
+			$contents = $loot->rollInventory($inventory, $context);
+			$this->lootTableNBT = []; // Inventory listeners may access the same container.
+			$inventory->setContents($contents);
+		}catch(InvalidGeneratorOptionsException|\RuntimeException|\JsonException $e){
+			$world->getLogger()->warning("Unable to fill generated container at $position: " . $e->getMessage());
+		}
+	}
+
 	/**
 	 * @see Container::canOpenWith()
 	 */
@@ -116,6 +162,7 @@ trait ContainerTrait{
 	 * @see Tile::onBlockDestroyedHook()
 	 */
 	protected function onBlockDestroyedHook() : void{
+		$this->unpackWorldgenLoot();
 		$inv = $this->getRealInventory();
 		$pos = $this->getPosition();
 

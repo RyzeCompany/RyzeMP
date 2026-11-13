@@ -12,9 +12,16 @@ use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\vanilla\biome\ClimateBiomeTree;
 use pocketmine\world\generator\vanilla\biome\TheEndBiomeSource;
 use pocketmine\world\generator\vanilla\carver\CarverSystem;
+use pocketmine\world\generator\vanilla\feature\DeterministicDecoration;
 use pocketmine\world\generator\vanilla\feature\FeatureDecorator;
 use pocketmine\world\generator\vanilla\feature\FeatureRegistry;
 use pocketmine\world\generator\vanilla\surface\MaterialSystem;
+use pocketmine\world\generator\vanilla\structure\placement\BedrockStructurePlacements;
+use pocketmine\world\generator\vanilla\structure\StructureEnvironment;
+use pocketmine\world\generator\vanilla\structure\StructureManager;
+use pocketmine\world\generator\vanilla\structure\StructureRegistry;
+use pocketmine\world\generator\vanilla\structure\template\StructureTemplates;
+use pocketmine\world\generator\vanilla\structure\TerrainSampler;
 use Symfony\Component\Filesystem\Path;
 use function file_exists;
 use function file_get_contents;
@@ -29,9 +36,7 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Adapter for VanillaMine's real multi-noise / density / aquifer terrain stage.
  *
- * IMPORTANT: Feature/structure decoration and beardifier adaptation are NOT yet ported.
- * This adapter is intentionally a distinct, version-pinned preset on the existing opt-in
- * generator. The empty preset continues to use the legacy experimental terrain unchanged.
+ * Terrain, placed features and structure terrain adaptation are selected by the world's preset.
  */
 final class VanillaDensityChunkWriter{
 	public const PRESET_PREFIX = "core-v1;data=";
@@ -43,6 +48,8 @@ final class VanillaDensityChunkWriter{
 	private ?CarverSystem $carvers;
 	private ?TheEndBiomeSource $endBiomes = null;
 	private ?FeatureDecorator $features = null;
+	private ?StructureManager $structures = null;
+	private ?DeterministicDecoration $deterministicDecoration = null;
 	/** @var list<int> */
 	private array $biomes;
 
@@ -50,7 +57,7 @@ final class VanillaDensityChunkWriter{
 	private int $air;
 	private int $bedrock;
 
-	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false, bool $useCompiledTerrain = false){
+	public function __construct(int $seed, string $dataDir, private string $dimension = "overworld", private ?string $pinnedHash = null, bool $enablePlacedFeatures = false, bool $useCompiledTerrain = false, bool $enableStructures = false){
 		$this->terrainDataDir = $dataDir;
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($dataDir, $this->pinnedHash);
@@ -71,7 +78,7 @@ final class VanillaDensityChunkWriter{
 		$this->terrain = $useCompiledTerrain ? new CompiledTerrainFiller($router, $tree, $dataDir . "/compiled") : new InterpretedTerrainFiller($router, $tree);
 		$this->materials = new MaterialSystem($data, $router, $tree, $seed, null, null, $dimension);
 		$this->carvers = CarverSystem::create($data, $router, $tree, $seed, $this->materials, null);
-		if($enablePlacedFeatures){
+		if($enablePlacedFeatures || $enableStructures){
 			$sample = $this->endBiomes !== null ?
 				fn(int $qx, int $qy, int $qz) : int => $this->endBiomes->getNoiseBiome($qx, $qy, $qz) :
 				function(int $qx, int $qy, int $qz) use ($router, $tree) : int{
@@ -87,11 +94,12 @@ final class VanillaDensityChunkWriter{
 						ClimateBiomeTree::quantize($router->ridges->compute($x, 0.0, $z))
 					);
 				};
+			$buildHeight = $dimension === "end" ? 256 : $router->height;
 			$this->features = new FeatureDecorator(
 				$data,
 				$seed,
 				$router->minY,
-				$dimension === "end" ? 256 : $router->height,
+				$buildHeight,
 				$router->seaLevel,
 				$names,
 				$sample,
@@ -99,6 +107,29 @@ final class VanillaDensityChunkWriter{
 				$dimension === "end" ? TheEndBiomeSource::NAMES : FeatureRegistry::multiNoiseBiomes($data, $dimension)
 			);
 			$this->features->regionRandomFactory = $router->random->fromHashOf("minecraft:worldgen_region_random")->forkPositional();
+			$this->features->featuresEnabled = $enablePlacedFeatures;
+			if($enableStructures){
+				$blocks = $this->features->blocks;
+				$registry = StructureRegistry::shared($data, $blocks);
+				$environment = new StructureEnvironment(
+					$seed, $router->minY, $buildHeight, $router->seaLevel, $dimension,
+					new TerrainSampler($this->terrain->fill(...), $router->minY, $router->height),
+					static fn(int $x, int $y, int $z) : string => $names[$sample($x >> 2, $y >> 2, $z >> 2)],
+					$registry,
+					StructureTemplates::shared($data, $blocks),
+					$blocks
+				);
+				$features = $this->features->registry;
+				$environment->setColdEnoughToSnow(static function(string $biome, int $x, int $y, int $z) use ($features, $router) : bool{
+					$index = $features->biomeIndex[$biome] ?? null;
+					return $index !== null && !$features->climate()->warmEnoughToRain($index, $x, $y, $z, $router->seaLevel);
+				});
+				$this->structures = new StructureManager($environment, BedrockStructurePlacements::MODE_JAVA, [], $names);
+				$this->features->structures = $this->structures;
+				if($enablePlacedFeatures){
+					$this->deterministicDecoration = new DeterministicDecoration($this->features, $this->writeTerrain(...));
+				}
+			}
 		}
 		$this->air = VanillaBlocks::AIR()->getStateId();
 		$this->bedrock = VanillaBlocks::BEDROCK()->getStateId();
@@ -109,17 +140,15 @@ final class VanillaDensityChunkWriter{
 		if(!in_array($dimension, ["overworld", "nether", "end"], true)){
 			throw new InvalidGeneratorOptionsException("Unsupported VanillaMine dimension: $dimension");
 		}
-		if(str_starts_with($preset, VanillaDataIdentity::PRESET_PREFIX) ||
-			str_starts_with($preset, VanillaDataIdentity::FEATURES_PRESET_PREFIX) ||
-			str_starts_with($preset, VanillaDataIdentity::COMPILED_PRESET_PREFIX)){
+		if(($hash = VanillaDataIdentity::expectedHash($preset)) !== null){
 			$pinned = VanillaDataIdentity::parse($preset);
 			$dir = $pinned["directory"];
-			VanillaDataIdentity::assertMatches($dir, $pinned["hash"]);
+			VanillaDataIdentity::assertMatches($dir, $hash);
 		}else{
 			// Preserve the old unpinned core-v1 preset verbatim for existing
 			// experimental worlds; never upgrade their algorithm silently.
 			if(!str_starts_with($preset, self::PRESET_PREFIX)){
-				throw new InvalidGeneratorOptionsException("Expected core-v1 or pinned core-v2 preset");
+				throw new InvalidGeneratorOptionsException("Expected core-v1 or a pinned core-v2 through core-v5 preset");
 			}
 			$dir = substr($preset, strlen(self::PRESET_PREFIX));
 			if($dir === "" || str_contains($dir, ";") || str_contains($dir, "\0") || !Path::isAbsolute($dir)){
@@ -178,13 +207,19 @@ final class VanillaDensityChunkWriter{
 				}
 			}
 		}
+		if(VanillaDataIdentity::hasStructures($preset)){
+			foreach(["worldgen/structure", "worldgen/structure_set", "worldgen/template_pool", "worldgen/processor_list", "structure"] as $required){
+				if(!is_dir($dir . "/data/minecraft/" . $required)){
+					throw new InvalidGeneratorOptionsException("VanillaMine structure cache is missing $required");
+				}
+			}
+		}
 		return $dir;
 	}
 
 	/**
 	 * Applies the upstream VanillaMine density and climate stages to a RyzeMP chunk.
-	 * This is NOT a complete vanilla chunk: decoration, structure adaptation and
-	 * full cross-version validation are still pending. Not for production worlds.
+	 * Decoration runs separately after the neighbouring terrain is available.
 	 */
 	public function fill(Chunk $chunk, int $chunkX, int $chunkZ) : void{
 		if($chunk->isPopulated()){
@@ -196,7 +231,12 @@ final class VanillaDensityChunkWriter{
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
 		}
-		$terrain = $this->terrain->fill($chunkX, $chunkZ);
+		$this->writeTerrain($chunk, $chunkX, $chunkZ);
+		$this->deterministicDecoration?->rememberTerrain($chunk, $chunkX, $chunkZ);
+	}
+
+	private function writeTerrain(Chunk $chunk, int $chunkX, int $chunkZ) : void{
+		$terrain = $this->terrain->fill($chunkX, $chunkZ, $this->structures?->getBeardifier($chunkX, $chunkZ));
 		$terrain->unpackBiomes();
 		if($this->endBiomes !== null){
 			$terrain->biomes = $this->endBiomes->fillChunk($chunkX, $chunkZ, $terrain->height >> 2);
@@ -263,7 +303,7 @@ final class VanillaDensityChunkWriter{
 		}
 	}
 
-	/** Runs Java 26.3 placed-feature decoration, with no structures or native backend. */
+	/** Runs decoration enabled by the world's preset. */
 	public function populate(\pocketmine\world\ChunkManager $world, int $chunkX, int $chunkZ) : void{
 		if($this->features === null){
 			return;
@@ -271,10 +311,19 @@ final class VanillaDensityChunkWriter{
 		if($this->pinnedHash !== null){
 			VanillaDataIdentity::assertMatches($this->terrainDataDir, $this->pinnedHash);
 		}
-		$this->features->decorate($world, $chunkX, $chunkZ);
+		if($this->deterministicDecoration !== null){
+			$this->deterministicDecoration->decorate($world, $chunkX, $chunkZ);
+		}else{
+			$this->features->decorate($world, $chunkX, $chunkZ);
+		}
 	}
 
 	public function hasPlacedFeatures() : bool{
 		return $this->features !== null;
+	}
+
+	/** @internal */
+	public function getStructureManager() : ?StructureManager{
+		return $this->structures;
 	}
 }

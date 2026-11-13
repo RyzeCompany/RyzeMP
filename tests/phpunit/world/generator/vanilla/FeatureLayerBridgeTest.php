@@ -57,6 +57,7 @@ final class FeatureLayerBridgeTest extends TestCase{
 		$level->minZ = -16;
 		(new ReflectionProperty(FeatureLevel::class, 'minY'))->setValue($level, -64);
 		(new ReflectionProperty(FeatureLevel::class, 'maxY'))->setValue($level, 320);
+		(new ReflectionProperty(FeatureLevel::class, 'biomes'))->setValue($level, (new ReflectionClass(FeatureBiomes::class))->newInstanceWithoutConstructor());
 		(new ReflectionProperty(FeatureLevel::class, 'chunks'))->setValue($level, [1 => $neighbour]);
 
 		$nbt = BlockEntityData::lootContainer("Chest", "minecraft:chests/simple_dungeon", -4172144997902289642);

@@ -32,8 +32,11 @@ use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\world\generator\vanilla\WorldgenData;
 use function count;
+use function array_search;
 use function in_array;
 use function str_ends_with;
+use function str_starts_with;
+use function substr;
 
 /**
  * Saved data of the tiles that features give to their blocks (Bedrock tile format, see the tiles in
@@ -71,6 +74,20 @@ final class BlockEntityData{
 	private static function toBedrockPath(string $javaId) : string{
 		$id = "minecraft:" . WorldgenData::stripNamespace($javaId);
 		return self::BEDROCK_LOOT_NAMES[$id] ?? "loot_tables/" . WorldgenData::stripNamespace($id) . ".json";
+	}
+
+	public static function toJavaLootId(string $name) : string{
+		if(str_starts_with($name, "minecraft:")){
+			return $name;
+		}
+		$javaId = array_search($name, self::BEDROCK_LOOT_NAMES, true);
+		if($javaId !== false){
+			return $javaId;
+		}
+		if(str_starts_with($name, "loot_tables/") && str_ends_with($name, ".json")){
+			$name = substr($name, 12, -5);
+		}
+		return "minecraft:" . $name;
 	}
 
 	private function __construct(){
