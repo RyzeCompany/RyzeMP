@@ -42,17 +42,23 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 	/** @phpstan-var \WeakMap<Skin, SkinData> */
 	private static ?\WeakMap $personaSkins = null;
 	/** @phpstan-var \WeakMap<Skin, int> */
-	private static ?\WeakMap $personaSourceProtocols = null;
+	private static ?\WeakMap $skinSourceProtocols = null;
+	/** @phpstan-var \WeakMap<Skin, SkinData> */
+	private static ?\WeakMap $sourceSkins = null;
+	/** @phpstan-var \WeakMap<Skin, array<int, SkinData>> */
+	private static ?\WeakMap $outgoingSkinCache = null;
 
 	public function __construct(){
 		self::$personaSkins ??= new \WeakMap();
-		self::$personaSourceProtocols ??= new \WeakMap();
+		self::$skinSourceProtocols ??= new \WeakMap();
+		self::$sourceSkins ??= new \WeakMap();
+		self::$outgoingSkinCache ??= new \WeakMap();
 	}
 
 	public function toSkinData(Skin $skin) : SkinData{
-		$persona = self::$personaSkins[$skin] ?? null;
-		if($persona !== null){
-			return $persona;
+		$original = self::$sourceSkins[$skin] ?? self::$personaSkins[$skin] ?? null;
+		if($original !== null){
+			return $original;
 		}
 		return $this->toClassicSkinData($skin, true);
 	}
@@ -68,23 +74,50 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 	}
 
 	public function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
-		$persona = self::$personaSkins[$skin] ?? null;
-		if($persona !== null){
-			$sourceProtocol = self::$personaSourceProtocols[$skin] ?? null;
-			if(
-				$sourceProtocol !== null &&
-				self::getPersonaCompatibilityFamily($sourceProtocol) !== self::getPersonaCompatibilityFamily($targetProtocol)
-			){
-				return $this->toClassicSkinData($skin, false);
-			}
-			return $persona;
+		// Do not cache a plugin's potentially customized adapter output across adapter instances.
+		$useCache = $this::class === self::class;
+		$cached = $useCache ? (self::$outgoingSkinCache[$skin] ?? []) : [];
+		if(isset($cached[$targetProtocol])){
+			return $cached[$targetProtocol];
 		}
 
-		// Respect plugin overrides of the legacy method for non-Persona skins.
-		return $this->toSkinData($skin);
+		$persona = self::$personaSkins[$skin] ?? null;
+		if($persona !== null){
+			$sourceProtocol = self::$skinSourceProtocols[$skin] ?? null;
+			if(
+				$sourceProtocol === null ||
+				self::getPersonaCompatibilityFamily($sourceProtocol) !== self::getPersonaCompatibilityFamily($targetProtocol)
+			){
+				// The Persona wire layout and metadata are not portable between families.
+				// The replacement is a server-authored, trusted classic skin.
+				$converted = $this->toClassicSkinData($skin, true, $targetProtocol);
+			}else{
+				$converted = $persona;
+			}
+		}elseif($useCache){
+			$sourceProtocol = self::$skinSourceProtocols[$skin] ?? null;
+			$original = self::$sourceSkins[$skin] ?? null;
+			// Preserve client skin identity and metadata for its own protocol. The 827 -> 844
+			// path uses the same classic skin wire layout and is an upgrade, not a downgrade.
+			if($original !== null && ($sourceProtocol === $targetProtocol || ($sourceProtocol === ProtocolInfo::PROTOCOL_1_21_100 && $targetProtocol === ProtocolInfo::PROTOCOL_1_21_111))){
+				$converted = $original;
+			}else{
+				$forceClassicGeometry = $sourceProtocol !== null && $sourceProtocol >= ProtocolInfo::PROTOCOL_1_26_40 && $targetProtocol < ProtocolInfo::PROTOCOL_1_26_40;
+				$converted = $this->toClassicSkinData($skin, true, $targetProtocol, $forceClassicGeometry);
+			}
+		}else{
+			// Respect plugin overrides of the legacy adapter method.
+			$converted = $this->toSkinData($skin);
+		}
+
+		if($useCache){
+			$cached[$targetProtocol] = $converted;
+			self::$outgoingSkinCache[$skin] = $cached;
+		}
+		return $converted;
 	}
 
-	private function toClassicSkinData(Skin $skin, bool $trusted) : SkinData{
+	private function toClassicSkinData(Skin $skin, bool $trusted, ?int $targetProtocol = null, bool $forceClassicGeometry = false) : SkinData{
 		$capeData = $skin->getCapeData();
 		$capeImage = $capeData === "" ? new SkinImage(0, 0, "") : new SkinImage(32, 64, $capeData);
 		$geometryName = $skin->getGeometryName();
@@ -92,9 +125,19 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 			$geometryName = "geometry.humanoid.custom";
 		}
 		$geometryData = $skin->getGeometryData();
-		if($geometryData === ""){
+		if($geometryData === "" || $forceClassicGeometry){
 			$geometryData = SkinData::GEOMETRY_DATA_NONE;
 		}
+		if($forceClassicGeometry){
+			$geometryName = "geometry.humanoid.custom";
+		}
+		$geometryEngineVersion = match(true){
+			$targetProtocol === null => ProtocolInfo::MINECRAFT_VERSION_NETWORK,
+			$targetProtocol < ProtocolInfo::PROTOCOL_1_21_0 => "1.20.0",
+			$targetProtocol < ProtocolInfo::PROTOCOL_1_26_0 => "1.21.0",
+			$targetProtocol < ProtocolInfo::PROTOCOL_1_26_40 => "1.26.0",
+			default => ProtocolInfo::MINECRAFT_VERSION_NETWORK
+		};
 		return new SkinData(
 			$skin->getSkinId(),
 			"", //TODO: playfab ID
@@ -102,6 +145,7 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 			SkinImage::fromLegacy($skin->getSkinData()), [],
 			$capeImage,
 			$geometryData,
+			geometryDataEngineVersion: $geometryEngineVersion,
 			isVerified: $trusted,
 			trustedSkinFlag: $trusted ? "true" : "false",
 			profileHash: ""
@@ -169,10 +213,8 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 	}
 	public function fromSkinDataForProtocol(SkinData $data, int $sourceProtocol) : Skin{
 		$skin = $this->fromSkinData($data);
-		if($data->isPersona()){
-			self::$personaSkins[$skin] = $data;
-			self::$personaSourceProtocols[$skin] = $sourceProtocol;
-		}
+		self::$sourceSkins[$skin] = $data;
+		self::$skinSourceProtocols[$skin] = $sourceProtocol;
 		return $skin;
 	}
 

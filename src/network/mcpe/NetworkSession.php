@@ -1467,21 +1467,39 @@ class NetworkSession{
 		try{
 			$transition = $this->dimensionTransition;
 			$hash = World::chunkHash($chunkX, $chunkZ);
-			if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash)){
+			$diagnosticReceipt = $this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
+			// Protocol 844 (1.21.111/114) must receive terrain before actors.
+			$waitForLegacyReceipt = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_21_111;
+			if($diagnosticReceipt || $waitForLegacyReceipt){
 				$receipt = new PromiseResolver();
-				$receipt->getPromise()->onCompletion(function() use($transition, $hash, $chunkX, $chunkZ) : void{
-					if($this->dimensionTransition !== $transition){ return; }
-					$transition->recordReceipt($hash);
-					$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
-				}, static function() : void{});
-				$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
+				$receipt->getPromise()->onCompletion(
+					function() use ($transition, $hash, $chunkX, $chunkZ, $diagnosticReceipt, $waitForLegacyReceipt, $onCompletion) : void{
+						if($diagnosticReceipt && $transition !== null && $this->dimensionTransition === $transition){
+							$transition->recordReceipt($hash);
+							$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
+						}
+						if($waitForLegacyReceipt){
+							$onCompletion();
+						}
+					},
+					function() use ($world, $chunkX, $chunkZ, $waitForLegacyReceipt) : void{
+						if($waitForLegacyReceipt){
+							$this->player?->retryFailedChunkSend($world, $chunkX, $chunkZ);
+						}
+					}
+				);
+				if($diagnosticReceipt){
+					$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
+				}
 				$this->flushGamePacketQueue();
 				$this->queueCompressedNoGamePacketFlush($chunkPacket, ackPromises: [$receipt]);
 			}else{
 				$this->queueCompressed($chunkPacket);
 			}
 			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
-			$onCompletion();
+			if(!$waitForLegacyReceipt){
+				$onCompletion();
+			}
 		}finally{
 			$world->timings->syncChunkSend->stopTiming();
 		}
@@ -1705,46 +1723,8 @@ class NetworkSession{
 	 */
 	public function syncPlayerList(array $players) : void{
 		$this->sendDataPacket(PlayerListPacket::add(array_map(function(Player $player) : PlayerListEntry{
-			$this->debugCrossVersionPlayerSync($player, "player-list");
 			return PlayerListEntry::createAdditionEntry($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $this->typeConverter->coreSkinToNet($player->getSkin()), $player->getXuid());
 		}, $players)));
-	}
-
-	private function debugCrossVersionPlayerSync(Player $source, string $phase) : void{
-		$sourceSession = $source->getNetworkSession();
-		$sourceProtocol = $sourceSession->getProtocolId();
-		$targetProtocol = $this->getProtocolId();
-		if($sourceProtocol === $targetProtocol){
-			return;
-		}
-
-		$skin = $source->getSkin();
-		$extra = $source->getPlayerInfo()->getExtraData();
-		$persona = (bool) ($extra["PersonaSkin"] ?? false);
-		$trusted = (bool) ($extra["TrustedSkin"] ?? false);
-		$profileHash = (string) ($extra["ProfileHash"] ?? "");
-		$skinWidth = (int) ($extra["SkinImageWidth"] ?? 0);
-		$skinHeight = (int) ($extra["SkinImageHeight"] ?? 0);
-		$personaPieces = is_array($extra["PersonaPieces"] ?? null) ? count($extra["PersonaPieces"]) : 0;
-		$tintColors = is_array($extra["PieceTintColors"] ?? null) ? count($extra["PieceTintColors"]) : 0;
-
-		$this->logger->debug(
-			"CrossVersion[$phase] source=" . $source->getName() .
-			" game=" . ($sourceSession->getGameVersion() ?? "unknown") .
-			" protocol=$sourceProtocol -> target=" . $this->getDisplayName() .
-			" game=" . ($this->getGameVersion() ?? "unknown") .
-			" protocol=$targetProtocol" .
-			" skinId=" . $skin->getSkinId() .
-			" skinBytes=" . strlen($skin->getSkinData()) .
-			" skinSize={$skinWidth}x{$skinHeight}" .
-			" capeBytes=" . strlen($skin->getCapeData()) .
-			" geometryName=" . $skin->getGeometryName() .
-			" geometryBytes=" . strlen($skin->getGeometryData()) .
-			" persona=" . ($persona ? "yes" : "no") .
-			" personaPieces=$personaPieces tintGroups=$tintColors" .
-			" trusted=" . ($trusted ? "yes" : "no") .
-			" profileHashBytes=" . strlen($profileHash)
-		);
 	}
 
 	public function onPlayerAdded(Player $p) : void{
