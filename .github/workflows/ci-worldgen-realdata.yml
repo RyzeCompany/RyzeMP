@@ -116,7 +116,10 @@ jobs:
         run: |
           export RYZEMP_VANILLAGEN_BINARY="$RUNNER_TEMP/vanillagen"
           export RYZEMP_VANILLAGEN_SHA256="$(sha256sum "$RUNNER_TEMP/vanillagen" | cut -d ' ' -f1)"
-          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          # Only core-v6 is intended to use native Go: core-v1 stays interpreted.
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" core-v6
+          # Same loopback fixture/seed/workers as the PHP benchmark above.
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --benchmark
       - name: Erase downloaded Minecraft data (never upload artifacts)
         if: always()
         run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"
