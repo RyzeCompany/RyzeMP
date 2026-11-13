@@ -27,9 +27,13 @@ use pmmp\encoding\BE;
 use pmmp\encoding\Byte;
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
+use pocketmine\nbt\LittleEndianNbtSerializer;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\TreeRoot;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
+use function array_map;
 use function array_values;
 use function count;
 use function pack;
@@ -42,6 +46,7 @@ use function unpack;
  */
 final class FastChunkSerializer{
 	private const FLAG_POPULATED = 1 << 1;
+	private const FLAG_PENDING_TILES = 1 << 2;
 
 	private function __construct(){
 		//NOOP
@@ -60,11 +65,13 @@ final class FastChunkSerializer{
 
 	/**
 	 * Fast-serializes the chunk for passing between threads
-	 * TODO: tiles and entities
+	 * Includes pending generator NBT. Live tiles and entities stay on the world thread.
 	 */
 	public static function serializeTerrain(Chunk $chunk) : string{
 		$stream = new ByteBufferWriter();
-		Byte::writeUnsigned($stream, ($chunk->isPopulated() ? self::FLAG_POPULATED : 0));
+		$pendingTiles = $chunk->getPendingTileNBT();
+		Byte::writeUnsigned($stream, ($chunk->isPopulated() ? self::FLAG_POPULATED : 0) |
+			($pendingTiles !== [] ? self::FLAG_PENDING_TILES : 0));
 
 		//subchunks
 		$subChunks = $chunk->getSubChunks();
@@ -82,6 +89,15 @@ final class FastChunkSerializer{
 			}
 			self::serializePalettedArray($stream, $subChunk->getBiomeArray());
 
+		}
+
+		if($pendingTiles !== []){
+			$nbt = (new LittleEndianNbtSerializer())->writeMultiple(array_map(
+				static fn(CompoundTag $tag) => new TreeRoot($tag),
+				array_values($pendingTiles)
+			));
+			BE::writeUnsignedInt($stream, strlen($nbt));
+			$stream->writeByteArray($nbt);
 		}
 
 		return $stream->getData();
@@ -123,6 +139,13 @@ final class FastChunkSerializer{
 			$subChunks[$y] = new SubChunk($airBlockId, $layers, $biomeArray);
 		}
 
-		return new Chunk($subChunks, $terrainPopulated);
+		$chunk = new Chunk($subChunks, $terrainPopulated);
+		if(($flags & self::FLAG_PENDING_TILES) !== 0){
+			$nbt = $stream->readByteArray(BE::readUnsignedInt($stream));
+			foreach((new LittleEndianNbtSerializer())->readMultiple($nbt) as $tag){
+				$chunk->addPendingTileNBT($tag->mustGetCompoundTag());
+			}
+		}
+		return $chunk;
 	}
 }

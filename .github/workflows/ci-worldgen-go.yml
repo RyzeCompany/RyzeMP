@@ -1,0 +1,65 @@
+name: Build native VanillaMine Go worldgen (Linux AMD64)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci-worldgen-go.yml'
+      - 'src/world/generator/vanilla/native/**'
+      - 'src/world/generator/vanilla/VanillaDensityChunkWriter.php'
+      - 'src/Server.php'
+      - 'tests/native-worldgen-parity.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-go:
+    name: Build and test pinned vanillagen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Fetch verified VanillaMine Go sources
+        env:
+          VANILLAMINE_REVISION: 4dd2228b47d64c8015c28138c846e6c4acb28345
+        run: |
+          set -euo pipefail
+          git init "$RUNNER_TEMP/vanillamine-pinned"
+          git -C "$RUNNER_TEMP/vanillamine-pinned" fetch --depth=1 https://gitlab.com/VanillaMine/VanillaMine.git "$VANILLAMINE_REVISION"
+          git -C "$RUNNER_TEMP/vanillamine-pinned" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/vanillamine-pinned" rev-parse HEAD)" = "$VANILLAMINE_REVISION"
+      - name: Run upstream tests and build Linux executable outside PHAR
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: 'off'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/vanillamine-pinned/native/vanillagen"
+          go test -count=1 ./...
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" .
+          "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" -version | tee "$GITHUB_WORKSPACE/dist/VERSION.txt"
+          test "$(awk '{print $4 " " $6}' "$GITHUB_WORKSPACE/dist/VERSION.txt")" = "7 4"
+          cd "$GITHUB_WORKSPACE/dist"
+          sha256sum vanillagen-linux-amd64 | tee SHA256SUMS
+          printf '%s\n' 'VanillaMine source commit: 4dd2228b47d64c8015c28138c846e6c4acb28345' > SOURCE.txt
+          # Exercise the exact schema-2 release manifest consumed by the Egg.
+          truncate -s 2000000 "$RUNNER_TEMP/RyzeMP_test.phar"
+          python3 "$GITHUB_WORKSPACE/tools/release-manifest.py" --release v1.0.0-beta.go-preview --channel pruebas \
+            --phar "$RUNNER_TEMP/RyzeMP_test.phar" --go "$GITHUB_WORKSPACE/dist/vanillagen-linux-amd64" \
+            --out "$RUNNER_TEMP/ryzemp-update.json"
+          python3 -c 'import json,os; m=json.load(open(os.environ["RUNNER_TEMP"]+"/ryzemp-update.json")); assert m["schema"]==2 and m["vanillagen"]["protocol"]==7 and m["vanillagen"]["algorithm"]==4 and m["vanillagen"]["stage"]=="full"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-vanillagen-linux-amd64
+          path: |
+            dist/vanillagen-linux-amd64
+            dist/SHA256SUMS
+            dist/VERSION.txt
+            dist/SOURCE.txt
+          retention-days: 30

@@ -342,6 +342,7 @@ class World implements ChunkManager{
 	 * @phpstan-var array<ChunkPosHash, bool>
 	 */
 	private array $activeChunkPopulationTasks = [];
+	private bool $chunkPopulationBlocked = false;
 	/**
 	 * @var ChunkLockId[]
 	 * @phpstan-var array<ChunkPosHash, ChunkLockId>
@@ -1231,7 +1232,8 @@ class World implements ChunkManager{
 			$blockPosition = BlockPosition::fromVector3($b);
 
 			$tile = $this->getTileAt($b->x, $b->y, $b->z);
-			if($tile instanceof Spawnable){
+			$spawnTile = $tile instanceof Spawnable && $tile->canSpawnTo($typeConverter);
+			if($spawnTile){
 				$expectedClass = $fullBlock->getIdInfo()->getTileClass();
 				if($expectedClass !== null && $tile instanceof $expectedClass && count($fakeStateProperties = $tile->getRenderUpdateBugWorkaroundStateProperties($fullBlock)) > 0){
 					$originalStateData = $blockTranslator->internalIdToNetworkStateData($fullBlock->getStateId());
@@ -1255,7 +1257,7 @@ class World implements ChunkManager{
 				UpdateBlockPacket::DATA_LAYER_NORMAL
 			);
 
-			if($tile instanceof Spawnable){
+			if($spawnTile){
 				$packets[] = BlockActorDataPacket::create($blockPosition, $tile->getSerializedSpawnCompound($typeConverter));
 			}
 		}
@@ -2850,6 +2852,9 @@ class World implements ChunkManager{
 		unset($this->blockCollisionBoxCache[$chunkHash]);
 		unset($this->changedBlocks[$chunkHash]);
 		$chunk->setTerrainDirty();
+		if($chunk->getPendingTileNBT() !== []){
+			$this->createPendingTiles($chunkX, $chunkZ, $chunk);
+		}
 		$this->markTickingChunkForRecheck($chunkX, $chunkZ); //this replacement chunk may not meet the conditions for ticking
 
 		if(!$this->isChunkInUse($chunkX, $chunkZ)){
@@ -2875,6 +2880,44 @@ class World implements ChunkManager{
 				foreach($this->getChunkEntities($chunkX + $cX, $chunkZ + $cZ) as $entity){
 					$entity->onNearbyBlockChange();
 				}
+			}
+		}
+	}
+
+	/** Installs generated tiles only after the chunk has passed the population lock checks. */
+	private function createPendingTiles(int $chunkX, int $chunkZ, Chunk $chunk) : void{
+		$pending = $chunk->getPendingTileNBT();
+		$chunk->clearPendingTileNBT();
+		$tileFactory = TileFactory::getInstance();
+		foreach($pending as $nbt){
+			$x = $nbt->getInt(Tile::TAG_X);
+			$y = $nbt->getInt(Tile::TAG_Y);
+			$z = $nbt->getInt(Tile::TAG_Z);
+			if(($x >> Chunk::COORD_BIT_SIZE) !== $chunkX || ($z >> Chunk::COORD_BIT_SIZE) !== $chunkZ || !$this->isInWorld($x, $y, $z)){
+				$this->logger->warning("Generated tile is outside its chunk at $x,$y,$z");
+				continue;
+			}
+			$localX = $x & Chunk::COORD_MASK;
+			$localZ = $z & Chunk::COORD_MASK;
+			if($chunk->getTile($localX, $y, $localZ) !== null){
+				continue; // Keep the saved inventory of a tile already present at this position.
+			}
+			$block = $this->blockStateRegistry->fromStateId($chunk->getBlockStateId($localX, $y, $localZ));
+			$expectedClass = $block->getIdInfo()->getTileClass();
+			$id = $nbt->getTag(Tile::TAG_ID);
+			$tileClass = $id instanceof StringTag ? $tileFactory->getClassFromSaveId($id->getValue()) : null;
+			if($expectedClass === null || $tileClass === null || !is_a($tileClass, $expectedClass, true)){
+				$name = $id instanceof StringTag ? $id->getValue() : "<missing id>";
+				$this->logger->debug("Generated tile $name has no compatible block at $x,$y,$z");
+				continue;
+			}
+			try{
+				$tile = $tileFactory->createFromData($this, $nbt);
+				if($tile !== null){
+					$this->addTile($tile);
+				}
+			}catch(SavedDataLoadingException $e){
+				$this->logger->error("Invalid generated tile at $x,$y,$z: " . $e->getMessage());
 			}
 		}
 	}
@@ -3555,10 +3598,14 @@ class World implements ChunkManager{
 		if($associatedChunkLoader === null){
 			$temporaryLoader = new class implements ChunkLoader{};
 			$this->registerChunkLoader($temporaryLoader, $chunkX, $chunkZ);
-			$resolver->getPromise()->onCompletion(
-				fn() => $this->unregisterChunkLoader($temporaryLoader, $chunkX, $chunkZ),
-				static function() : void{}
-			);
+			$release = function() use ($temporaryLoader, $chunkX, $chunkZ) : void{
+				$this->unregisterChunkLoader($temporaryLoader, $chunkX, $chunkZ);
+			};
+			$resolver->getPromise()->onCompletion($release, function() use ($release) : void{
+				if($this->chunkPopulationBlocked){
+					$release();
+				}
+			});
 		}
 		return $resolver->getPromise();
 	}
@@ -3611,7 +3658,18 @@ class World implements ChunkManager{
 			$resolver->resolve($chunk);
 			return [$resolver, false];
 		}
+		if($this->chunkPopulationBlocked){
+			$resolver ??= new PromiseResolver();
+			unset($this->chunkPopulationRequestMap[$chunkHash]);
+			$resolver->reject();
+			return [$resolver, false];
+		}
 		return [$resolver, true];
+	}
+
+	/** @internal Whether this world has stopped generating after a pinned-cache validation failure. */
+	public function isChunkPopulationBlocked() : bool{
+		return $this->chunkPopulationBlocked;
 	}
 
 	/**
@@ -3697,24 +3755,58 @@ class World implements ChunkManager{
 			$centerChunk = $this->loadChunk($chunkX, $chunkZ);
 			$adjacentChunks = $this->getAdjacentChunks($chunkX, $chunkZ);
 
-			$this->generatorExecutor->populate(
-				$chunkX,
-				$chunkZ,
-				$centerChunk,
-				$adjacentChunks,
-				function(Chunk $centerChunk, array $adjacentChunks) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
-					if(!$this->isLoaded()){
-						return;
-					}
-
+			$onCompletion = function(Chunk $centerChunk, array $adjacentChunks) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
+				if($this->isLoaded()){
 					$this->generateChunkCallback($chunkPopulationLockId, $chunkX, $chunkZ, $centerChunk, $adjacentChunks, $temporaryChunkLoader);
 				}
-			);
+			};
+			if($this->generatorExecutor instanceof AsyncGeneratorExecutor){
+				$this->generatorExecutor->populate($chunkX, $chunkZ, $centerChunk, $adjacentChunks, $onCompletion,
+					function(string $message) use ($chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader) : void{
+						if($this->isLoaded()){
+							$this->abortChunkPopulation($message, $chunkPopulationLockId, $chunkX, $chunkZ, $temporaryChunkLoader);
+						}
+					}
+				);
+			}else{
+				$this->generatorExecutor->populate($chunkX, $chunkZ, $centerChunk, $adjacentChunks, $onCompletion);
+			}
 
 			return $resolver->getPromise();
 		}finally{
 			$timings->stopTiming();
 		}
+	}
+
+	private function abortChunkPopulation(string $reason, ChunkLockId $lock, int $x, int $z, ChunkLoader $loader) : void{
+		$this->releasePopulationArea($lock, $x, $z, $loader);
+		unset($this->activeChunkPopulationTasks[self::chunkHash($x, $z)]);
+		if($this->chunkPopulationBlocked){
+			return;
+		}
+
+		$this->chunkPopulationBlocked = true;
+		$this->logger->error("$reason. New chunk generation is disabled until the cache is restored and the world is reopened.");
+		$requests = $this->chunkPopulationRequestMap;
+		$this->chunkPopulationRequestMap = [];
+		$this->chunkPopulationRequestQueue = new \SplQueue();
+		$this->chunkPopulationRequestQueueIndex = [];
+		foreach($requests as $request){
+			$request->reject();
+		}
+	}
+
+	private function releasePopulationArea(ChunkLockId $lock, int $x, int $z, ChunkLoader $loader) : int{
+		$dirtyChunks = 0;
+		for($xx = -1; $xx <= 1; ++$xx){
+			for($zz = -1; $zz <= 1; ++$zz){
+				$this->unregisterChunkLoader($loader, $x + $xx, $z + $zz);
+				if(!$this->unlockChunk($x + $xx, $z + $zz, $lock)){
+					++$dirtyChunks;
+				}
+			}
+		}
+		return $dirtyChunks;
 	}
 
 	/**
@@ -3725,17 +3817,13 @@ class World implements ChunkManager{
 		$timings = $this->timings->chunkPopulationCompletion;
 		$timings->startTiming();
 
-		$dirtyChunks = 0;
-		for($xx = -1; $xx <= 1; ++$xx){
-			for($zz = -1; $zz <= 1; ++$zz){
-				$this->unregisterChunkLoader($temporaryChunkLoader, $x + $xx, $z + $zz);
-				if(!$this->unlockChunk($x + $xx, $z + $zz, $chunkLockId)){
-					$dirtyChunks++;
-				}
-			}
-		}
-
+		$dirtyChunks = $this->releasePopulationArea($chunkLockId, $x, $z, $temporaryChunkLoader);
 		$index = World::chunkHash($x, $z);
+		if($this->chunkPopulationBlocked){
+			unset($this->activeChunkPopulationTasks[$index]);
+			$timings->stopTiming();
+			return;
+		}
 		if(!isset($this->activeChunkPopulationTasks[$index])){
 			throw new AssumptionFailedError("This should always be set, regardless of whether the task was orphaned or not");
 		}

@@ -26,12 +26,19 @@ namespace pocketmine\block\tile;
 use pocketmine\data\bedrock\item\SavedItemStackData;
 use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
+use pocketmine\loot\LootContext;
+use pocketmine\loot\LootTables;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
+use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\UnexpectedTagTypeException;
+use pocketmine\utils\Utils;
 use pocketmine\world\Position;
+use pocketmine\world\generator\InvalidGeneratorOptionsException;
 
 /**
  * This trait implements most methods in the {@link Container} interface. It should only be used by Tiles.
@@ -40,9 +47,21 @@ trait ContainerTrait{
 	/** @var string|null */
 	private $lock = null;
 
+	/** @var array<string, Tag> Unopened loot data preserved alongside the saved inventory. */
+	private array $lootTableNBT = [];
+
 	abstract public function getRealInventory() : Inventory;
 
 	protected function loadItems(CompoundTag $tag) : void{
+		$this->lootTableNBT = [];
+		if(($lootTable = $tag->getTag(Container::TAG_LOOT_TABLE)) instanceof StringTag && $lootTable->getValue() !== ""){
+			$this->lootTableNBT[Container::TAG_LOOT_TABLE] = clone $lootTable;
+			foreach([Container::TAG_LOOT_TABLE_SEED, Container::TAG_LOOT_TABLE_SEED_LONG] as $key){
+				if(($seed = $tag->getTag($key)) !== null){
+					$this->lootTableNBT[$key] = clone $seed;
+				}
+			}
+		}
 		try{
 			$inventoryTag = $tag->getListTag(Container::TAG_ITEMS, CompoundTag::class);
 		}catch(UnexpectedTagTypeException){
@@ -77,9 +96,37 @@ trait ContainerTrait{
 		}
 
 		$tag->setTag(Container::TAG_ITEMS, new ListTag($items, NBT::TAG_Compound));
+		foreach(Utils::stringifyKeys($this->lootTableNBT) as $key => $value){
+			$tag->setTag($key, clone $value);
+		}
 
 		if($this->lock !== null){
 			$tag->setString(Container::TAG_LOCK, $this->lock);
+		}
+	}
+
+	protected function unpackWorldgenLoot() : void{
+		$table = $this->lootTableNBT[Container::TAG_LOOT_TABLE] ?? null;
+		if(!$table instanceof StringTag){
+			return;
+		}
+		$position = $this->getPosition();
+		$world = $position->getWorld();
+		try{
+			$loot = LootTables::forWorld($world)?->get($table->getValue());
+			if($loot === null){
+				return;
+			}
+			$seed = $this->lootTableNBT[Container::TAG_LOOT_TABLE_SEED_LONG] ?? $this->lootTableNBT[Container::TAG_LOOT_TABLE_SEED] ?? null;
+			$context = LootContext::seeded($seed instanceof LongTag || $seed instanceof IntTag ? $seed->getValue() : 0);
+			$context->world = $world;
+			$context->origin = $position->add(0.5, 0.5, 0.5);
+			$inventory = $this->getRealInventory();
+			$contents = $loot->rollInventory($inventory, $context);
+			$this->lootTableNBT = []; // Inventory listeners may access the same container.
+			$inventory->setContents($contents);
+		}catch(InvalidGeneratorOptionsException|\RuntimeException|\JsonException $e){
+			$world->getLogger()->warning("Unable to fill generated container at $position: " . $e->getMessage());
 		}
 	}
 
@@ -99,6 +146,7 @@ trait ContainerTrait{
 	 * @see Tile::onBlockDestroyedHook()
 	 */
 	protected function onBlockDestroyedHook() : void{
+		$this->unpackWorldgenLoot();
 		$inv = $this->getRealInventory();
 		$pos = $this->getPosition();
 

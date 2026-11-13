@@ -56,6 +56,17 @@ abstract class Spawnable extends Tile{
 		$this->spawnCompoundCaches = [];
 	}
 
+	/** @internal Whether the receiving protocol has this tile's block. */
+	final public function canSpawnTo(TypeConverter $typeConverter) : bool{
+		$requiredBlock = $this->getRequiredNetworkBlockName();
+		return $requiredBlock === null ||
+			$typeConverter->getBlockTranslator()->internalIdToNetworkStateData($this->getBlock()->getStateId())->getName() === $requiredBlock;
+	}
+
+	protected function getRequiredNetworkBlockName() : ?string{
+		return null;
+	}
+
 	/**
 	 * The Bedrock client won't re-render a block if the block's state properties didn't change. This is a problem when
 	 * the tile may affect the block's appearance. For example, a cauldron's liquid changes colour based on the dye

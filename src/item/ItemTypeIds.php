@@ -368,7 +368,20 @@ final class ItemTypeIds{
 
 	public const CHEST_MINECART = 20329;
 
-	public const FIRST_UNUSED_ITEM_ID = 20330;
+	public const TRIAL_KEY = 20330;
+	public const OMINOUS_TRIAL_KEY = 20331;
+
+	public const BRUSH = 20332;
+	public const POTTERY_SHERD = 20333;
+	public const WIND_CHARGE = 20334;
+	public const HEAVY_CORE = 20335;
+	public const OMINOUS_BOTTLE = 20336;
+	public const FLOW_ARMOR_TRIM_SMITHING_TEMPLATE = 20337;
+	public const FLOW_BANNER_PATTERN = 20338;
+	public const LEAD = 20339;
+	public const SNIFFER_EGG = 20340;
+
+	public const FIRST_UNUSED_ITEM_ID = 20341;
 
 	private static int $nextDynamicId = self::FIRST_UNUSED_ITEM_ID;
 

@@ -28,6 +28,8 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\format\io\FastChunkSerializer;
 use pocketmine\world\generator\executor\ThreadLocalGeneratorContext;
+use pocketmine\world\generator\vanilla\InvalidVanillaDataException;
+use pocketmine\world\generator\vanilla\VanillaWorldgenProfiler;
 use function array_map;
 use function igbinary_serialize;
 use function igbinary_unserialize;
@@ -43,15 +45,28 @@ use function igbinary_unserialize;
  */
 class PopulationTask extends AsyncTask{
 	private const TLS_KEY_ON_COMPLETION = "onCompletion";
+	private const TLS_KEY_ON_DATA_FAILURE = "onDataFailure";
+
+	private bool $handlesDataFailure;
+	private ?string $dataFailure = null;
 
 	private ?string $chunk;
 
 	private string $adjacentChunks;
 
+	private float $queuedAt;
+	private float $startedAt = 0.0;
+	private float $queueDelayMs = 0.0;
+	private float $workerDurationMs = 0.0;
+	// AsyncTask uses ThreadSafe properties: transfer profiling aggregates in a
+	// scalar string, never as an array (PHP 8.4 ZTS rejects arrays here).
+	private string $worldgenStages = "";
+
 	/**
 	 * @param Chunk[]|null[] $adjacentChunks
 	 * @phpstan-param array<int, Chunk|null> $adjacentChunks
 	 * @phpstan-param OnCompletion $onCompletion
+	 * @phpstan-param (\Closure(string) : void)|null $onDataFailure
 	 */
 	public function __construct(
 		private int $worldId,
@@ -59,8 +74,14 @@ class PopulationTask extends AsyncTask{
 		private int $chunkZ,
 		?Chunk $chunk,
 		array $adjacentChunks,
-		\Closure $onCompletion
+		\Closure $onCompletion,
+		?\Closure $onDataFailure = null
 	){
+		$this->queuedAt = microtime(true);
+		$this->handlesDataFailure = $onDataFailure !== null;
+		if($onDataFailure !== null){
+			$this->storeLocal(self::TLS_KEY_ON_DATA_FAILURE, $onDataFailure);
+		}
 		$this->chunk = $chunk !== null ? FastChunkSerializer::serializeTerrain($chunk) : null;
 
 		$this->adjacentChunks = igbinary_serialize(array_map(
@@ -72,6 +93,29 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onRun() : void{
+		$profile = VanillaWorldgenProfiler::enabled();
+		if($profile){
+			$this->startedAt = microtime(true);
+			$this->queueDelayMs = ($this->startedAt - $this->queuedAt) * 1000;
+			VanillaWorldgenProfiler::begin();
+		}
+		try{
+			$this->generate();
+		}catch(InvalidVanillaDataException $e){
+			if(!$this->handlesDataFailure){
+				throw $e;
+			}
+			$this->dataFailure = $e->getMessage();
+		}finally{
+			if($profile){
+				$this->worldgenStages = igbinary_serialize(VanillaWorldgenProfiler::finish()) ??
+					throw new AssumptionFailedError("Could not serialize worldgen metrics");
+				$this->workerDurationMs = (microtime(true) - $this->startedAt) * 1000;
+			}
+		}
+	}
+
+	private function generate() : void{
 		$context = ThreadLocalGeneratorContext::fetch($this->worldId);
 		if($context === null){
 			throw new AssumptionFailedError("Generator context should have been initialized before any PopulationTask execution");
@@ -116,6 +160,18 @@ class PopulationTask extends AsyncTask{
 	}
 
 	public function onCompletion() : void{
+		if($this->worldgenStages !== ""){
+			/** @var array<string, float> $stages */
+			$stages = igbinary_unserialize($this->worldgenStages);
+			VanillaWorldgenProfiler::report($stages, $this->queueDelayMs,
+				$this->workerDurationMs, (microtime(true) - $this->queuedAt) * 1000);
+		}
+		if($this->dataFailure !== null){
+			/** @phpstan-var \Closure(string) : void $onDataFailure */
+			$onDataFailure = $this->fetchLocal(self::TLS_KEY_ON_DATA_FAILURE);
+			$onDataFailure($this->dataFailure);
+			return;
+		}
 		/**
 		 * @var \Closure $onCompletion
 		 * @phpstan-var OnCompletion $onCompletion

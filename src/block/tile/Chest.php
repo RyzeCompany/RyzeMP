@@ -116,6 +116,10 @@ class Chest extends Spawnable implements Container, Nameable{
 	}
 
 	public function getInventory() : ChestInventory|DoubleChestInventory{
+		$this->unpackWorldgenLoot();
+		if($this->isPaired()){
+			$this->getPair()?->unpackWorldgenLoot();
+		}
 		if($this->isPaired() && $this->doubleInventory === null){
 			$this->checkPairing();
 		}

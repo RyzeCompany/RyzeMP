@@ -1,0 +1,181 @@
+<?php
+
+declare(strict_types=1);
+
+namespace pocketmine\world\generator\vanilla\feature;
+
+use pocketmine\block\Block;
+use pocketmine\block\BlockBreakInfo;
+use pocketmine\block\BlockIdentifier;
+use pocketmine\block\BlockTypeIds;
+use pocketmine\block\BlockTypeInfo;
+use pocketmine\block\BrushableBlock;
+use pocketmine\block\DecoratedPot;
+use pocketmine\block\tile\DecoratedPot as DecoratedPotTile;
+use pocketmine\block\RuntimeBlockStateRegistry;
+use pocketmine\block\tile\BrushableBlock as BrushableBlockTile;
+use pocketmine\block\VanillaBlocks;
+use pocketmine\crafting\CraftingManager;
+use pocketmine\crafting\ExactRecipeIngredient;
+use pocketmine\crafting\ShapedRecipe;
+use pocketmine\data\bedrock\block\BlockStateNames;
+use pocketmine\data\bedrock\block\BlockTypeNames;
+use pocketmine\data\bedrock\block\convert\BlockStateReader;
+use pocketmine\data\bedrock\block\convert\BlockStateWriter;
+use pocketmine\data\bedrock\item\ItemTypeNames;
+use pocketmine\data\bedrock\item\SavedItemData;
+use pocketmine\item\Item;
+use pocketmine\item\Brush;
+use pocketmine\item\ItemIdentifier;
+use pocketmine\item\ItemTypeIds;
+use pocketmine\item\PotterySherd;
+use pocketmine\item\PotterySherdType;
+use function strtolower;
+use pocketmine\item\StringToItemParser;
+use pocketmine\item\VanillaItems;
+use pocketmine\math\Facing;
+use pocketmine\world\format\io\GlobalBlockStateHandlers;
+use pocketmine\world\format\io\GlobalItemDataHandlers;
+
+final class ArchaeologyContent{
+	private static bool $sherdsRegistered = false;
+	private function __construct(){}
+
+	/** @internal */
+	public static function register() : void{
+		self::registerBlock(BlockTypeIds::SUSPICIOUS_SAND, BlockTypeNames::SUSPICIOUS_SAND, "Suspicious Sand", VanillaBlocks::SAND(...));
+		self::registerBlock(BlockTypeIds::SUSPICIOUS_GRAVEL, BlockTypeNames::SUSPICIOUS_GRAVEL, "Suspicious Gravel", VanillaBlocks::GRAVEL(...));
+		$brush = self::brush();
+		GlobalItemDataHandlers::getDeserializer()->map(ItemTypeNames::BRUSH, static fn() : Brush => clone $brush);
+		GlobalItemDataHandlers::getSerializer()->map($brush, static fn() : SavedItemData => new SavedItemData(ItemTypeNames::BRUSH));
+		StringToItemParser::getInstance()->register("brush", static fn() : Brush => clone $brush);
+		self::registerSherds();
+		self::registerLootItems();
+		self::registerDecoratedPot();
+	}
+
+	private static bool $lootItemsRegistered = false;
+
+	/** Preserve the two archaeology rewards absent from the base item registry. */
+	public static function registerLootItems() : void{
+		if(self::$lootItemsRegistered){
+			return;
+		}
+		self::registerLootItem(new Item(new ItemIdentifier(ItemTypeIds::LEAD), "Lead"), ItemTypeNames::LEAD);
+		self::registerLootItem(new Item(new ItemIdentifier(ItemTypeIds::SNIFFER_EGG), "Sniffer Egg"), BlockTypeNames::SNIFFER_EGG);
+		self::$lootItemsRegistered = true;
+	}
+
+	private static function registerLootItem(Item $item, string $id) : void{
+		GlobalItemDataHandlers::getDeserializer()->map($id, static fn() : Item => clone $item);
+		GlobalItemDataHandlers::getSerializer()->map($item, static fn() : SavedItemData => new SavedItemData($id));
+		StringToItemParser::getInstance()->register($id, static fn() : Item => clone $item);
+	}
+
+
+	/**
+	 * Registers all 23 vanilla pottery sherds with a single stateful item type,
+	 * just as VanillaMine does. Names are serialized as individual Bedrock IDs;
+	 * multi-version packet adapters remain responsible for older client fallbacks.
+	 * @internal
+	 */
+	public static function registerSherds() : void{
+		if(self::$sherdsRegistered){
+			return;
+		}
+		$prototype = new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd");
+		$deserializer = GlobalItemDataHandlers::getDeserializer();
+		foreach(PotterySherdType::cases() as $type){
+			$id = "minecraft:" . strtolower($type->name) . "_pottery_sherd";
+			$sherd = (clone $prototype)->setSherdType($type);
+			$deserializer->map($id, static fn() : PotterySherd => clone $sherd);
+			StringToItemParser::getInstance()->register($id, static fn() : PotterySherd => clone $sherd);
+		}
+		GlobalItemDataHandlers::getSerializer()->map($prototype, static fn(PotterySherd $item) : SavedItemData =>
+			new SavedItemData("minecraft:" . strtolower($item->getSherdType()->name) . "_pottery_sherd"));
+		self::$sherdsRegistered = true;
+	}
+
+
+	private static bool $decoratedPotRegistered = false;
+
+	/** Register native decorated-pot block states and their LevelDB tile. */
+	private static function registerDecoratedPot() : void{
+		if(self::$decoratedPotRegistered){
+			return;
+		}
+		$pot = self::newDecoratedPot();
+		RuntimeBlockStateRegistry::getInstance()->register($pot);
+		//Bedrock decorated_pot has the numeric "direction" state, NOT
+		//"minecraft:cardinal_direction". Using the wrong property prevents
+		//the login crafting-data cache from serializing decorated-pot items.
+		GlobalBlockStateHandlers::getDeserializer()->map(BlockTypeNames::DECORATED_POT, static fn(BlockStateReader $in) : DecoratedPot =>
+			(clone $pot)->setFacing(match($in->readBoundedInt(BlockStateNames::DIRECTION, 0, 3)){
+				0 => Facing::EAST,
+				1 => Facing::SOUTH,
+				2 => Facing::WEST,
+				3 => Facing::NORTH,
+				default => throw new \InvalidArgumentException("Invalid Bedrock decorated-pot direction")
+			}));
+		GlobalBlockStateHandlers::getSerializer()->map($pot, static fn(DecoratedPot $state) : BlockStateWriter =>
+			BlockStateWriter::create(BlockTypeNames::DECORATED_POT)->writeInt(BlockStateNames::DIRECTION, match($state->getFacing()){
+				Facing::EAST => 0,
+				Facing::SOUTH => 1,
+				Facing::WEST => 2,
+				Facing::NORTH => 3,
+				default => throw new \InvalidArgumentException("Decorated pot has non-horizontal facing")
+			}));
+		self::$decoratedPotRegistered = true;
+	}
+
+	/** @internal */
+	private static function newDecoratedPot() : DecoratedPot{
+		return new DecoratedPot(
+			new BlockIdentifier(BlockTypeIds::DECORATED_POT, DecoratedPotTile::class),
+			"Decorated Pot",
+			new BlockTypeInfo(BlockBreakInfo::instant())
+		);
+	}
+
+	/** @internal */
+	public static function registerRecipe(CraftingManager $craftingManager) : void{
+		$brush = self::brush();
+		if(!$craftingManager->matchRecipeByOutputs([$brush])->valid()){
+			$craftingManager->registerShapedRecipe(new ShapedRecipe(
+				["F", "C", "S"],
+				[
+					"F" => new ExactRecipeIngredient(VanillaItems::FEATHER()),
+					"C" => new ExactRecipeIngredient(VanillaItems::COPPER_INGOT()),
+					"S" => new ExactRecipeIngredient(VanillaItems::STICK())
+				],
+				[$brush]
+			));
+		}
+		//Vanilla plain pot: four bricks in a diamond. Patterned pots require
+		//RyzeMP's crafting manager to support dynamic special recipe outputs.
+		$pot = self::newDecoratedPot()->asItem();
+		if(!$craftingManager->matchRecipeByOutputs([$pot])->valid()){
+			$craftingManager->registerShapedRecipe(new ShapedRecipe(
+				[" B ", "B B", " B "],
+				["B" => new ExactRecipeIngredient(VanillaItems::BRICK())],
+				[$pot]
+			));
+		}
+	}
+
+	private static function brush() : Brush{
+		return new Brush(new ItemIdentifier(ItemTypeIds::BRUSH), "Brush");
+	}
+
+	/** @phpstan-param \Closure() : Block $brushedResult */
+	private static function registerBlock(int $id, string $identifier, string $name, \Closure $brushedResult) : void{
+		$block = new BrushableBlock(new BlockIdentifier($id, BrushableBlockTile::class), $name, new BlockTypeInfo(BlockBreakInfo::shovel(0.25)), $brushedResult);
+		RuntimeBlockStateRegistry::getInstance()->register($block);
+		GlobalBlockStateHandlers::getDeserializer()->map($identifier, static fn(BlockStateReader $in) : BrushableBlock => (clone $block)
+			->setBrushedProgress($in->readBoundedInt(BlockStateNames::BRUSHED_PROGRESS, 0, BrushableBlock::MAX_BRUSHED_PROGRESS))
+			->setHanging($in->readBool(BlockStateNames::HANGING)));
+		GlobalBlockStateHandlers::getSerializer()->map($block, static fn(BrushableBlock $state) : BlockStateWriter => BlockStateWriter::create($identifier)
+			->writeInt(BlockStateNames::BRUSHED_PROGRESS, $state->getBrushedProgress())
+			->writeBool(BlockStateNames::HANGING, $state->isHanging()));
+	}
+}

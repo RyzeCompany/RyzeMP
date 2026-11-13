@@ -79,14 +79,16 @@ final class AsyncGeneratorExecutor implements GeneratorExecutor{
 		$this->generatorRegisteredWorkers = [];
 	}
 
-	public function populate(int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks, \Closure $onCompletion) : void{
+	/** @phpstan-param (\Closure(string) : void)|null $onDataFailure */
+	public function populate(int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks, \Closure $onCompletion, ?\Closure $onDataFailure = null) : void{
 		$task = new PopulationTask(
 			$this->asyncContextId,
 			$chunkX,
 			$chunkZ,
 			$centerChunk,
 			$adjacentChunks,
-			$onCompletion
+			$onCompletion,
+			$onDataFailure
 		);
 		$workerId = $this->workerPool->selectWorker();
 		if(!isset($this->workerPool->getRunningWorkers()[$workerId]) && isset($this->generatorRegisteredWorkers[$workerId])){

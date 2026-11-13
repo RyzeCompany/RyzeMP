@@ -57,6 +57,7 @@ class Dispenser extends Spawnable implements Container, Nameable{
 	}
 
 	public function getInventory() : DispenserInventory{
+		$this->unpackWorldgenLoot();
 		return $this->inventory;
 	}
 

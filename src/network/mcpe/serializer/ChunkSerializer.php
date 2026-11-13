@@ -29,6 +29,7 @@ use pmmp\encoding\VarInt;
 use pocketmine\block\tile\Spawnable;
 use pocketmine\data\bedrock\BiomeIds;
 use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\network\mcpe\convert\BlockTranslator;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -112,7 +113,7 @@ final class ChunkSerializer{
 			$stream->writeByteArray($subChunk);
 		}
 
-		self::serializeBiomes($chunk, $dimensionId, $stream);
+		self::serializeBiomes($chunk, $dimensionId, $stream, $typeConverter->getProtocolId());
 		self::serializeChunkData($chunk, $stream, $typeConverter, $tiles);
 
 		return $stream->getData();
@@ -121,12 +122,12 @@ final class ChunkSerializer{
 	/**
 	 * @phpstan-param DimensionIds::* $dimensionId
 	 */
-	public static function serializeBiomes(Chunk $chunk, int $dimensionId, ByteBufferWriter $stream) : void{
+	public static function serializeBiomes(Chunk $chunk, int $dimensionId, ByteBufferWriter $stream, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : void{
 		[$minSubChunkIndex, $maxSubChunkIndex] = self::getDimensionChunkBounds($dimensionId);
 		$biomeIdMap = LegacyBiomeIdToStringIdMap::getInstance();
 		//all biomes must always be written :(
 		for($y = $minSubChunkIndex; $y <= $maxSubChunkIndex; ++$y){
-			self::serializeBiomePalette($chunk->getSubChunk($y)->getBiomeArray(), $biomeIdMap, $stream);
+			self::serializeBiomePalette($chunk->getSubChunk($y)->getBiomeArray(), $biomeIdMap, $stream, $protocolId);
 		}
 	}
 
@@ -184,7 +185,7 @@ final class ChunkSerializer{
 		}
 	}
 
-	private static function serializeBiomePalette(PalettedBlockArray $biomePalette, LegacyBiomeIdToStringIdMap $biomeIdMap, ByteBufferWriter $stream) : void{
+	private static function serializeBiomePalette(PalettedBlockArray $biomePalette, LegacyBiomeIdToStringIdMap $biomeIdMap, ByteBufferWriter $stream, int $protocolId) : void{
 		$biomePaletteBitsPerBlock = $biomePalette->getBitsPerBlock();
 		Byte::writeUnsigned($stream, ($biomePaletteBitsPerBlock << 1) | 1); //the last bit is non-persistence (like for blocks), though it has no effect on biomes since they always use integer IDs
 		$stream->writeByteArray($biomePalette->getWordArray());
@@ -197,14 +198,20 @@ final class ChunkSerializer{
 		foreach($biomePaletteArray as $p){
 			//we would use writeSignedIntArray() here, but the gains of writing in batch are negated by the cost of
 			//allocating a temporary array for the mapped palette IDs, especially for small palettes
-			VarInt::writeSignedInt($stream, $biomeIdMap->legacyToString($p) !== null ? $p : BiomeIds::OCEAN);
+			$networkBiome = match(true){
+				$p === BiomeIds::PALE_GARDEN && $protocolId < ProtocolInfo::PROTOCOL_1_21_50 => BiomeIds::ROOFED_FOREST,
+				$p === BiomeIds::SULFUR_CAVES && $protocolId < ProtocolInfo::PROTOCOL_1_26_30 => BiomeIds::DRIPSTONE_CAVES,
+				$biomeIdMap->legacyToString($p) === null => BiomeIds::OCEAN,
+				default => $p
+			};
+			VarInt::writeSignedInt($stream, $networkBiome);
 		}
 	}
 
 	public static function serializeTiles(Chunk $chunk, TypeConverter $typeConverter) : string{
 		$stream = new ByteBufferWriter();
 		foreach($chunk->getTiles() as $tile){
-			if($tile instanceof Spawnable){
+			if($tile instanceof Spawnable && $tile->canSpawnTo($typeConverter)){
 				$stream->writeByteArray($tile->getSerializedSpawnCompound($typeConverter)->getEncodedNbt());
 			}
 		}

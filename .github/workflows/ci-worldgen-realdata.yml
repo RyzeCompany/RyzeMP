@@ -1,0 +1,135 @@
+name: Worldgen real VanillaMine Java 26.3 oracle
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci-worldgen-realdata.yml'
+      - 'src/world/generator/vanilla/**'
+      - 'src/world/dimension/generator/end/**'
+      - 'src/world/dimension/DimensionManager.php'
+      - 'src/world/dimension/DimensionSettings.php'
+      - 'resources/dimensions.yml'
+      - 'src/world/dimension/portal/**'
+      - 'src/world/format/**'
+      - 'src/world/World.php'
+      - 'src/block/tile/**'
+      - 'src/block/BrushableBlock.php'
+      - 'src/item/Brush.php'
+      - 'src/world/sound/BrushSound.php'
+      - 'src/block/TrialSpawner.php'
+      - 'src/block/Vault.php'
+      - 'src/block/vault/**'
+      - 'src/network/mcpe/serializer/ChunkSerializer.php'
+      - 'src/loot/**'
+      - 'tests/phpunit/world/generator/vanilla/**'
+      - 'tests/fixtures/worldgen/**'
+      - 'tests/worldgen-phar-smoke.py'
+      - 'tools/prepare-vanillamine-worldgen.php'
+      - 'src/PocketMine.php'
+      - 'tests/worldgen-egg-bootstrap-smoke.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  java-263-realdata:
+    name: Rebuild verified source data and compare Java references
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Set temporary data directory (runner context is unavailable at job env evaluation)
+        run: echo "POCKETMINE_VANILLA_WORLDGEN_DATA=$RUNNER_TEMP/ryzemp-worldgen-java-263" >> "$GITHUB_ENV"
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Prepare official Java 26.3 cache using VanillaMine verified bootstrap
+        timeout-minutes: 30
+        run: |
+          php -d memory_limit=2G tools/prepare-vanillamine-worldgen.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -s "$POCKETMINE_VANILLA_WORLDGEN_DATA/version.json"
+          php tools/worldgen-data-fingerprint.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Compare VanillaMine carvers and dimensions to independent Java reference
+        timeout-minutes: 12
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --fail-on-skipped \
+            tests/phpunit/world/generator/vanilla/CarverTest.php \
+            tests/phpunit/world/generator/vanilla/VanillaRealDataReferenceTest.php \
+            tests/phpunit/world/generator/vanilla/VanillaRealDataFeatureSmokeTest.php \
+            tests/phpunit/world/generator/vanilla/StructureTest.php \
+            tests/phpunit/world/generator/vanilla/VaultLootCoverageTest.php \
+            tests/phpunit/world/generator/vanilla/FreeSpaceTest.php
+      - name: Check vanilla one-shot bootstrap with real Java 26.3 data
+        timeout-minutes: 5
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --fail-on-skipped tests/phpunit/world/generator/vanilla/VanillaWorldgenSetupTest.php
+      - name: Build the PHAR and restart three opt-in LevelDB worlds
+        timeout-minutes: 12
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
+          php -d phar.readonly=0 build/server-phar.php --out="$RUNNER_TEMP/RyzeMP-worldgen.phar"
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Boot the packaged PHAR in Egg auto-Vanilla mode, preserve previous worlds
+        timeout-minutes: 5
+        run: python3 tests/worldgen-egg-bootstrap-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Reject changed worldgen data without losing stored chunks
+        timeout-minutes: 4
+        run: python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --cache-failure
+      - name: Measure concurrent core-v6 PHAR generation
+        timeout-minutes: 18
+        run: |
+          uname -sm
+          nproc
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --benchmark
+      - name: Set up the upstream Go compiler
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Evaluate the pinned VanillaMine Go backend
+        timeout-minutes: 12
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: 'off'
+          VANILLAMINE_REVISION: 4dd2228b47d64c8015c28138c846e6c4acb28345
+        run: |
+          git init "$RUNNER_TEMP/vanillamine-reference"
+          git -C "$RUNNER_TEMP/vanillamine-reference" fetch --depth=1 https://gitlab.com/VanillaMine/VanillaMine.git "$VANILLAMINE_REVISION"
+          git -C "$RUNNER_TEMP/vanillamine-reference" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/vanillamine-reference" rev-parse HEAD)" = "$VANILLAMINE_REVISION"
+          cd "$RUNNER_TEMP/vanillamine-reference/native/vanillagen"
+          go version
+          go test -count=1 -v ./...
+          go build -trimpath -o "$RUNNER_TEMP/vanillagen" .
+          "$RUNNER_TEMP/vanillagen" -version
+          for dimension in overworld nether end; do
+            for seed in 12345 -987654321; do
+              printf 'Go terrain benchmark: %s seed %s\n' "$dimension" "$seed"
+              "$RUNNER_TEMP/vanillagen" -bench -stage 2 -data "$POCKETMINE_VANILLA_WORLDGEN_DATA" -settings "$dimension" -seed "$seed" -chunks 128 -workers 2
+            done
+          done
+      - name: Verify full Go versus compiled PHP for all dimensions and seeds
+        timeout-minutes: 10
+        env:
+          RYZEMP_VANILLAGEN_STAGE: full
+        run: |
+          php -d memory_limit=2G tests/native-worldgen-parity.php "$RUNNER_TEMP/vanillagen" "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+      - name: Exercise the actual RyzeMP PHAR with the Go backend enabled
+        timeout-minutes: 15
+        env:
+          RYZEMP_VANILLAGEN_STAGE: full
+        run: |
+          export RYZEMP_VANILLAGEN_BINARY="$RUNNER_TEMP/vanillagen"
+          export RYZEMP_VANILLAGEN_SHA256="$(sha256sum "$RUNNER_TEMP/vanillagen" | cut -d ' ' -f1)"
+          # Only core-v6 is intended to use native Go: core-v1 stays interpreted.
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" core-v6
+          # Same loopback fixture/seed/workers as the PHP benchmark above.
+          python3 tests/worldgen-phar-smoke.py "$(command -v php)" "$RUNNER_TEMP/RyzeMP-worldgen.phar" "$POCKETMINE_VANILLA_WORLDGEN_DATA" --benchmark
+      - name: Erase downloaded Minecraft data (never upload artifacts)
+        if: always()
+        run: rm -rf "$POCKETMINE_VANILLA_WORLDGEN_DATA"

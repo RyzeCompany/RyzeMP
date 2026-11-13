@@ -1,0 +1,49 @@
+<?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+ */
+
+declare(strict_types=1);
+
+namespace pocketmine\item;
+
+use pocketmine\data\runtime\RuntimeDataDescriber;
+
+class PotterySherd extends Item{
+
+	private PotterySherdType $sherdType = PotterySherdType::ANGLER;
+
+	protected function describeState(RuntimeDataDescriber $w) : void{
+		$w->enum($this->sherdType);
+	}
+
+	public function getSherdType() : PotterySherdType{ return $this->sherdType; }
+
+	/**
+	 * @return $this
+	 */
+	public function setSherdType(PotterySherdType $type) : self{
+		$this->sherdType = $type;
+		return $this;
+	}
+
+	public function getVanillaName() : string{
+		return $this->sherdType->getDisplayName() . " " . parent::getVanillaName();
+	}
+}

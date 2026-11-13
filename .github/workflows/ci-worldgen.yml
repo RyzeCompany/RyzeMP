@@ -1,0 +1,58 @@
+name: Worldgen PHPStan 9
+
+on:
+  pull_request:
+    paths:
+      - 'src/world/generator/vanilla/**'
+      - 'src/world/dimension/generator/VanillaGenerators.php'
+      - 'src/world/dimension/DimensionSettings.php'
+      - 'src/world/dimension/generator/end/**'
+      - 'src/world/dimension/portal/**'
+      - 'src/world/World.php'
+      - 'src/world/format/Chunk.php'
+      - 'src/world/format/io/FastChunkSerializer.php'
+      - 'src/block/tile/**'
+      - 'src/block/BrushableBlock.php'
+      - 'src/item/Brush.php'
+      - 'src/world/sound/BrushSound.php'
+      - 'src/block/TrialSpawner.php'
+      - 'src/block/Vault.php'
+      - 'src/block/vault/**'
+      - 'src/network/mcpe/serializer/ChunkSerializer.php'
+      - 'src/loot/**'
+      - 'tests/phpunit/world/generator/vanilla/**'
+      - '.github/workflows/ci-worldgen.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phpstan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Prepare optional PHPStan exclusion directory
+        run: mkdir -p build/php
+      - name: Analyze complete Phase 2 core using PHPStan level 9
+        run: |
+          php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
+            src/world/generator/vanilla \
+            src/world/dimension/generator/VanillaGenerators.php \
+            src/world/dimension/DimensionSettings.php \
+            src/world/dimension/generator/end/EndCrystalSpawner.php src/world/dimension/generator/end/object/EndGateway.php \
+            src/world/dimension/portal/PortalContent.php src/world/dimension/portal/PortalTravel.php src/world/dimension/portal/block/EndGateway.php \
+            src/world/World.php src/world/format/Chunk.php src/world/format/io/FastChunkSerializer.php \
+            src/world/generator/PopulationTask.php src/world/generator/PopulationUtils.php src/world/generator/executor \
+            src/block/tile src/loot src/world/locate/LocateTimeoutException.php \
+            src/block/BrushableBlock.php src/item/Brush.php src/world/sound/BrushSound.php \
+            src/block/TrialSpawner.php src/block/Vault.php src/block/vault src/network/mcpe/serializer/ChunkSerializer.php \
+            tests/phpunit/world/generator/vanilla

@@ -1,0 +1,273 @@
+<?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+ */
+
+declare(strict_types=1);
+
+namespace pocketmine\world\generator\vanilla\compiler;
+
+use pocketmine\utils\AssumptionFailedError;
+use pocketmine\utils\Filesystem;
+use pocketmine\world\generator\vanilla\density\ConstantFunction;
+use pocketmine\world\generator\vanilla\density\DensityFunction;
+use pocketmine\world\generator\vanilla\density\InterpolatedFunction;
+use pocketmine\world\generator\vanilla\NoiseRouter;
+use function class_exists;
+use function count;
+use function file_exists;
+use function function_exists;
+use function implode;
+use function ini_get;
+use function intdiv;
+use function is_a;
+use function is_array;
+use function is_dir;
+use function mkdir;
+use function opcache_get_status;
+use function rename;
+use function sha1;
+use function spl_object_id;
+use function str_replace;
+use function strlen;
+use function substr;
+
+/**
+ * Generates (once per graph shape), caches on disk and loads the kernel class for a noise router.
+ * The generated file only depends on the worldgen data, not on the seed; it is require()d so that OPcache and the
+ * JIT can compile it like any other PHP file.
+ */
+final class KernelFactory{
+	public const NAMESPACE = "pocketmine\\world\\generator\\vanilla\\compiled";
+	/**
+	 * Evaluate cell corners column by column with vectorized (batch) code instead of point by point.
+	 * Same values; much faster with the tracing JIT.
+	 */
+	public static bool $batchCorners = true;
+	/** Bump when the generated code changes in a way the source hash would not catch. */
+	private const VERSION = 1;
+
+	/**
+	 * Returns "tracing", "function" or "off" for the running process' JIT configuration.
+	 */
+	public static function jitMode() : string{
+		if(!function_exists('opcache_get_status')){
+			return "off";
+		}
+		$status = opcache_get_status(false);
+		if(!is_array($status) || !isset($status["jit"]) || !is_array($status["jit"]) || ($status["jit"]["on"] ?? false) !== true){
+			return "off";
+		}
+		$mode = (string) ini_get("opcache.jit");
+		if($mode === "tracing" || $mode === "on"){
+			return "tracing";
+		}
+		if($mode === "function"){
+			return "function";
+		}
+		//numeric CRTO: T (third digit) 4 and 5 are trace based
+		return strlen($mode) === 4 && ($mode[2] === "4" || $mode[2] === "5") ? "tracing" : "function";
+	}
+
+	public static function create(NoiseRouter $router, string $cacheDir) : CompiledKernel{
+		//the tracing JIT cannot compile loops containing the inlined Perlin sampler but inlines a call to it, the
+		//function JIT and the interpreter prefer the inlined code
+		DensityCompiler::$inlineOctaves = self::jitMode() !== "tracing";
+		$compiler = new DensityCompiler();
+		$compiler->compileRoot($router->temperature, "temperature");
+		$compiler->compileRoot($router->vegetation, "vegetation");
+		$compiler->compileRoot($router->continents, "continents");
+		$compiler->compileRoot($router->erosion, "erosion");
+		$compiler->compileRoot($router->depth, "depth");
+		$compiler->compileRoot($router->ridges, "ridges");
+		$zero = new ConstantFunction(0.0);
+		$compiler->compileRoot($router->aquiferBarrier ?? $zero, "aquiferBarrier");
+		$compiler->compileRoot($router->aquiferFloodedness ?? $zero, "aquiferFloodedness");
+		$compiler->compileRoot($router->aquiferSpread ?? $zero, "aquiferSpread");
+		$compiler->compileRoot($router->aquiferLava ?? $zero, "aquiferLava");
+		$compiler->compileRoot($router->aquiferExclusion ?? $zero, "aquiferExclusion");
+		$compiler->compileRoot($router->aquiferSurfaceLevel ?? $zero, "aquiferSurfaceLevel");
+		self::compileFill($compiler, $router);
+
+		$source = $compiler->buildClass("__KERNEL__", self::NAMESPACE);
+		$hash = substr(sha1(self::VERSION . $source), 0, 20);
+		$className = "Kernel_" . $hash;
+		$fqcn = self::NAMESPACE . "\\" . $className;
+		if(!class_exists($fqcn, false)){
+			if(!is_dir($cacheDir)){
+				@mkdir($cacheDir, 0777, true);
+			}
+			$path = $cacheDir . "/" . $className . ".php";
+			$expectedSource = str_replace("__KERNEL__", $className, $source);
+			if(!file_exists($path)){
+				$tmp = $path . "." . spl_object_id($compiler) . ".tmp";
+				Filesystem::safeFilePutContents($tmp, $expectedSource);
+				@rename($tmp, $path);
+			}
+			// Compilation outputs live outside the pinned Mojang data inputs.
+			// Verify exact generated bytes BEFORE require_once to prevent cache
+			// tampering, corrupted/incomplete writes, and accidental code drift.
+			$cached = @file_get_contents($path);
+			if($cached === false || !hash_equals(hash("sha256", $expectedSource), hash("sha256", $cached))){
+				throw new \RuntimeException("VanillaMine compiled PHP kernel cache differs from deterministic source: " . $path);
+			}
+			require_once $path;
+		}
+		if(!class_exists($fqcn, false) || !is_a($fqcn, CompiledKernel::class, true)){
+			throw new AssumptionFailedError("Generated kernel $fqcn could not be loaded");
+		}
+		$kernel = (new \ReflectionClass($fqcn))->newInstance($compiler->getBindings());
+		if(!$kernel instanceof CompiledKernel){
+			throw new AssumptionFailedError("Generated kernel has the wrong type");
+		}
+		return $kernel;
+	}
+
+	/**
+	 * @param InterpolatedFunction[] $out
+	 * @param true[]                 $seen
+	 * @phpstan-param list<InterpolatedFunction> $out
+	 * @phpstan-param array<int, true>           $seen
+	 */
+	public static function collectInterpolated(DensityFunction $f, array &$out, array &$seen) : void{
+		$id = spl_object_id($f);
+		if(isset($seen[$id])){
+			return;
+		}
+		$seen[$id] = true;
+		if($f instanceof InterpolatedFunction){
+			$out[] = $f;
+			return;
+		}
+		foreach($f->children() as $child){
+			self::collectInterpolated($child, $out, $seen);
+		}
+	}
+
+	private static function compileFill(DensityCompiler $compiler, NoiseRouter $router) : void{
+		$channels = [];
+		$seen = [];
+		self::collectInterpolated($router->finalDensity, $channels, $seen);
+		if(count($channels) === 0){
+			throw new \RuntimeException("The final density has no interpolated part");
+		}
+		$w = $channels[0]->cellWidth;
+		$h = $channels[0]->cellHeight;
+		foreach($channels as $c){
+			if($c->cellWidth !== $w || $c->cellHeight !== $h){
+				throw new \RuntimeException("All interpolated functions of the final density must use the same cell size");
+			}
+		}
+		$cellsXZ = intdiv(16, $w);
+		$cellsY = intdiv($router->height, $h);
+		$cornersY = $cellsY + 1;
+		$minY = $router->minY;
+		$height = $router->height;
+		$n = count($channels);
+
+		$channelVars = [];
+		foreach($channels as $k => $c){
+			if(self::$batchCorners){
+				$compiler->compileBatchRoot($c->input, "bch$k");
+			}else{
+				$compiler->compileRoot($c->input, "ch$k");
+			}
+			$channelVars[spl_object_id($c)] = "\$v$k";
+		}
+		[$outerCode, $outerResult] = $compiler->compileInline($router->finalDensity, $channelVars, "o");
+
+		$cornerCalls = [];
+		$init = [];
+		$loadCorners = [];
+		$lerpY = [];
+		$lerpX = [];
+		$lerpZ = [];
+		for($k = 0; $k < $n; ++$k){
+			$init[] = "\$c$k = [];";
+			$cornerCalls[] = self::$batchCorners ?
+				//batch results are keyed by y index but not necessarily in key order
+				"\$r = \$this->bch$k(\$x, \$z, \$Y);\nfor(\$j = 0; \$j < $cornersY; ++\$j){\n\t\$c{$k}[] = \$r[\$j];\n}" :
+				"\$c{$k}[] = \$this->ch$k(\$x, \$y, \$z);";
+			$loadCorners[] = "\$a000_$k = \$c{$k}[\$i00 + \$cy]; \$a010_$k = \$c{$k}[\$i00 + \$cy + 1]; " .
+				"\$a100_$k = \$c{$k}[\$i10 + \$cy]; \$a110_$k = \$c{$k}[\$i10 + \$cy + 1]; " .
+				"\$a001_$k = \$c{$k}[\$i01 + \$cy]; \$a011_$k = \$c{$k}[\$i01 + \$cy + 1]; " .
+				"\$a101_$k = \$c{$k}[\$i11 + \$cy]; \$a111_$k = \$c{$k}[\$i11 + \$cy + 1];";
+			$lerpY[] = "\$e00_$k = \$a000_$k + \$fy * (\$a010_$k - \$a000_$k); \$e10_$k = \$a100_$k + \$fy * (\$a110_$k - \$a100_$k); " .
+				"\$e01_$k = \$a001_$k + \$fy * (\$a011_$k - \$a001_$k); \$e11_$k = \$a101_$k + \$fy * (\$a111_$k - \$a101_$k);";
+			$lerpX[] = "\$g0_$k = \$e00_$k + \$fx * (\$e10_$k - \$e00_$k); \$g1_$k = \$e01_$k + \$fx * (\$e11_$k - \$e01_$k);";
+			$lerpZ[] = "\$v$k = \$g0_$k + \$fz * (\$g1_$k - \$g0_$k);";
+		}
+		$t = fn(array $lines, int $indent) : string => self::indentLines($lines, $indent);
+
+		$src = "\tpublic function fillDensity(int \$baseX, int \$baseZ) : array{\n";
+		$src .= $t($init, 2);
+		$src .= "\t\t\$Y = [];\n\t\tfor(\$cy = 0; \$cy < $cornersY; ++\$cy){\n\t\t\t\$Y[] = (float) ($minY + \$cy * $h);\n\t\t}\n";
+		$src .= "\t\tfor(\$cx = 0; \$cx <= $cellsXZ; ++\$cx){\n\t\t\t\$x = (float) (\$baseX + \$cx * $w);\n";
+		$src .= "\t\t\tfor(\$cz = 0; \$cz <= $cellsXZ; ++\$cz){\n\t\t\t\t\$z = (float) (\$baseZ + \$cz * $w);\n";
+		if(self::$batchCorners){
+			$src .= $t($cornerCalls, 4);
+			$src .= "\t\t\t}\n\t\t}\n";
+		}else{
+			$src .= "\t\t\t\tfor(\$cy = 0; \$cy < $cornersY; ++\$cy){\n\t\t\t\t\t\$y = (float) ($minY + \$cy * $h);\n";
+			$src .= $t($cornerCalls, 5);
+			$src .= "\t\t\t\t}\n\t\t\t}\n\t\t}\n";
+		}
+		$src .= "\t\t\$d = array_fill(0, " . (256 * $height) . ", 0.0);\n";
+		$src .= "\t\tfor(\$cx = 0; \$cx < $cellsXZ; ++\$cx){\n\t\t\tfor(\$cz = 0; \$cz < $cellsXZ; ++\$cz){\n";
+		$src .= "\t\t\t\t\$i00 = (\$cx * " . ($cellsXZ + 1) . " + \$cz) * $cornersY;\n";
+		$src .= "\t\t\t\t\$i10 = ((\$cx + 1) * " . ($cellsXZ + 1) . " + \$cz) * $cornersY;\n";
+		$src .= "\t\t\t\t\$i01 = (\$cx * " . ($cellsXZ + 1) . " + \$cz + 1) * $cornersY;\n";
+		$src .= "\t\t\t\t\$i11 = ((\$cx + 1) * " . ($cellsXZ + 1) . " + \$cz + 1) * $cornersY;\n";
+		$src .= "\t\t\t\tfor(\$cy = " . ($cellsY - 1) . "; \$cy >= 0; --\$cy){\n";
+		$src .= $t($loadCorners, 5);
+		$src .= "\t\t\t\t\tfor(\$ly = " . ($h - 1) . "; \$ly >= 0; --\$ly){\n";
+		$src .= "\t\t\t\t\t\t\$fy = \$ly / $h;\n\t\t\t\t\t\t\$y = (float) ($minY + \$cy * $h + \$ly);\n";
+		$src .= "\t\t\t\t\t\t\$yi = \$cy * $h + \$ly;\n";
+		$src .= $t($lerpY, 6);
+		$src .= "\t\t\t\t\t\tfor(\$lx = 0; \$lx < $w; ++\$lx){\n";
+		$src .= "\t\t\t\t\t\t\t\$fx = \$lx / $w;\n\t\t\t\t\t\t\t\$bx = \$cx * $w + \$lx;\n\t\t\t\t\t\t\t\$x = (float) (\$baseX + \$bx);\n";
+		$src .= $t($lerpX, 7);
+		$src .= "\t\t\t\t\t\t\tfor(\$lz = 0; \$lz < $w; ++\$lz){\n";
+		$src .= "\t\t\t\t\t\t\t\t\$fz = \$lz / $w;\n\t\t\t\t\t\t\t\t\$bz = \$cz * $w + \$lz;\n\t\t\t\t\t\t\t\t\$z = (float) (\$baseZ + \$bz);\n";
+		$src .= $t($lerpZ, 8);
+		$src .= $t([$outerCode], 8);
+		$src .= "\t\t\t\t\t\t\t\t\$d[((\$bx << 4) | \$bz) * $height + \$yi] = $outerResult;\n";
+		$src .= "\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n";
+		$src .= "\t\treturn \$d;\n\t}\n";
+		$compiler->addMethod($src);
+	}
+
+	/**
+	 * @param string[] $lines
+	 */
+	private static function indentLines(array $lines, int $indent) : string{
+		$pad = "";
+		for($i = 0; $i < $indent; ++$i){
+			$pad .= "\t";
+		}
+		$out = [];
+		foreach($lines as $line){
+			if($line === ""){
+				continue;
+			}
+			$out[] = $pad . str_replace("\n", "\n" . $pad, $line);
+		}
+		return count($out) > 0 ? implode("\n", $out) . "\n" : "";
+	}
+}

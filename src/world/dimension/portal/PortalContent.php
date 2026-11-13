@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace pocketmine\world\dimension\portal;
 
 use pocketmine\world\dimension\portal\block\EndPortal;
+use pocketmine\world\dimension\portal\block\EndGateway;
 use pocketmine\world\dimension\portal\item\EnderEye;
 use pocketmine\block\BlockBreakInfo;
 use pocketmine\block\BlockIdentifier;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\block\BlockTypeInfo;
 use pocketmine\block\RuntimeBlockStateRegistry;
+use pocketmine\block\tile\EndGateway as EndGatewayTile;
 use pocketmine\crafting\CraftingManager;
 use pocketmine\crafting\ExactRecipeIngredient;
 use pocketmine\crafting\ShapelessRecipe;
@@ -19,6 +21,10 @@ use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\inventory\CreativeInventory;
+use pocketmine\inventory\ArmorInventory;
+use pocketmine\item\Armor;
+use pocketmine\item\ArmorTypeInfo;
+use pocketmine\item\enchantment\ItemEnchantmentTags;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\item\StringToItemParser;
@@ -27,6 +33,8 @@ use pocketmine\scheduler\AsyncPool;
 use pocketmine\scheduler\AsyncTask;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
+use pocketmine\world\generator\vanilla\feature\ArchaeologyContent;
 use InvalidArgumentException;
 
 /**
@@ -61,22 +69,54 @@ final class PortalContent{
 			return;
 		}
 		$typeId = BlockTypeIds::newId();
+		$gatewayId = BlockTypeIds::newId();
 		self::registerBlock($typeId);
+		self::registerGateway($gatewayId);
+		self::registerElytra();
+		TrialChamberContent::register();
+		ArchaeologyContent::register();
 		self::registerItem();
 		self::registerRecipe($craftingManager);
+		ArchaeologyContent::registerRecipe($craftingManager);
 
-		$pool->addWorkerStartHook(function(int $worker) use($pool, $typeId) : void{
-			$pool->submitTaskToWorker(new class($typeId) extends AsyncTask{
+		$pool->addWorkerStartHook(function(int $worker) use($pool, $typeId, $gatewayId) : void{
+			$pool->submitTaskToWorker(new class($typeId, $gatewayId) extends AsyncTask{
 				public function __construct(
-					private int $typeId
+					private int $typeId,
+					private int $gatewayId
 				){
 				}
 
 				public function onRun() : void{
 					PortalContent::registerBlock($this->typeId);
+					PortalContent::registerGateway($this->gatewayId);
+					PortalContent::registerElytra();
+					TrialChamberContent::register();
+					ArchaeologyContent::register();
 				}
 			}, $worker);
 		});
+	}
+
+	/** @internal */
+	public static function registerGateway(int $typeId) : void{
+		$block = new EndGateway(new BlockIdentifier($typeId, EndGatewayTile::class), "End Gateway", new BlockTypeInfo(BlockBreakInfo::indestructible()));
+		RuntimeBlockStateRegistry::getInstance()->register($block);
+		GlobalBlockStateHandlers::getDeserializer()->mapSimple(BlockTypeNames::END_GATEWAY, static fn() => clone $block);
+		GlobalBlockStateHandlers::getSerializer()->mapSimple($block, BlockTypeNames::END_GATEWAY);
+	}
+
+	/** @internal */
+	public static function registerElytra() : void{
+		$item = new Armor(
+			new ItemIdentifier(ItemTypeIds::ELYTRA),
+			"Elytra",
+			new ArmorTypeInfo(0, 432, ArmorInventory::SLOT_CHEST),
+			[ItemEnchantmentTags::ELYTRA]
+		);
+		GlobalItemDataHandlers::getDeserializer()->map(ItemTypeNames::ELYTRA, static fn() => clone $item);
+		GlobalItemDataHandlers::getSerializer()->map($item, static fn() => new SavedItemData(ItemTypeNames::ELYTRA));
+		StringToItemParser::getInstance()->register("elytra", static fn() => clone $item);
 	}
 
 	/**

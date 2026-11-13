@@ -6,6 +6,7 @@ namespace pocketmine\world\dimension;
 
 use InvalidArgumentException;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\world\generator\vanilla\VanillaDataIdentity;
 use function abs;
 use function is_array;
 use function is_bool;
@@ -28,15 +29,27 @@ final class DimensionSettings{
 		/** @var array<int, int|null> */
 		private array $sourceDimensions = [],
 		public readonly bool $transitionDiagnostics = false,
-		public readonly int $transitionTimeoutSeconds = 120
+		public readonly int $transitionTimeoutSeconds = 120,
+		/** @var array<int, string> */
+		private array $worldgenPresets = []
 	){}
 
 	/** @param mixed[] $config */
 	public static function fromArray(array $config) : self{
 		$worldNames = [];
 		$sourceDimensions = [];
+		$worldgenPresets = [];
 		foreach(["nether" => DimensionIds::NETHER, "end" => DimensionIds::THE_END] as $key => $id){
 			$section = self::section($config, $key);
+
+			$preset = $section["worldgen-preset"] ?? "";
+			if(!is_string($preset) || ($preset !== "" && !VanillaDataIdentity::hasStructureContent($preset))){
+				throw new InvalidArgumentException("dimensions.yml: $key.worldgen-preset must be empty or a pinned core-v6 preset");
+			}
+			if($preset !== ""){
+				VanillaDataIdentity::parse($preset);
+				$worldgenPresets[$id] = $preset;
+			}
 			$sourceDimensions[$id] = match($section["source-dimension"] ?? "auto"){
 				"auto" => null,
 				"overworld" => DimensionIds::OVERWORLD,
@@ -72,12 +85,17 @@ final class DimensionSettings{
 		if($transitionTimeout < 10 || $transitionTimeout > 600){
 			throw new InvalidArgumentException("dimensions.yml: portal.transition-timeout-seconds must be between 10 and 600");
 		}
-		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true), $sourceDimensions, self::boolean($portal, "transition-diagnostics", false), $transitionTimeout);
+		return new self($worldNames, $timeout, self::boolean($arrival, "use-world-spawn", false), $x, $y, $z, self::boolean($arrival, "create-platform", true), $sourceDimensions, self::boolean($portal, "transition-diagnostics", false), $transitionTimeout, $worldgenPresets);
 	}
 
 	/** null means automatic detection; this is storage identity, not the client's dimension. */
 	public function getSourceDimension(int $dimension) : ?int{
 		return $this->sourceDimensions[$dimension] ?? null;
+	}
+
+	/** Preset used only when the configured world folder is first created. */
+	public function getWorldgenPreset(int $dimension) : ?string{
+		return $this->worldgenPresets[$dimension] ?? null;
 	}
 
 	/** @return array<int, string> */
@@ -93,7 +111,10 @@ final class DimensionSettings{
 		}
 	}
 
-	/** @param mixed[] $config @return mixed[] */
+	/**
+	 * @param mixed[] $config
+	 * @return mixed[]
+	 */
 	private static function section(array $config, string $key) : array{
 		$value = $config[$key] ?? [];
 		if(!is_array($value)){

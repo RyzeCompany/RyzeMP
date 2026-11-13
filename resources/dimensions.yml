@@ -3,6 +3,8 @@
 nether:
   enabled: true
   world: world_nether
+  # Optional for a new world folder. Use core-v6;data=/absolute/cache;sha256=HEX.
+  # worldgen-preset: ""
   # auto: prefer native Nether chunks; otherwise keep separate-world storage.
   # Options: auto, overworld, nether, end. No conversion or renaming of chunks.
   source-dimension: auto
@@ -10,6 +12,8 @@ nether:
 end:
   enabled: true
   world: world_the_end
+  # Optional for a new world folder. Use the same pinned cache as the Overworld.
+  # worldgen-preset: ""
   source-dimension: auto
   arrival:
     # Enable for a custom map whose level.dat contains its intended spawn.

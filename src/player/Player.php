@@ -137,6 +137,7 @@ use pocketmine\world\ChunkListenerNoOpTrait;
 use pocketmine\world\ChunkLoader;
 use pocketmine\world\ChunkTicker;
 use pocketmine\world\format\Chunk;
+use pocketmine\world\generator\vanilla\VanillaWorldgenProfiler;
 use pocketmine\world\Position;
 use pocketmine\world\sound\EntityAttackNoDamageSound;
 use pocketmine\world\sound\EntityAttackSound;
@@ -270,6 +271,10 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 	protected int $viewDistance = -1;
 	protected int $spawnThreshold;
 	protected int $spawnChunkLoadCount = 0;
+	private ?float $initialTerrainStartedAt = null;
+	private float $initialPopulationWaitMs = 0.0;
+	private float $initialSendPrepareMs = 0.0;
+	private int $initialTerrainChunkSamples = 0;
 	protected int $chunksPerTick;
 	protected ChunkSelector $chunkSelector;
 	protected ChunkLoader $chunkLoader;
@@ -863,6 +868,9 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		}
 
 		Timings::$playerChunkSend->startTiming();
+		if(!$this->spawned && $this->initialTerrainStartedAt === null && VanillaWorldgenProfiler::enabled()){
+			$this->initialTerrainStartedAt = microtime(true);
+		}
 
 		$count = 0;
 		$world = $this->getWorld();
@@ -877,7 +885,7 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 		\asort($priority, SORT_NUMERIC);
 		// Keep the configured per-tick and in-flight limits; never add unrequested chunks.
 		foreach($priority + $this->loadQueue as $index => $distance){
-			if($count >= $limit){
+			if(!$this->isConnected() || $count >= $limit){
 				break;
 			}
 
@@ -896,8 +904,9 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 				$world->registerTickingChunk($this->chunkTicker, $X, $Z);
 			}
 
+			$requestedAt = $this->initialTerrainStartedAt !== null ? microtime(true) : null;
 			$world->requestChunkPopulation($X, $Z, $this->chunkLoader)->onCompletion(
-				function() use ($X, $Z, $index, $world) : void{
+				function() use ($X, $Z, $index, $world, $requestedAt) : void{
 					if(!$this->isConnected() || !isset($this->usedChunks[$index]) || $world !== $this->getWorld()){
 						return;
 					}
@@ -909,24 +918,43 @@ class Player extends Human implements CommandSender, ChunkListener, IPlayer, Nev
 					}
 					unset($this->activeChunkGenerationRequests[$index]);
 					$this->usedChunks[$index] = UsedChunkStatus::REQUESTED_SENDING;
-
-					$this->getNetworkSession()->startUsingChunk($X, $Z, function() use ($X, $Z, $index, $world) : void{
+					if($requestedAt !== null && $this->initialTerrainStartedAt !== null){
+						$this->initialPopulationWaitMs += (microtime(true) - $requestedAt) * 1000;
+					}
+					$prepareStartedAt = $requestedAt !== null ? microtime(true) : null;
+					$this->getNetworkSession()->startUsingChunk($X, $Z, function() use ($X, $Z, $index, $world, $prepareStartedAt) : void{
 						if($world !== $this->getWorld() || ($this->usedChunks[$index] ?? null) !== UsedChunkStatus::REQUESTED_SENDING){ return; }
 						$this->usedChunks[$index] = UsedChunkStatus::SENT;
+						if($prepareStartedAt !== null && $this->initialTerrainStartedAt !== null){
+							$this->initialSendPrepareMs += (microtime(true) - $prepareStartedAt) * 1000;
+							++$this->initialTerrainChunkSamples;
+						}
 						if($this->spawnChunkLoadCount === -1){
 							$this->spawnEntitiesOnChunk($X, $Z);
 						}elseif($this->spawnChunkLoadCount++ === $this->spawnThreshold){
 							$this->spawnChunkLoadCount = -1;
 
 							$this->spawnEntitiesOnAllChunks();
-
+							if($this->initialTerrainStartedAt !== null){
+								$elapsed = (microtime(true) - $this->initialTerrainStartedAt) * 1000;
+								$samples = max(1, $this->initialTerrainChunkSamples);
+								$this->server->getLogger()->info("[Worldgen perf] initial spawn terrain: " .
+									(int) $elapsed . " ms total, " . $this->initialTerrainChunkSamples .
+									" chunks queued, population wait avg " . (int) ($this->initialPopulationWaitMs / $samples) .
+									" ms, chunk packet preparation avg " . (int) ($this->initialSendPrepareMs / $samples) .
+									" ms (request-to-queue timing, not client acknowledgement)");
+								$this->initialTerrainStartedAt = null;
+							}
 							$this->getNetworkSession()->notifyTerrainReady();
 						}
 						(new PlayerPostChunkSendEvent($this, $X, $Z))->call();
 					});
 				},
-				static function() : void{
-					//NOOP: we'll re-request this if it fails anyway
+				function() use ($world, $index) : void{
+					if($world->isChunkPopulationBlocked() && $this->isConnected() && $this->getWorld() === $world &&
+						($this->usedChunks[$index] ?? null) === UsedChunkStatus::REQUESTED_GENERATION){
+						$this->disconnect("World generation is unavailable. Contact the server administrator.");
+					}
 				}
 			);
 		}

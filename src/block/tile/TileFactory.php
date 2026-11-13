@@ -66,6 +66,7 @@ final class TileFactory{
 		$this->register(Dispenser::class, ["Dispenser", "minecraft:dispenser"]);
 		$this->register(EnchantTable::class, ["EnchantTable", "minecraft:enchanting_table"]);
 		$this->register(EnderChest::class, ["EnderChest", "minecraft:ender_chest"]);
+		$this->register(EndGateway::class, ["EndGateway", "minecraft:end_gateway"]);
 		$this->register(FlowerPot::class, ["FlowerPot", "minecraft:flower_pot"]);
 		$this->register(NormalFurnace::class, ["Furnace", "minecraft:furnace"]);
 		$this->register(Hopper::class, ["Hopper", "minecraft:hopper"]);
@@ -81,13 +82,16 @@ final class TileFactory{
 		$this->register(MobHead::class, ["Skull", "minecraft:skull"]);
 		$this->register(GlowingItemFrame::class, ["GlowItemFrame"]);
 		$this->register(HangingSign::class, ["HangingSign", "minecraft:hanging_sign"]);
+		$this->register(TrialSpawner::class, ["TrialSpawner", "minecraft:trial_spawner"]);
+		$this->register(Vault::class, ["Vault", "minecraft:vault"]);
+		$this->register(BrushableBlock::class, ["BrushableBlock", "minecraft:brushable_block"]);
+		$this->register(DecoratedPot::class, ["DecoratedPot", "minecraft:decorated_pot"]);
 
 		//TODO: ChalkboardBlock
 		//TODO: ChemistryTable
 		//TODO: CommandBlock
 		//TODO: Conduit
 		//TODO: Dropper
-		//TODO: EndGateway
 		//TODO: EndPortal
 		//TODO: JigsawBlock
 		//TODO: MovingBlock
@@ -124,15 +128,22 @@ final class TileFactory{
 
 	/**
 	 * @internal
+	 * @phpstan-return class-string<Tile>|null
+	 */
+	public function getClassFromSaveId(string $saveId) : ?string{
+		return $this->knownTiles[$saveId] ?? null;
+	}
+
+	/**
+	 * @internal
 	 * @throws SavedDataLoadingException
 	 */
 	public function createFromData(World $world, CompoundTag $nbt) : ?Tile{
 		try{
-			$type = $nbt->getString(Tile::TAG_ID, "");
-			if(!isset($this->knownTiles[$type])){
+			$class = $this->getClassFromSaveId($nbt->getString(Tile::TAG_ID, ""));
+			if($class === null){
 				return null;
 			}
-			$class = $this->knownTiles[$type];
 			assert(is_a($class, Tile::class, true));
 			/**
 			 * @var Tile $tile

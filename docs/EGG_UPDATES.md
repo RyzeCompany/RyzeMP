@@ -29,3 +29,9 @@ Se conservan mundos, plugins, configuraciones y `nethernet/operator-key.pem`. Ry
 Si no hay release preparada, GitHub falla o un archivo no pasa la validacion, el instalador termina con un mensaje util sin sustituir la instalacion actual. Un nuevo formato de manifiesto o una ABI distinta requieren actualizar el egg del panel. No se baja automaticamente de version dentro del mismo canal.
 
 Composer es una distribucion independiente para desarrolladores. El egg descarga binarios de GitHub Releases y no ejecuta `composer update` sobre el servidor.
+
+## Aceleracion nativa Go desde las releases nuevas
+
+El PR experimental de worldgen Go publica `vanillagen-linux-amd64` **fuera del PHAR** y cambia el generador de manifiestos a **schema 2** al entregar el binario con el mismo tag/release de RyzeMP. El manifiesto incluye SHA-256, protocolo 7, algoritmo 4 y `stage=full`. El Egg compatible verifica el checksum del asset oficial, el propio ejecutable y su version; la reinstalacion actualiza Go de forma atomica junto con PHP, RyzeRTC y PHAR, sin tocar `worlds/`, plugins, IP/puerto o el cache Java 26.3.
+
+**No distribuir un artefacto temporal de Actions como si fuese una release.** Para las versiones anteriores con schema 1 el nuevo Egg sigue usando worldgen PHP. La release Go requiere un **tag/version nuevos**; el flujo nunca sobrescribe una release publica. El PR #60 sigue en borrador y no debe fusionarse sin autorizacion.

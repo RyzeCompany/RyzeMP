@@ -34,6 +34,29 @@ jobs:
         with:
           name: RyzeMP-phar
           path: package
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Build the exact pinned VanillaMine Go binary for the same release
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: 'off'
+          VANILLAMINE_REVISION: 4dd2228b47d64c8015c28138c846e6c4acb28345
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init "$RUNNER_TEMP/vanillamine-release"
+          git -C "$RUNNER_TEMP/vanillamine-release" fetch --depth=1 https://gitlab.com/VanillaMine/VanillaMine.git "$VANILLAMINE_REVISION"
+          git -C "$RUNNER_TEMP/vanillamine-release" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/vanillamine-release" rev-parse HEAD)" = "$VANILLAMINE_REVISION"
+          (
+            cd "$RUNNER_TEMP/vanillamine-release/native/vanillagen"
+            go test -count=1 ./...
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/package/vanillagen-linux-amd64" .
+          )
+          test "$(package/vanillagen-linux-amd64 -version)" = 'vanillagen dev protocol 7 algorithm 4'
+          sha256sum package/vanillagen-linux-amd64
       - name: Publish the verified beta PHAR and update manifest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -71,9 +94,9 @@ jobs:
           cp LICENSE package/LICENSE
           cp COPYING package/COPYING
           python3 tools/release-manifest.py --release "$tag" --channel "$channel" \
-            --phar "package/RyzeMP_${tag}.phar" --out package/ryzemp-update.json
+            --phar "package/RyzeMP_${tag}.phar" --go package/vanillagen-linux-amd64 --out package/ryzemp-update.json
           # Publish the manifest last; keep the release hidden until all files are ready.
-          for name in "RyzeMP_${tag}.phar" SHA256SUMS.txt LICENSE COPYING native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
+          for name in "RyzeMP_${tag}.phar" vanillagen-linux-amd64 SHA256SUMS.txt LICENSE COPYING native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
             mkdir -p existing
             if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir existing; then
               cmp "package/$name" "existing/$name"

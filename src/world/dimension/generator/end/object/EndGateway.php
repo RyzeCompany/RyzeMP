@@ -6,6 +6,7 @@ namespace pocketmine\world\dimension\generator\end\object;
 
 use pocketmine\world\dimension\generator\Blocks;
 use pocketmine\world\dimension\generator\object\BlockManager;
+use pocketmine\world\dimension\portal\block\EndGateway as RegisteredEndGateway;
 use pocketmine\block\Block;
 
 /**
@@ -24,6 +25,10 @@ final class EndGateway{
 			$this->resolved = true;
 			try{
 				$this->gateway = Blocks::get("minecraft:end_gateway");
+				if($this->gateway instanceof RegisteredEndGateway){
+					// This legacy generator has no configured exit or tile for the new gateway.
+					$this->gateway = null;
+				}
 			}catch(\InvalidArgumentException){
 				$this->gateway = null;
 			}

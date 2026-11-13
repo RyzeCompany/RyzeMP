@@ -1,0 +1,324 @@
+{
+    "_comment": "md5 of the Java block and biome names of whole Nether and End chunks (terrain, material rules and carvers), of decorated chunks, and the End spikes, for two seeds; numbers only, no Mojang data. The terrain (seed 12345) matched a Java Edition 26.3 server world block for block (except one block at a density within 1e-5 of 0 in chunk -92,131); the decorated chunks are regression values (End spikes, chorus plants and islands matched Java exactly, Nether decoration depends on the chunk decoration order).",
+    "nether": {
+        "12345": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "blocks": "d6d7ada7de9103b88000ca8a3b677877",
+                "biomes": "e9fe3673d67cc3c3a55f92716981bbd2"
+            },
+            {
+                "cx": -6,
+                "cz": 2,
+                "blocks": "b5357a382cb9884f51f2ee9e0d6b1d91",
+                "biomes": "c338356e81dd17280646911a1d3e4930"
+            },
+            {
+                "cx": -92,
+                "cz": 131,
+                "blocks": "d4ddfbcc51e237b73b115cee6aa43dbd",
+                "biomes": "e9fe3673d67cc3c3a55f92716981bbd2"
+            },
+            {
+                "cx": 66,
+                "cz": 35,
+                "blocks": "a7d6ede8eb2ba74f8bdddcef70eeba12",
+                "biomes": "1f2c22daf06a3769218df9e88bf7c74e"
+            },
+            {
+                "cx": -20,
+                "cz": 12,
+                "blocks": "c191e336e86b0abf00d02c08bf55b482",
+                "biomes": "2a65de63b1b5e5eced9b227bf10746cd"
+            },
+            {
+                "cx": -18,
+                "cz": 15,
+                "blocks": "19865e1b902b7dc76d601dc482fd88ce",
+                "biomes": "0b7dbb919416bea0f21d0c306c4a367c"
+            }
+        ],
+        "-4172144997902289642": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "blocks": "a26f049bb839c3e21e342d53f5c4bd98",
+                "biomes": "c338356e81dd17280646911a1d3e4930"
+            },
+            {
+                "cx": -6,
+                "cz": 2,
+                "blocks": "fb642a0526432fcf730bc1c20616e5fa",
+                "biomes": "c338356e81dd17280646911a1d3e4930"
+            },
+            {
+                "cx": -92,
+                "cz": 131,
+                "blocks": "94f157c0d3ec4f1f392d4c029df28496",
+                "biomes": "bb6d6279299ce39811b67be1e6f55fe3"
+            },
+            {
+                "cx": 66,
+                "cz": 35,
+                "blocks": "a76541fee1e9035a6d68cbc07187dd20",
+                "biomes": "1f2c22daf06a3769218df9e88bf7c74e"
+            },
+            {
+                "cx": -20,
+                "cz": 12,
+                "blocks": "4778affe5df899ee58f6b5884c0268b4",
+                "biomes": "e9fe3673d67cc3c3a55f92716981bbd2"
+            },
+            {
+                "cx": -18,
+                "cz": 15,
+                "blocks": "d1ab9a3d8ee00110268ac9802afa5bf4",
+                "biomes": "e9fe3673d67cc3c3a55f92716981bbd2"
+            }
+        ]
+    },
+    "end": {
+        "12345": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "blocks": "c1b5c587fa92e1a70662c934ef4c72fb",
+                "biomes": "3cb29377af87f66439ef07a6bdc29afe"
+            },
+            {
+                "cx": 2,
+                "cz": -3,
+                "blocks": "ebeba040bcfb2593c6775111497ab12a",
+                "biomes": "3cb29377af87f66439ef07a6bdc29afe"
+            },
+            {
+                "cx": 66,
+                "cz": 3,
+                "blocks": "0fcbe354003288a2ef9eb159cf391fda",
+                "biomes": "8d001735a2e8ad472f36bc807a9b33e0"
+            },
+            {
+                "cx": 74,
+                "cz": 9,
+                "blocks": "de68014da0602ed710f6201ad03bd80c",
+                "biomes": "ebf5831821265cef868a81de61db0d7a"
+            },
+            {
+                "cx": -125,
+                "cz": 97,
+                "blocks": "0fcbe354003288a2ef9eb159cf391fda",
+                "biomes": "8d001735a2e8ad472f36bc807a9b33e0"
+            }
+        ],
+        "-4172144997902289642": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "blocks": "a09a244150f12687bdd3332ed9113bac",
+                "biomes": "3cb29377af87f66439ef07a6bdc29afe"
+            },
+            {
+                "cx": 2,
+                "cz": -3,
+                "blocks": "d7d17f17547aaaad2adc887dd6fb7390",
+                "biomes": "3cb29377af87f66439ef07a6bdc29afe"
+            },
+            {
+                "cx": 66,
+                "cz": 3,
+                "blocks": "0fcbe354003288a2ef9eb159cf391fda",
+                "biomes": "8d001735a2e8ad472f36bc807a9b33e0"
+            },
+            {
+                "cx": 74,
+                "cz": 9,
+                "blocks": "ad312f3e1b050900ef88f21b668b7cd2",
+                "biomes": "ebf5831821265cef868a81de61db0d7a"
+            },
+            {
+                "cx": -125,
+                "cz": 97,
+                "blocks": "b904c2accb83e41f48307bf71f9d89dd",
+                "biomes": "ebf5831821265cef868a81de61db0d7a"
+            }
+        ]
+    },
+    "decorated": {
+        "nether": [
+            {
+                "cx": -6,
+                "cz": 2,
+                "md5": "df7b2fd441a5502d4d70b1ee8dcfdd90"
+            },
+            {
+                "cx": -20,
+                "cz": 12,
+                "md5": "67f67e7e22bd8865320ac22328abbcd6"
+            }
+        ],
+        "end": [
+            {
+                "cx": 2,
+                "cz": -1,
+                "md5": "2d54a5661effb656b896cea90e5696bb"
+            },
+            {
+                "cx": -3,
+                "cz": 2,
+                "md5": "25e1875c3c2b1b9899241ef698bf039e"
+            },
+            {
+                "cx": 69,
+                "cz": 14,
+                "md5": "5923444663d9a4f88d918f7cce31f138"
+            }
+        ]
+    },
+    "spikes": {
+        "12345": [
+            [
+                42,
+                0,
+                4,
+                97,
+                false
+            ],
+            [
+                33,
+                24,
+                5,
+                103,
+                false
+            ],
+            [
+                12,
+                39,
+                3,
+                91,
+                false
+            ],
+            [
+                -13,
+                39,
+                2,
+                76,
+                false
+            ],
+            [
+                -34,
+                24,
+                4,
+                94,
+                false
+            ],
+            [
+                -42,
+                -1,
+                4,
+                100,
+                false
+            ],
+            [
+                -34,
+                -25,
+                2,
+                79,
+                true
+            ],
+            [
+                -13,
+                -40,
+                3,
+                88,
+                false
+            ],
+            [
+                12,
+                -40,
+                3,
+                85,
+                false
+            ],
+            [
+                33,
+                -25,
+                2,
+                82,
+                true
+            ]
+        ],
+        "-4172144997902289642": [
+            [
+                42,
+                0,
+                4,
+                94,
+                false
+            ],
+            [
+                33,
+                24,
+                3,
+                88,
+                false
+            ],
+            [
+                12,
+                39,
+                2,
+                82,
+                true
+            ],
+            [
+                -13,
+                39,
+                3,
+                91,
+                false
+            ],
+            [
+                -34,
+                24,
+                2,
+                79,
+                true
+            ],
+            [
+                -42,
+                -1,
+                5,
+                103,
+                false
+            ],
+            [
+                -34,
+                -25,
+                2,
+                76,
+                false
+            ],
+            [
+                -13,
+                -40,
+                4,
+                100,
+                false
+            ],
+            [
+                12,
+                -40,
+                3,
+                85,
+                false
+            ],
+            [
+                33,
+                -25,
+                4,
+                97,
+                false
+            ]
+        ]
+    }
+}

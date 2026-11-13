@@ -15,13 +15,17 @@ use pocketmine\world\dimension\portal\PortalContent;
 use pocketmine\world\dimension\portal\PortalLinkManager;
 use pocketmine\world\dimension\portal\PortalTravel;
 use pocketmine\world\generator\GeneratorManager;
+use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\format\io\WorldProvider;
 use pocketmine\world\format\io\data\BedrockWorldData;
 use pocketmine\world\format\io\leveldb\LevelDB;
+use pocketmine\world\Position;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
 use function copy;
+use function file_exists;
 use function is_file;
+use function is_link;
 
 final class DimensionManager{
 
@@ -106,6 +110,10 @@ final class DimensionManager{
 		$this->portalTravel->touchEndPortal($entity);
 	}
 
+	public function touchEndGateway(Entity $entity, Position $position) : void{
+		$this->portalTravel->touchEndGateway($entity, $position);
+	}
+
 	public function onChunkPopulated(World $world, int $chunkX, int $chunkZ) : void{
 		$this->endCrystalSpawner->onChunkPopulated($world, $chunkX, $chunkZ);
 	}
@@ -123,19 +131,44 @@ final class DimensionManager{
 			$worldManager->loadWorld($name, true);
 			return;
 		}
+		$preset = $this->settings->getWorldgenPreset($dimension);
+		if($preset !== null){
+			$generatorName = $dimension === DimensionIds::NETHER ? VanillaGenerators::NETHER_CORE : VanillaGenerators::END_CORE;
+		}
 		$generator = GeneratorManager::getInstance()->getGenerator($generatorName);
 		if($generator === null){
 			$this->server->getLogger()->error("Native dimensions: generator {$generatorName} is not registered");
 			return;
 		}
+		$generatorOptions = $preset ?? GeneratorOptions::encode(\pocketmine\RESOURCE_PATH);
+		if($preset !== null){
+			try{
+				$generator->validateGeneratorOptions($generatorOptions);
+			}catch(InvalidGeneratorOptionsException $e){
+				$this->server->getLogger()->error("Native dimensions: cannot create $name. " . $e->getMessage());
+				return;
+			}
+		}
 		$options = WorldCreationOptions::create()
 			->setGeneratorClass($generator->getGeneratorClass())
-			->setGeneratorOptions(GeneratorOptions::encode(\pocketmine\RESOURCE_PATH));
+			->setGeneratorOptions($generatorOptions);
 		$seed = $worldManager->getDefaultWorld()?->getSeed();
 		if($seed !== null){
 			$options->setSeed($seed);
 		}
-		$worldManager->generateWorld($name, $options);
+		if($preset !== null){
+			$path = $this->server->getDataPath() . "worlds/" . $name;
+			if(file_exists($path) || is_link($path)){
+				$this->server->getLogger()->error("Native dimensions: choose a fresh folder for $name");
+				return;
+			}
+			LevelDB::generate($path . "/", $name, $options);
+			if(!$worldManager->loadWorld($name, true)){
+				return;
+			}
+		}elseif(!$worldManager->generateWorld($name, $options)){
+			return;
+		}
 		$this->server->getLogger()->info("Native dimensions: created {$name}");
 	}
 }
