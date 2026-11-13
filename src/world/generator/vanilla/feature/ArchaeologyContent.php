@@ -94,7 +94,8 @@ final class ArchaeologyContent{
 				0 => Facing::EAST,
 				1 => Facing::SOUTH,
 				2 => Facing::WEST,
-				3 => Facing::NORTH
+				3 => Facing::NORTH,
+				default => throw new \InvalidArgumentException("Invalid Bedrock decorated-pot direction")
 			}));
 		GlobalBlockStateHandlers::getSerializer()->map($pot, static fn(DecoratedPot $state) : BlockStateWriter =>
 			BlockStateWriter::create(BlockTypeNames::DECORATED_POT)->writeInt(BlockStateNames::DIRECTION, match($state->getFacing()){
