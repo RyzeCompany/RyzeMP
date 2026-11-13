@@ -18,7 +18,7 @@ The initial version must not be described as complete Bedrock or VanillaMine mob
 
 Under \`pocketmine.yml\`:
 
-- \`mobs.enabled\`: enable runtime and natural spawning (default true in this branch).
+- `mobs.enabled`: enable AI and natural spawning. Stock new `pocketmine.yml` has `true`; older configurations missing this key default to `false` to avoid unexpected activation. Set it explicitly to opt in.
 - \`mobs.max-ai-updates-per-tick\`: default 120 (shared across worlds).
 - \`mobs.max-path-searches-per-tick\`: default 8.
 - \`mobs.max-path-nodes\`: default 160.

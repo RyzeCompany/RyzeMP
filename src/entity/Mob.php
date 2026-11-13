@@ -50,7 +50,7 @@ abstract class Mob extends Living{
 			return $changed;
 		}
 		$this->aiTicks += $tickDiff;
-		if(!$this->aiEnabled){ return $changed; }
+		if(!$this->aiEnabled || !AiBudget::isEnabled()){ return $changed; }
 		$w = $this->getWorld();
 		if($w->getPlayers() === []){
 			if($this->navigation->isNavigating()){ $this->navigation->stop(); }

@@ -19,6 +19,12 @@ final class AiBudgetTest extends TestCase{
 		self::assertFalse(AiBudget::takeGoalUpdate(101,$a));
 		self::assertTrue(AiBudget::takeGoalUpdate(102,$a));
 	}
+	public function testDisabledAiStillKeepsBudgetConfiguration() : void{
+		AiBudget::configure(1,1,16,false);
+		self::assertFalse(AiBudget::isEnabled());
+		AiBudget::configure(1,1,16,true);
+		self::assertTrue(AiBudget::isEnabled());
+	}
 	public function testPathBudgetAndClampedNodes() : void{
 		AiBudget::configure(4,1,1);
 		self::assertSame(16,AiBudget::getPathNodeLimit());

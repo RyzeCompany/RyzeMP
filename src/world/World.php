@@ -587,11 +587,12 @@ class World implements ChunkManager{
 		AiBudget::initialize(
 			$cfg->getPropertyInt("mobs.max-ai-updates-per-tick", 120),
 			$cfg->getPropertyInt("mobs.max-path-searches-per-tick", 8),
-			$cfg->getPropertyInt("mobs.max-path-nodes", 160)
+			$cfg->getPropertyInt("mobs.max-path-nodes", 160),
+			$cfg->getPropertyBool("mobs.enabled", false)
 		);
 		$this->naturalMobSpawner = new NaturalMobSpawner(
 			$this,
-			$cfg->getPropertyBool("mobs.enabled", true) && $cfg->getPropertyBool("mobs.spawning.enabled", true),
+			$cfg->getPropertyBool("mobs.enabled", false) && $cfg->getPropertyBool("mobs.spawning.enabled", true),
 			$cfg->getPropertyInt("mobs.spawning.max-total", 72),
 			$cfg->getPropertyInt("mobs.spawning.max-monsters", 40),
 			$cfg->getPropertyInt("mobs.spawning.max-animals", 24),
