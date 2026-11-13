@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
+use pocketmine\entity\animal\Chicken;
+use pocketmine\entity\animal\Cow;
+use pocketmine\entity\animal\Pig;
+use pocketmine\entity\animal\Sheep;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\utils\SingletonTrait;
 
@@ -16,6 +20,16 @@ final class SpawnerEntityRegistry{
 
 	/** @var array<string, \Closure(Location, ?CompoundTag) : Entity> */
 	private array $factories = [];
+
+	public function __construct(){
+		$this->register("minecraft:chicken", fn(Location $l, ?CompoundTag $nbt) : Entity => new Chicken($l, $nbt));
+		$this->register("minecraft:cow", fn(Location $l, ?CompoundTag $nbt) : Entity => new Cow($l, $nbt));
+		$this->register("minecraft:pig", fn(Location $l, ?CompoundTag $nbt) : Entity => new Pig($l, $nbt));
+		$this->register("minecraft:sheep", fn(Location $l, ?CompoundTag $nbt) : Entity => new Sheep($l, $nbt));
+		$this->register("minecraft:zombie", fn(Location $l, ?CompoundTag $nbt) : Entity => new Zombie($l, $nbt));
+		$this->register("minecraft:squid", fn(Location $l, ?CompoundTag $nbt) : Entity => new Squid($l, $nbt));
+		$this->register("minecraft:villager", fn(Location $l, ?CompoundTag $nbt) : Entity => new Villager($l, $nbt));
+	}
 
 	/**
 	 * @param \Closure(Location, ?CompoundTag) : Entity $factory

@@ -44,6 +44,7 @@ use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockStateDeserializeException;
 use pocketmine\data\SavedDataLoadingException;
 use pocketmine\entity\Entity;
+use pocketmine\entity\ai\AiBudget;
 use pocketmine\entity\EntityFactory;
 use pocketmine\entity\Location;
 use pocketmine\entity\NeverSavedWithChunkEntity;
@@ -120,6 +121,7 @@ use pocketmine\world\sound\ProtocolSound;
 use pocketmine\world\sound\Sound;
 use pocketmine\world\utils\SubChunkExplorer;
 use pocketmine\world\weather\Weather;
+use pocketmine\world\mobs\NaturalMobSpawner;
 use pocketmine\YmlServerProperties;
 use function abs;
 use function array_filter;
@@ -400,6 +402,7 @@ class World implements ChunkManager{
 	private RuntimeBlockStateRegistry $blockStateRegistry;
 
 	private Weather $weather;
+	private NaturalMobSpawner $naturalMobSpawner;
 
 	/**
 	 * @phpstan-return ChunkPosHash
@@ -580,6 +583,22 @@ class World implements ChunkManager{
 		}
 		$this->tickedBlocksPerSubchunkPerTick = $cfg->getPropertyInt(YmlServerProperties::CHUNK_TICKING_BLOCKS_PER_SUBCHUNK_PER_TICK, self::DEFAULT_TICKED_BLOCKS_PER_SUBCHUNK_PER_TICK);
 		$this->maxConcurrentChunkPopulationTasks = $cfg->getPropertyInt(YmlServerProperties::CHUNK_GENERATION_POPULATION_QUEUE_SIZE, 2);
+
+		AiBudget::initialize(
+			$cfg->getPropertyInt("mobs.max-ai-updates-per-tick", 120),
+			$cfg->getPropertyInt("mobs.max-path-searches-per-tick", 8),
+			$cfg->getPropertyInt("mobs.max-path-nodes", 160)
+		);
+		$this->naturalMobSpawner = new NaturalMobSpawner(
+			$this,
+			$cfg->getPropertyBool("mobs.enabled", true) && $cfg->getPropertyBool("mobs.spawning.enabled", true),
+			$cfg->getPropertyInt("mobs.spawning.max-total", 72),
+			$cfg->getPropertyInt("mobs.spawning.max-monsters", 40),
+			$cfg->getPropertyInt("mobs.spawning.max-animals", 24),
+			$cfg->getPropertyInt("mobs.spawning.max-aquatic", 12),
+			$cfg->getPropertyInt("mobs.spawning.interval-ticks", 20),
+			$cfg->getPropertyInt("mobs.spawning.max-attempts", 6)
+		);
 
 		$this->initRandomTickBlocksFromConfig($cfg);
 
@@ -1122,6 +1141,7 @@ class World implements ChunkManager{
 
 		$this->timings->randomChunkUpdates->startTiming();
 		$this->tickChunks();
+		$this->naturalMobSpawner->tick($currentTick);
 		$this->timings->randomChunkUpdates->stopTiming();
 
 		$this->executeQueuedLightUpdates();

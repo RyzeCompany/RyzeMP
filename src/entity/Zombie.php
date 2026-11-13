@@ -23,14 +23,20 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
+use pocketmine\entity\ai\goal\ZombieAttackGoal;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use function mt_rand;
 
-class Zombie extends Living{
+class Zombie extends Mob{
 
 	public static function getNetworkTypeId() : string{ return EntityIds::ZOMBIE; }
+
+	protected function registerGoals() : void{
+		$this->getGoalSelector()->addGoal(1, new ZombieAttackGoal($this));
+		parent::registerGoals();
+	}
 
 	protected function getInitialSizeInfo() : EntitySizeInfo{
 		return new EntitySizeInfo(1.9, 0.6); //TODO: eye height ??
