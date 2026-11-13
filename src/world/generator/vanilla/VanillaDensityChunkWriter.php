@@ -330,6 +330,11 @@ final class VanillaDensityChunkWriter{
 		foreach(($terrain->palette ?? $this->materials->palette->getNames()) as $material => $javaId){
 			$states[$material] = JavaBlockMapping::toBlock($javaId)->getStateId();
 		}
+		// The original Chunk::setBlockStateId() resolves the subchunk and
+		// marks the same dirty flag for EVERY solid block. All terrain writes
+		// below are in the world height range; cache the subchunk references
+		// and mark the chunk dirty once without changing any block state.
+		$subChunks = $chunk->getSubChunks();
 		for($x = 0; $x < 16; ++$x){
 			for($z = 0; $z < 16; ++$z){
 				$base = (($x << 4) | $z) * $height;
@@ -341,13 +346,14 @@ final class VanillaDensityChunkWriter{
 						$state = $this->bedrock;
 					}
 					if($state !== $this->air){
-						$chunk->setBlockStateId($x, $y, $z, $state);
+						$subChunks[$y >> SubChunk::COORD_BIT_SIZE]->setBlockStateId($x, $y & SubChunk::COORD_MASK, $z, $state);
 						$highest = $y + 1;
 					}
 				}
 				$chunk->setHeightMap($x, $z, $highest);
 			}
 		}
+		$chunk->setTerrainDirtyFlag(Chunk::DIRTY_FLAG_BLOCKS, true);
 		if($this->features !== null){
 			$this->features->recordTerrain($chunkX, $chunkZ, $chunk);
 		}
