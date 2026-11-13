@@ -58,11 +58,11 @@ final class TrialChamberRewardItemTest extends TestCase{
 		$stack->ominousAmplifier = 3;
 		$bottle = LootItemConverter::toItem($stack, "");
 		self::assertNotNull($bottle);
-		self::assertSame(3, Item::safeNbtDeserialize($bottle->nbtSerialize())->getNamedTag()->getInt("ominous_bottle_amplifier"));
+		self::assertSame(3, Item::safeNbtDeserialize($bottle->nbtSerialize(), "vault bottle test")->getNamedTag()->getInt("ominous_bottle_amplifier"));
 
 		$crossbow = new Crossbow(new ItemIdentifier(ItemTypeIds::CROSSBOW), "Crossbow");
 		$crossbow->setDamage(17);
-		$restored = Item::safeNbtDeserialize($crossbow->nbtSerialize());
+		$restored = Item::safeNbtDeserialize($crossbow->nbtSerialize(), "vault crossbow test");
 		self::assertInstanceOf(Crossbow::class, $restored);
 		self::assertSame(17, $restored->getDamage());
 	}
