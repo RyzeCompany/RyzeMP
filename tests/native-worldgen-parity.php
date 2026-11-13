@@ -51,8 +51,14 @@ try{
 				if($native->getClient() === null){
 					throw new RuntimeException("Native helper unexpectedly fell back during $dimension chunk $chunkX,$chunkZ");
 				}
-				if($result->stage !== \pocketmine\world\generator\vanilla\TerrainChunk::STAGE_CARVED || $result->palette === null){
-					throw new RuntimeException("Go full-stage response is not material+carver-complete");
+				//The End has no carvers in the upstream 26.3 data. Go
+				//correctly returns STAGE_MATERIALS there; Nether/Overworld
+				//must return STAGE_CARVED when their carvers are present.
+				$requiredStage = $phpCarvers === null ?
+					\pocketmine\world\generator\vanilla\TerrainChunk::STAGE_MATERIALS :
+					\pocketmine\world\generator\vanilla\TerrainChunk::STAGE_CARVED;
+				if($result->stage < $requiredStage || $result->palette === null){
+					throw new RuntimeException("Go did not complete expected terrain stages for $dimension: returned " . $result->stage . ", required $requiredStage");
 				}
 				if($result->biomes !== $reference->biomes){
 					throw new RuntimeException("Go/PHP 3D biome mismatch for $dimension seed $seed chunk $chunkX,$chunkZ");
