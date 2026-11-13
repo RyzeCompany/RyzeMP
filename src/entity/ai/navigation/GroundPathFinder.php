@@ -2,6 +2,13 @@
 declare(strict_types=1);
 namespace pocketmine\entity\ai\navigation;
 
+use pocketmine\block\BaseFire;
+use pocketmine\block\Block;
+use pocketmine\block\Cactus;
+use pocketmine\block\Lava;
+use pocketmine\block\Magma;
+use pocketmine\block\SweetBerryBush;
+use pocketmine\block\Water;
 use pocketmine\math\Vector3;
 use pocketmine\world\World;
 use pocketmine\utils\Utils;
@@ -62,8 +69,21 @@ final class GroundPathFinder{
 	}
 	public static function walkable(World $w,int $x,int $y,int $z) : bool{
 		if($y<=$w->getMinY() || $y+1>=$w->getMaxY() || !$w->isChunkLoaded($x>>4,$z>>4)){return false;}
-		return $w->getBlockAt($x,$y-1,$z)->isSolid()
-			&& !$w->getBlockAt($x,$y,$z)->isSolid()
-			&& !$w->getBlockAt($x,$y+1,$z)->isSolid();
+		$ground = $w->getBlockAt($x, $y - 1, $z);
+		$feet = $w->getBlockAt($x, $y, $z);
+		$head = $w->getBlockAt($x, $y + 1, $z);
+		return $ground->isSolid() && !self::isHazardous($ground)
+			&& !$feet->isSolid() && !self::isHazardous($feet)
+			&& !$head->isSolid() && !self::isHazardous($head);
+	}
+	/**
+	 * Non-solid hazards are not safe air. A walking mob must not choose lava,
+	 * water, fire or berry bushes as a waypoint, nor magma as its footing.
+	 * The test is conservative: specialized swimmers get their own navigator.
+	 */
+	public static function isHazardous(Block $block) : bool{
+		return $block instanceof Lava || $block instanceof Water
+			|| $block instanceof BaseFire || $block instanceof Cactus
+			|| $block instanceof Magma || $block instanceof SweetBerryBush;
 	}
 }

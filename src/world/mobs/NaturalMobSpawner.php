@@ -9,6 +9,7 @@ use pocketmine\entity\animal\Chicken;
 use pocketmine\entity\animal\Cow;
 use pocketmine\entity\animal\Pig;
 use pocketmine\entity\animal\Sheep;
+use pocketmine\entity\ai\navigation\GroundPathFinder;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
@@ -121,10 +122,9 @@ final class NaturalMobSpawner{
 				}else{
 					$y=$height+1;
 				}
-				if(!$w->isInWorld($x,$y,$z) ||
-					!$w->getBlockAt($x,$y-1,$z)->isSolid() ||
-					$w->getBlockAt($x,$y,$z)->isSolid() ||
-					$w->getBlockAt($x,$y+1,$z)->isSolid()){
+				// Share the pathfinder's two-block clearance and hazard checks:
+				// no spawn inside lava, fire, berries or on unsafe footing.
+				if(!$w->isInWorld($x,$y,$z) || !GroundPathFinder::walkable($w,$x,$y,$z)){
 					continue;
 				}
 				$light=$w->getFullLightAt($x,$y,$z);
