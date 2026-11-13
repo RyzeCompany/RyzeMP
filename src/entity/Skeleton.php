@@ -42,5 +42,5 @@ class Skeleton extends Mob{
 	}
 
 	public function getXpDropAmount() : int{ return 5; }
-	public function getPickedItem() : ?Item{ return VanillaItems::SKELETON_SPAWN_EGG(); }
+	public function getPickedItem() : ?Item{ return null; }
 }

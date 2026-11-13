@@ -144,7 +144,7 @@ class Creeper extends Mob implements Explosive{
 		return $this->exploded ? [] : [VanillaItems::GUNPOWDER()->setCount(mt_rand(0, 2))];
 	}
 	public function getXpDropAmount() : int{ return 5; }
-	public function getPickedItem() : ?Item{ return VanillaItems::CREEPER_SPAWN_EGG(); }
+	public function getPickedItem() : ?Item{ return null; }
 
 	protected function syncNetworkData(EntityMetadataCollection $properties) : void{
 		parent::syncNetworkData($properties);
