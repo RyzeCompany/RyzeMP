@@ -192,6 +192,46 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame("1.21.0", $decoded->getGeometryDataEngineVersion());
 	}
 
+	/** @return array<string, array{int}> */
+	public static function classicLegacySourceProtocols() : array{
+		return [
+			'1.21.100 to 1.21.114' => [ProtocolInfo::PROTOCOL_1_21_100],
+			'1.21.114 to 1.21.114' => [ProtocolInfo::PROTOCOL_1_21_111]
+		];
+	}
+
+	#[DataProvider('classicLegacySourceProtocols')]
+	public function testClassicClientIdentitySurvivesPlayerListOn844(int $sourceProtocol) : void{
+		$incoming = new SkinData(
+			'classic-login',
+			'playfab-from-client',
+			'{"geometry":{"default":"geometry.humanoid.custom"}}',
+			new SkinImage(64, 64, str_repeat("\\x12\\x34\\x56\\xff", 64 * 64)),
+			geometryData: '{}',
+			geometryDataEngineVersion: '1.21.0',
+			fullSkinId: '11c30e00-3432-485a-96df-79ade5434382',
+			armSize: SkinData::ARM_SIZE_SLIM,
+			skinColor: '#FFAABBCC'
+		);
+		$adapter = new LegacySkinAdapter();
+		$skin = $adapter->fromSkinDataForProtocol($incoming, $sourceProtocol);
+		self::assertSame($incoming, $adapter->toSkinData($skin));
+		$outgoing = $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111);
+		self::assertSame($incoming, $outgoing);
+		self::assertSame($outgoing, $adapter->toSkinDataForProtocol($skin, ProtocolInfo::PROTOCOL_1_21_111));
+
+		$packet = PlayerListPacket::add([PlayerListEntry::createAdditionEntry(Uuid::uuid4(), 42, 'ClassicPlayer', $outgoing)]);
+		$wire = new ByteBufferWriter();
+		$packet->encode($wire, ProtocolInfo::PROTOCOL_1_21_111);
+		$decoded = new PlayerListPacket();
+		$decoded->decode(new ByteBufferReader($wire->getData()), ProtocolInfo::PROTOCOL_1_21_111);
+		$skinData = $decoded->entries[0]->skinData;
+		self::assertSame($incoming->getFullSkinId(), $skinData->getFullSkinId());
+		self::assertSame($incoming->getPlayFabId(), $skinData->getPlayFabId());
+		self::assertSame($incoming->getArmSize(), $skinData->getArmSize());
+		self::assertSame($incoming->getSkinColor(), $skinData->getSkinColor());
+	}
+
 	public function testModernClassicGeometryDowngradesForLegacyViewer() : void{
 		$geometry = '{"format_version":"1.26.52","minecraft:geometry":[]}';
 		$incoming = new SkinData(
@@ -212,6 +252,7 @@ final class MultiVersionSkinAdapterTest extends TestCase{
 		self::assertSame($skin->getSkinData(), $legacy->getSkinImage()->getData());
 		self::assertSame('{"geometry":{"default":"geometry.custom.ryze"}}', $modern->getResourcePatch());
 		self::assertSame($geometry, $modern->getGeometryData());
+		self::assertSame($incoming, $modern);
 	}
 
 	public function testClassicSkinUsesRecipientGeometryVersionAndStableId() : void{
