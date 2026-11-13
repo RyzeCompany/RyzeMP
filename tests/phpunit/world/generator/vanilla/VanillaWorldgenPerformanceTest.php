@@ -48,7 +48,7 @@ final class VanillaWorldgenPerformanceTest extends TestCase{
             1, 0, 0, null, [],
             static function(Chunk $chunk, array $adjacentChunks) : void{}
         );
-        self::assertInstanceOf(\pocketmine\world\generator\PopulationTask::class, $task);
+        self::assertSame("", (new \ReflectionProperty($task, "worldgenStages"))->getValue($task));
     }
 
     public function testProfilerDisabledAndResetSafely() : void{
