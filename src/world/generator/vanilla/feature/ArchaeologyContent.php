@@ -25,12 +25,16 @@ use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\item\Brush;
 use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemTypeIds;
+use pocketmine\item\PotterySherd;
+use pocketmine\item\PotterySherdType;
+use function strtolower;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 
 final class ArchaeologyContent{
+	private static bool $sherdsRegistered = false;
 	private function __construct(){}
 
 	/** @internal */
@@ -41,6 +45,31 @@ final class ArchaeologyContent{
 		GlobalItemDataHandlers::getDeserializer()->map(ItemTypeNames::BRUSH, static fn() : Brush => clone $brush);
 		GlobalItemDataHandlers::getSerializer()->map($brush, static fn() : SavedItemData => new SavedItemData(ItemTypeNames::BRUSH));
 		StringToItemParser::getInstance()->register("brush", static fn() : Brush => clone $brush);
+		self::registerSherds();
+	}
+
+
+	/**
+	 * Registers all 23 vanilla pottery sherds with a single stateful item type,
+	 * just as VanillaMine does. Names are serialized as individual Bedrock IDs;
+	 * multi-version packet adapters remain responsible for older client fallbacks.
+	 * @internal
+	 */
+	public static function registerSherds() : void{
+		if(self::$sherdsRegistered){
+			return;
+		}
+		$prototype = new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd");
+		$deserializer = GlobalItemDataHandlers::getDeserializer();
+		foreach(PotterySherdType::cases() as $type){
+			$id = "minecraft:" . strtolower($type->name) . "_pottery_sherd";
+			$sherd = (clone $prototype)->setSherdType($type);
+			$deserializer->map($id, static fn() : PotterySherd => clone $sherd);
+			StringToItemParser::getInstance()->register($id, static fn() : PotterySherd => clone $sherd);
+		}
+		GlobalItemDataHandlers::getSerializer()->map($prototype, static fn(PotterySherd $item) : SavedItemData =>
+			new SavedItemData("minecraft:" . strtolower($item->getSherdType()->name) . "_pottery_sherd"));
+		self::$sherdsRegistered = true;
 	}
 
 	/** @internal */
