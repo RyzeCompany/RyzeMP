@@ -60,12 +60,16 @@ final class VanillaWorldgenSetupTest extends TestCase{
         self::assertSame("world", $props->get("level-name"));
         self::assertSame(VanillaWorldgenSetup::GENERATOR, $props->get("level-type"));
         self::assertSame("12345", $props->get("level-seed"));
-        self::assertSame("19132", (string) $props->get("server-port"));
+        self::assertEquals("19132", $props->get("server-port"));
         $preset = "core-v6;data=" . $data["path"] . ";sha256=" . $data["hash"];
         self::assertSame($preset, $props->get("generator-settings"));
         $dims = new Config($this->root . "/dimensions.yml", Config::YAML);
-        self::assertSame($preset, $dims->getAll()["nether"]["worldgen-preset"]);
-        self::assertSame($preset, $dims->getAll()["end"]["worldgen-preset"]);
+        $nether = $dims->getAll()["nether"] ?? null;
+        $end = $dims->getAll()["end"] ?? null;
+        self::assertIsArray($nether);
+        self::assertIsArray($end);
+        self::assertSame($preset, $nether["worldgen-preset"]);
+        self::assertSame($preset, $end["worldgen-preset"]);
         $before = file_get_contents($this->root . "/server.properties");
         VanillaWorldgenSetup::configureWorlds($this->root, $data["path"], $data["hash"], $this->logger());
         self::assertSame($before, file_get_contents($this->root . "/server.properties"));
@@ -83,8 +87,12 @@ final class VanillaWorldgenSetupTest extends TestCase{
         $props = new Config($this->root . "/server.properties", Config::PROPERTIES);
         self::assertSame("world_vanilla_test", $props->get("level-name"));
         $dims = new Config($this->root . "/dimensions.yml", Config::YAML);
-        self::assertSame("world_vanilla_test_nether", $dims->getAll()["nether"]["world"]);
-        self::assertSame("world_vanilla_test_end", $dims->getAll()["end"]["world"]);
+        $nether = $dims->getAll()["nether"] ?? null;
+        $end = $dims->getAll()["end"] ?? null;
+        self::assertIsArray($nether);
+        self::assertIsArray($end);
+        self::assertSame("world_vanilla_test_nether", $nether["world"]);
+        self::assertSame("world_vanilla_test_end", $end["world"]);
         foreach(["world", "world_nether", "world_the_end"] as $name){
             self::assertSame("SENTINEL-" . $name,
                 file_get_contents($this->root . "/worlds/" . $name . "/level.dat"));
