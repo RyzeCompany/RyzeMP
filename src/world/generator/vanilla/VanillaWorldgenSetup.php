@@ -82,13 +82,24 @@ final class VanillaWorldgenSetup{
         $currentPreset = self::asConfigString($properties->get("generator-settings", ""));
 
         if($worldExists && $currentType === self::GENERATOR){
-            if($currentPreset !== $preset){
+            if($currentPreset === $preset){
+                $logger("Preserving existing Vanilla world $originalName with its original cache identity.");
+                VanillaDensityChunkWriter::validatePreset($currentPreset);
+                return;
+            }
+            try{
+                // A valid pinned preset must not be changed on any existing world.
+                // A fake HASH_REAL placeholder is NOT a pinned preset.
+                VanillaDataIdentity::parse($currentPreset);
+            }catch(\pocketmine\world\generator\InvalidGeneratorOptionsException){
+                $logger("Ignoring the invalid legacy HASH_REAL placeholder; creating a separate Vanilla test world.");
+                // The previous world is preserved, even if its properties are invalid.
+            }
+            // When the preset was valid but differs from the verified cache,
+            // do not continue and silently change an existing Vanilla world.
+            if(preg_match('/;sha256=[a-f0-9]{64}$/D', $currentPreset) === 1){
                 throw new \RuntimeException("Existing Vanilla world $originalName uses a different pinned cache. Refusing to change the world generator.");
             }
-            $logger("Preserving existing Vanilla world $originalName with its original cache identity.");
-            // Re-validate without overwriting the original pinned world.
-            VanillaDensityChunkWriter::validatePreset($currentPreset);
-            return;
         }
 
         $newName = $originalName;
