@@ -1439,6 +1439,10 @@ class NetworkSession{
 		// Resolve all enum definitions consistently across the entire command list,
 		// not one command at a time (subcommand overloads repeat enum names).
 		$normalized = \pocketmine\command\CommandMetadata::canonicalizePacketEnums(array_values($commandData));
+		// Controlled experiment C: the two synthetic probes have identical enum
+		// values, but only crateprobenative gets client-safe (no ':') enum names.
+		// No production command metadata or execution is modified.
+		$normalized = \pocketmine\command\CommandMetadata::rewriteDiagnosticProbeEnumNames($normalized);
 		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble($normalized, [], []));
 	}
 
