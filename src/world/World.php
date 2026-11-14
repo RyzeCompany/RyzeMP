@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 34268)
-Total output lines: 3955
-
 <?php
 
 /*
@@ -1338,7 +1335,1432 @@ class World implements ChunkManager{
 	 * @return true[] fullID => dummy
 	 * @phpstan-return array<int, true>
 	 */
-	public function getRandomTickedBlocks() :…12268 tokens truncated…y<ChunkPosHash, Chunk|null>
+	public function getRandomTickedBlocks() : array{
+		return $this->randomTickBlocks;
+	}
+
+	public function addRandomTickedBlock(Block $block) : void{
+		if($block instanceof UnknownBlock){
+			throw new \InvalidArgumentException("Cannot do random-tick on unknown block");
+		}
+		$this->randomTickBlocks[$block->getStateId()] = true;
+	}
+
+	public function removeRandomTickedBlock(Block $block) : void{
+		unset($this->randomTickBlocks[$block->getStateId()]);
+	}
+
+	/**
+	 * Returns the radius of chunks to be ticked around each player. This is referred to as "simulation distance" in the
+	 * Minecraft: Bedrock world options screen.
+	 */
+	public function getChunkTickRadius() : int{
+		return $this->chunkTickRadius;
+	}
+
+	/**
+	 * Sets the radius of chunks ticked around each player. This may not take effect immediately, since each player
+	 * needs to recalculate their tick radius.
+	 */
+	public function setChunkTickRadius(int $radius) : void{
+		$this->chunkTickRadius = $radius;
+	}
+
+	/**
+	 * Returns a list of chunk position hashes (as returned by World::chunkHash()) which are currently valid for
+	 * ticking.
+	 *
+	 * @return int[]
+	 * @phpstan-return list<ChunkPosHash>
+	 */
+	public function getTickingChunks() : array{
+		return array_keys($this->validTickingChunks);
+	}
+
+	/**
+	 * Instructs the World to tick the specified chunk, for as long as this chunk ticker (or any other chunk ticker) is
+	 * registered to it.
+	 */
+	public function registerTickingChunk(ChunkTicker $ticker, int $chunkX, int $chunkZ) : void{
+		$chunkPosHash = World::chunkHash($chunkX, $chunkZ);
+		$this->registeredTickingChunks[$chunkPosHash][spl_object_id($ticker)] = $ticker;
+		$this->recheckTickingChunks[$chunkPosHash] = $chunkPosHash;
+	}
+
+	/**
+	 * Unregisters the given chunk ticker from the specified chunk. If there are other tickers still registered to the
+	 * chunk, it will continue to be ticked.
+	 */
+	public function unregisterTickingChunk(ChunkTicker $ticker, int $chunkX, int $chunkZ) : void{
+		$chunkHash = World::chunkHash($chunkX, $chunkZ);
+		$tickerId = spl_object_id($ticker);
+		if(isset($this->registeredTickingChunks[$chunkHash][$tickerId])){
+			if(count($this->registeredTickingChunks[$chunkHash]) === 1){
+				unset(
+					$this->registeredTickingChunks[$chunkHash],
+					$this->recheckTickingChunks[$chunkHash],
+					$this->validTickingChunks[$chunkHash]
+				);
+			}else{
+				unset($this->registeredTickingChunks[$chunkHash][$tickerId]);
+			}
+		}
+	}
+
+	private function tickChunks() : void{
+		if($this->chunkTickRadius <= 0 || count($this->registeredTickingChunks) === 0){
+			return;
+		}
+
+		if(count($this->recheckTickingChunks) > 0){
+			$this->timings->randomChunkUpdatesChunkSelection->startTiming();
+
+			$chunkTickableCache = [];
+
+			foreach($this->recheckTickingChunks as $hash => $_){
+				World::getXZ($hash, $chunkX, $chunkZ);
+				if($this->isChunkTickable($chunkX, $chunkZ, $chunkTickableCache)){
+					$this->validTickingChunks[$hash] = $hash;
+				}
+			}
+			$this->recheckTickingChunks = [];
+
+			$this->timings->randomChunkUpdatesChunkSelection->stopTiming();
+		}
+
+		foreach($this->validTickingChunks as $index => $_){
+			World::getXZ($index, $chunkX, $chunkZ);
+
+			$this->tickChunk($chunkX, $chunkZ);
+		}
+	}
+
+	/**
+	 * @param bool[] &$cache
+	 *
+	 * @phpstan-param array<int, bool> $cache
+	 * @phpstan-param-out array<int, bool> $cache
+	 */
+	private function isChunkTickable(int $chunkX, int $chunkZ, array &$cache) : bool{
+		for($cx = -1; $cx <= 1; ++$cx){
+			for($cz = -1; $cz <= 1; ++$cz){
+				$chunkHash = World::chunkHash($chunkX + $cx, $chunkZ + $cz);
+				if(isset($cache[$chunkHash])){
+					if(!$cache[$chunkHash]){
+						return false;
+					}
+					continue;
+				}
+				if($this->isChunkLocked($chunkX + $cx, $chunkZ + $cz)){
+					$cache[$chunkHash] = false;
+					return false;
+				}
+				$adjacentChunk = $this->getChunk($chunkX + $cx, $chunkZ + $cz);
+				if($adjacentChunk === null || !$adjacentChunk->isPopulated()){
+					$cache[$chunkHash] = false;
+					return false;
+				}
+				$lightPopulatedState = $adjacentChunk->isLightPopulated();
+				if($lightPopulatedState !== true){
+					if($lightPopulatedState === false){
+						$this->orderLightPopulation($chunkX + $cx, $chunkZ + $cz);
+					}
+					$cache[$chunkHash] = false;
+					return false;
+				}
+
+				$cache[$chunkHash] = true;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Marks the 3x3 square of chunks centered on the specified chunk for chunk ticking eligibility recheck.
+	 *
+	 * This should be used whenever the chunk's eligibility to be ticked is changed. This includes:
+	 * - Loading/unloading the chunk (the chunk may be registered for ticking before it is loaded)
+	 * - Locking/unlocking the chunk (e.g. world population)
+	 * - Light populated state change (i.e. scheduled for light population, or light population completed)
+	 * - Arbitrary chunk replacement (i.e. setChunk() or similar)
+	 */
+	private function markTickingChunkForRecheck(int $chunkX, int $chunkZ) : void{
+		for($cx = -1; $cx <= 1; ++$cx){
+			for($cz = -1; $cz <= 1; ++$cz){
+				$chunkHash = World::chunkHash($chunkX + $cx, $chunkZ + $cz);
+				unset($this->validTickingChunks[$chunkHash]);
+				if(isset($this->registeredTickingChunks[$chunkHash])){
+					$this->recheckTickingChunks[$chunkHash] = $chunkHash;
+				}else{
+					unset($this->recheckTickingChunks[$chunkHash]);
+				}
+			}
+		}
+	}
+
+	private function orderLightPopulation(int $chunkX, int $chunkZ) : void{
+		$chunkHash = World::chunkHash($chunkX, $chunkZ);
+		$lightPopulatedState = $this->chunks[$chunkHash]->isLightPopulated();
+		if($lightPopulatedState === false){
+			$this->chunks[$chunkHash]->setLightPopulated(null);
+			$this->markTickingChunkForRecheck($chunkX, $chunkZ);
+
+			$this->workerPool->submitTask(new LightPopulationTask(
+				$this->chunks[$chunkHash],
+				function(array $blockLight, array $skyLight, array $heightMap) use ($chunkX, $chunkZ) : void{
+					/**
+					 * TODO: phpstan can't infer these types yet :(
+					 * @phpstan-var array<int, LightArray> $blockLight
+					 * @phpstan-var array<int, LightArray> $skyLight
+					 * @phpstan-var non-empty-list<int>    $heightMap
+					 */
+					if($this->unloaded || ($chunk = $this->getChunk($chunkX, $chunkZ)) === null || $chunk->isLightPopulated() === true){
+						return;
+					}
+					//TODO: calculated light information might not be valid if the terrain changed during light calculation
+
+					$chunk->setHeightMapArray($heightMap);
+					foreach($blockLight as $y => $lightArray){
+						$chunk->getSubChunk($y)->setBlockLightArray($lightArray);
+					}
+					foreach($skyLight as $y => $lightArray){
+						$chunk->getSubChunk($y)->setBlockSkyLightArray($lightArray);
+					}
+					$chunk->setLightPopulated(true);
+					$this->markTickingChunkForRecheck($chunkX, $chunkZ);
+				}
+			));
+		}
+	}
+
+	private function tickChunk(int $chunkX, int $chunkZ) : void{
+		$chunk = $this->getChunk($chunkX, $chunkZ);
+		if($chunk === null){
+			//the chunk may have been unloaded during a previous chunk's update (e.g. during BlockGrowEvent)
+			return;
+		}
+		$this->weather->tickChunk($chunkX, $chunkZ);
+		foreach($this->getChunkEntities($chunkX, $chunkZ) as $entity){
+			$entity->onRandomUpdate();
+		}
+
+		$blockFactory = $this->blockStateRegistry;
+		foreach($chunk->getSubChunks() as $Y => $subChunk){
+			if(!$subChunk->isEmptyFast()){
+				$k = 0;
+				for($i = 0; $i < $this->tickedBlocksPerSubchunkPerTick; ++$i){
+					if(($i % 5) === 0){
+						//60 bits will be used by 5 blocks (12 bits each)
+						$k = mt_rand(0, (1 << 60) - 1);
+					}
+					$x = $k & SubChunk::COORD_MASK;
+					$y = ($k >> SubChunk::COORD_BIT_SIZE) & SubChunk::COORD_MASK;
+					$z = ($k >> (SubChunk::COORD_BIT_SIZE * 2)) & SubChunk::COORD_MASK;
+					$k >>= (SubChunk::COORD_BIT_SIZE * 3);
+
+					$state = $subChunk->getBlockStateId($x, $y, $z);
+
+					if(isset($this->randomTickBlocks[$state])){
+						$block = $blockFactory->fromStateId($state);
+						$block->position($this, $chunkX * Chunk::EDGE_LENGTH + $x, ($Y << SubChunk::COORD_BIT_SIZE) + $y, $chunkZ * Chunk::EDGE_LENGTH + $z);
+						$block->onRandomTick();
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @return mixed[]
+	 */
+	public function __debugInfo() : array{
+		return [];
+	}
+
+	public function save(bool $force = false) : bool{
+
+		if(!$this->getAutoSave() && !$force){
+			return false;
+		}
+
+		(new WorldSaveEvent($this))->call();
+
+		$timings = $this->timings->syncDataSave;
+		$timings->startTiming();
+
+		$this->provider->getWorldData()->setTime($this->time);
+		$this->weather->save($this->provider->getWorldData());
+		$this->saveChunks();
+		$this->provider->getWorldData()->save();
+
+		$timings->stopTiming();
+
+		return true;
+	}
+
+	public function saveChunks() : void{
+		$this->timings->syncChunkSave->startTiming();
+		try{
+			foreach($this->chunks as $chunkHash => $chunk){
+				self::getXZ($chunkHash, $chunkX, $chunkZ);
+				$this->provider->saveChunk($chunkX, $chunkZ, new ChunkData(
+					$chunk->getSubChunks(),
+					$chunk->isPopulated(),
+					array_map(fn(Entity $e) => $e->saveNBT(), array_values(array_filter($this->getChunkEntities($chunkX, $chunkZ), fn(Entity $e) => $e->canSaveWithChunk()))),
+					array_map(fn(Tile $t) => $t->saveNBT(), array_values($chunk->getTiles())),
+				), $chunk->getTerrainDirtyFlags());
+				$chunk->clearTerrainDirtyFlags();
+			}
+		}finally{
+			$this->timings->syncChunkSave->stopTiming();
+		}
+	}
+
+	/**
+	 * Schedules a block update to be executed after the specified number of ticks.
+	 * Blocks will be updated with the scheduled update type.
+	 */
+	public function scheduleDelayedBlockUpdate(Vector3 $pos, int $delay, bool $replaceExisting = false) : void{
+		if(!$this->isInWorld($pos->x, $pos->y, $pos->z)){
+			return;
+		}
+		$index = World::blockHash($pos->x, $pos->y, $pos->z);
+		$dueTick = $this->server->getTick() + max(1, $delay);
+		if(!$replaceExisting && isset($this->scheduledBlockUpdateQueueIndex[$index]) && $this->scheduledBlockUpdateQueueIndex[$index] <= $dueTick){
+			return;
+		}
+		$this->scheduledBlockUpdateQueueIndex[$index] = $dueTick;
+		$this->scheduledBlockUpdateQueue->insert(new Vector3((int) $pos->x, (int) $pos->y, (int) $pos->z), $dueTick);
+	}
+
+	/** Whether this location has a live delayed update (not a stale replaced entry). */
+	public function isBlockUpdateScheduled(Vector3 $pos) : bool{
+		return isset($this->scheduledBlockUpdateQueueIndex[World::blockHash($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())]);
+	}
+
+	private function tryAddToNeighbourUpdateQueue(int $x, int $y, int $z) : void{
+		if($this->isInWorld($x, $y, $z)){
+			$hash = World::blockHash($x, $y, $z);
+			if(!isset($this->neighbourBlockUpdateQueueIndex[$hash])){
+				$this->neighbourBlockUpdateQueue->enqueue($hash);
+				$this->neighbourBlockUpdateQueueIndex[$hash] = true;
+			}
+		}
+	}
+
+	/**
+	 * Identical to {@link World::notifyNeighbourBlockUpdate()}, but without the Vector3 requirement. We don't want or
+	 * need Vector3 in the places where this is called.
+	 *
+	 * TODO: make this the primary method in PM6
+	 */
+	private function internalNotifyNeighbourBlockUpdate(int $x, int $y, int $z) : void{
+		$this->tryAddToNeighbourUpdateQueue($x, $y, $z);
+		foreach(Facing::OFFSET as [$dx, $dy, $dz]){
+			$this->tryAddToNeighbourUpdateQueue($x + $dx, $y + $dy, $z + $dz);
+		}
+	}
+
+	/**
+	 * Notify the blocks at and around the position that the block at the position may have changed.
+	 * This will cause onNearbyBlockChange() to be called for these blocks.
+	 * TODO: Accept plain integers in PM6 - the Vector3 requirement is an unnecessary inconvenience
+	 *
+	 * @see Block::onNearbyBlockChange()
+	 */
+	public function notifyNeighbourBlockUpdate(Vector3 $pos) : void{
+		$this->internalNotifyNeighbourBlockUpdate($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
+	}
+
+	/**
+	 * Returns the strongest vanilla-style power emitted into the specified block by
+	 * directly adjacent sources. This interface is available to native blocks and plugins.
+	 * Unloaded neighboring chunks are never loaded by a power query.
+	 */
+	public function getRedstonePowerAt(int $x, int $y, int $z) : int{
+		$power = 0;
+		foreach(Facing::ALL as $side){
+			[$dx, $dy, $dz] = Facing::OFFSET[$side];
+			$nx = $x + $dx;
+			$ny = $y + $dy;
+			$nz = $z + $dz;
+			if(!$this->isInWorld($nx, $ny, $nz) ||
+				!$this->isChunkLoaded($nx >> Chunk::COORD_BIT_SIZE, $nz >> Chunk::COORD_BIT_SIZE)
+			){
+				continue;
+			}
+			$neighbor = $this->getBlockAt($nx, $ny, $nz);
+			$sourceFace = Facing::opposite($side);
+			$power = max($power, $neighbor->getWeakPower($sourceFace), $neighbor->getStrongPower($sourceFace));
+			if($power >= 15){
+				return 15;
+			}
+		}
+		return $power;
+	}
+
+	/**
+	 * @return Block[]
+	 * @phpstan-return list<Block>
+	 */
+	public function getCollisionBlocks(AxisAlignedBB $bb, bool $targetFirst = false) : array{
+		$minX = (int) floor($bb->minX - 1);
+		$minY = (int) floor($bb->minY - 1);
+		$minZ = (int) floor($bb->minZ - 1);
+		$maxX = (int) floor($bb->maxX + 1);
+		$maxY = (int) floor($bb->maxY + 1);
+		$maxZ = (int) floor($bb->maxZ + 1);
+
+		$collides = [];
+
+		$collisionInfo = $this->blockStateRegistry->collisionInfo;
+		if($targetFirst){
+			for($z = $minZ; $z <= $maxZ; ++$z){
+				$zOverflow = $z === $minZ || $z === $maxZ;
+				for($x = $minX; $x <= $maxX; ++$x){
+					$zxOverflow = $zOverflow || $x === $minX || $x === $maxX;
+					for($y = $minY; $y <= $maxY; ++$y){
+						$overflow = $zxOverflow || $y === $minY || $y === $maxY;
+
+						$stateCollisionInfo = $this->getBlockCollisionInfo($x, $y, $z, $collisionInfo);
+						if($overflow ?
+							$stateCollisionInfo === RuntimeBlockStateRegistry::COLLISION_MAY_OVERFLOW && $this->getBlockAt($x, $y, $z)->collidesWithBB($bb) :
+							match ($stateCollisionInfo) {
+								RuntimeBlockStateRegistry::COLLISION_CUBE => true,
+								RuntimeBlockStateRegistry::COLLISION_NONE => false,
+								default => $this->getBlockAt($x, $y, $z)->collidesWithBB($bb)
+							}
+						){
+							return [$this->getBlockAt($x, $y, $z)];
+						}
+					}
+				}
+			}
+		}else{
+			//TODO: duplicated code :( this way is better for performance though
+			for($z = $minZ; $z <= $maxZ; ++$z){
+				$zOverflow = $z === $minZ || $z === $maxZ;
+				for($x = $minX; $x <= $maxX; ++$x){
+					$zxOverflow = $zOverflow || $x === $minX || $x === $maxX;
+					for($y = $minY; $y <= $maxY; ++$y){
+						$overflow = $zxOverflow || $y === $minY || $y === $maxY;
+
+						$stateCollisionInfo = $this->getBlockCollisionInfo($x, $y, $z, $collisionInfo);
+						if($overflow ?
+							$stateCollisionInfo === RuntimeBlockStateRegistry::COLLISION_MAY_OVERFLOW && $this->getBlockAt($x, $y, $z)->collidesWithBB($bb) :
+							match ($stateCollisionInfo) {
+								RuntimeBlockStateRegistry::COLLISION_CUBE => true,
+								RuntimeBlockStateRegistry::COLLISION_NONE => false,
+								default => $this->getBlockAt($x, $y, $z)->collidesWithBB($bb)
+							}
+						){
+							$collides[] = $this->getBlockAt($x, $y, $z);
+						}
+					}
+				}
+			}
+		}
+
+		return $collides;
+	}
+
+	/**
+	 * @param int[] $collisionInfo
+	 * @phpstan-param array<int, int> $collisionInfo
+	 */
+	private function getBlockCollisionInfo(int $x, int $y, int $z, array $collisionInfo) : int{
+		if(!$this->isInWorld($x, $y, $z)){
+			return RuntimeBlockStateRegistry::COLLISION_NONE;
+		}
+		$chunk = $this->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE);
+		if($chunk === null){
+			return RuntimeBlockStateRegistry::COLLISION_NONE;
+		}
+		$stateId = $chunk
+			->getSubChunk($y >> SubChunk::COORD_BIT_SIZE)
+			->getBlockStateId(
+				$x & SubChunk::COORD_MASK,
+				$y & SubChunk::COORD_MASK,
+				$z & SubChunk::COORD_MASK
+			);
+		return $collisionInfo[$stateId];
+	}
+
+	/**
+	 * Returns a list of all block AABBs which overlap the full block area at the given coordinates.
+	 * This checks a padding of 1 block around the coordinates to account for oversized AABBs of blocks like fences.
+	 * Larger AABBs (>= 2 blocks on any axis) are not accounted for.
+	 *
+	 * @param int[] $collisionInfo
+	 * @phpstan-param array<int, int> $collisionInfo
+	 *
+	 * @return AxisAlignedBB[]
+	 * @phpstan-return list<AxisAlignedBB>
+	 */
+	private function getBlockCollisionBoxesForCell(int $x, int $y, int $z, array $collisionInfo) : array{
+		$stateCollisionInfo = $this->getBlockCollisionInfo($x, $y, $z, $collisionInfo);
+		$boxes = match($stateCollisionInfo){
+			RuntimeBlockStateRegistry::COLLISION_NONE => [],
+			RuntimeBlockStateRegistry::COLLISION_CUBE => [AxisAlignedBB::one()->offset($x, $y, $z)],
+			default => $this->getBlockAt($x, $y, $z)->getCollisionBoxes()
+		};
+
+		//overlapping AABBs can't make any difference if this is a cube, so we can save some CPU cycles in this common case
+		if($stateCollisionInfo !== RuntimeBlockStateRegistry::COLLISION_CUBE){
+			$cellBB = null;
+			foreach(Facing::OFFSET as [$dx, $dy, $dz]){
+				$offsetX = $x + $dx;
+				$offsetY = $y + $dy;
+				$offsetZ = $z + $dz;
+				$stateCollisionInfo = $this->getBlockCollisionInfo($offsetX, $offsetY, $offsetZ, $collisionInfo);
+				if($stateCollisionInfo === RuntimeBlockStateRegistry::COLLISION_MAY_OVERFLOW){
+					//avoid allocating this unless it's needed
+					$cellBB ??= AxisAlignedBB::one()->offset($x, $y, $z);
+					$extraBoxes = $this->getBlockAt($offsetX, $offsetY, $offsetZ)->getCollisionBoxes();
+					foreach($extraBoxes as $extraBox){
+						if($extraBox->intersectsWith($cellBB)){
+							$boxes[] = $extraBox;
+						}
+					}
+				}
+			}
+		}
+
+		return $boxes;
+	}
+
+	/**
+	 * @return AxisAlignedBB[]
+	 * @phpstan-return list<AxisAlignedBB>
+	 */
+	public function getBlockCollisionBoxes(AxisAlignedBB $bb) : array{
+		$minX = (int) floor($bb->minX);
+		$minY = (int) floor($bb->minY);
+		$minZ = (int) floor($bb->minZ);
+		$maxX = (int) floor($bb->maxX);
+		$maxY = (int) floor($bb->maxY);
+		$maxZ = (int) floor($bb->maxZ);
+
+		$collides = [];
+
+		$collisionInfo = $this->blockStateRegistry->collisionInfo;
+
+		for($z = $minZ; $z <= $maxZ; ++$z){
+			for($x = $minX; $x <= $maxX; ++$x){
+				$chunkPosHash = World::chunkHash($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE);
+				for($y = $minY; $y <= $maxY; ++$y){
+					$relativeBlockHash = World::chunkBlockHash($x, $y, $z);
+
+					$boxes = $this->blockCollisionBoxCache[$chunkPosHash][$relativeBlockHash] ??= $this->getBlockCollisionBoxesForCell($x, $y, $z, $collisionInfo);
+
+					foreach($boxes as $blockBB){
+						if($blockBB->intersectsWith($bb)){
+							$collides[] = $blockBB;
+						}
+					}
+				}
+			}
+		}
+
+		return $collides;
+	}
+
+	/**
+	 * @deprecated Use {@link World::getBlockCollisionBoxes()} instead (alongside {@link World::getCollidingEntities()}
+	 * if entity collision boxes are also required).
+	 *
+	 * @return AxisAlignedBB[]
+	 * @phpstan-return list<AxisAlignedBB>
+	 */
+	public function getCollisionBoxes(Entity $entity, AxisAlignedBB $bb, bool $entities = true) : array{
+		$collides = $this->getBlockCollisionBoxes($bb);
+
+		if($entities){
+			foreach($this->getCollidingEntities($bb->expandedCopy(0.25, 0.25, 0.25), $entity) as $ent){
+				$collides[] = clone $ent->boundingBox;
+			}
+		}
+
+		return $collides;
+	}
+
+	/**
+	 * Computes the percentage of a circle away from noon the sun is currently at. This can be multiplied by 2 * M_PI to
+	 * get an angle in radians, or by 360 to get an angle in degrees.
+	 */
+	public function computeSunAnglePercentage() : float{
+		$timeProgress = ($this->time % self::TIME_FULL) / self::TIME_FULL;
+
+		//0.0 needs to be high noon, not dusk
+		$sunProgress = $timeProgress + ($timeProgress < 0.25 ? 0.75 : -0.25);
+
+		//Offset the sun progress to be above the horizon longer at dusk and dawn
+		//this is roughly an inverted sine curve, which pushes the sun progress back at dusk and forwards at dawn
+		$diff = (((1 - ((cos($sunProgress * M_PI) + 1) / 2)) - $sunProgress) / 3);
+
+		return $sunProgress + $diff;
+	}
+
+	/**
+	 * Returns the percentage of a circle away from noon the sun is currently at.
+	 */
+	public function getSunAnglePercentage() : float{
+		return $this->sunAnglePercentage;
+	}
+
+	/**
+	 * Returns the current sun angle in radians.
+	 */
+	public function getSunAngleRadians() : float{
+		return $this->sunAnglePercentage * 2 * M_PI;
+	}
+
+	/**
+	 * Returns the current sun angle in degrees.
+	 */
+	public function getSunAngleDegrees() : float{
+		return $this->sunAnglePercentage * 360.0;
+	}
+
+	/**
+	 * Computes how many points of sky light is subtracted based on the current time. Used to offset raw chunk sky light
+	 * to get a real light value.
+	 */
+	public function computeSkyLightReduction() : int{
+		$percentage = max(0, min(1, -(cos($this->getSunAngleRadians()) * 2 - 0.5)));
+
+		//TODO: check rain and thunder level
+
+		return (int) ($percentage * 11);
+	}
+
+	/**
+	 * Returns how many points of sky light is subtracted based on the current time.
+	 */
+	public function getSkyLightReduction() : int{
+		return $this->skyLightReduction;
+	}
+
+	/**
+	 * Returns the highest level of any type of light at the given coordinates, adjusted for the current weather and
+	 * time of day.
+	 */
+	public function getFullLight(Vector3 $pos) : int{
+		$floorX = $pos->getFloorX();
+		$floorY = $pos->getFloorY();
+		$floorZ = $pos->getFloorZ();
+		return $this->getFullLightAt($floorX, $floorY, $floorZ);
+	}
+
+	/**
+	 * Returns the highest level of any type of light at the given coordinates, adjusted for the current weather and
+	 * time of day.
+	 */
+	public function getFullLightAt(int $x, int $y, int $z) : int{
+		$skyLight = $this->getRealBlockSkyLightAt($x, $y, $z);
+		if($skyLight < 15){
+			return max($skyLight, $this->getBlockLightAt($x, $y, $z));
+		}else{
+			return $skyLight;
+		}
+	}
+
+	/**
+	 * Returns the highest level of any type of light at, or adjacent to, the given coordinates, adjusted for the
+	 * current weather and time of day.
+	 */
+	public function getHighestAdjacentFullLightAt(int $x, int $y, int $z) : int{
+		return $this->getHighestAdjacentLight($x, $y, $z, $this->getFullLightAt(...));
+	}
+
+	/**
+	 * Returns the highest potential level of any type of light at the target coordinates.
+	 * This is not affected by weather or time of day.
+	 */
+	public function getPotentialLight(Vector3 $pos) : int{
+		$floorX = $pos->getFloorX();
+		$floorY = $pos->getFloorY();
+		$floorZ = $pos->getFloorZ();
+		return $this->getPotentialLightAt($floorX, $floorY, $floorZ);
+	}
+
+	/**
+	 * Returns the highest potential level of any type of light at the target coordinates.
+	 * This is not affected by weather or time of day.
+	 */
+	public function getPotentialLightAt(int $x, int $y, int $z) : int{
+		return max($this->getPotentialBlockSkyLightAt($x, $y, $z), $this->getBlockLightAt($x, $y, $z));
+	}
+
+	/**
+	 * Returns the highest potential level of any type of light at, or adjacent to, the given coordinates.
+	 * This is not affected by weather or time of day.
+	 */
+	public function getHighestAdjacentPotentialLightAt(int $x, int $y, int $z) : int{
+		return $this->getHighestAdjacentLight($x, $y, $z, $this->getPotentialLightAt(...));
+	}
+
+	/**
+	 * Returns the highest potential level of sky light at the target coordinates, regardless of the time of day or
+	 * weather conditions.
+	 *
+	 * @return int 0-15
+	 */
+	public function getPotentialBlockSkyLightAt(int $x, int $y, int $z) : int{
+		if(!$this->isInWorld($x, $y, $z)){
+			return $y >= self::Y_MAX ? 15 : 0;
+		}
+		if(($chunk = $this->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)) !== null && $chunk->isLightPopulated() === true){
+			return $chunk->getSubChunk($y >> Chunk::COORD_BIT_SIZE)->getBlockSkyLightArray()->get($x & SubChunk::COORD_MASK, $y & SubChunk::COORD_MASK, $z & SubChunk::COORD_MASK);
+		}
+		return 0; //TODO: this should probably throw instead (light not calculated yet)
+	}
+
+	/**
+	 * Returns the sky light level at the specified coordinates, offset by the current time and weather.
+	 *
+	 * @return int 0-15
+	 */
+	public function getRealBlockSkyLightAt(int $x, int $y, int $z) : int{
+		$light = $this->getPotentialBlockSkyLightAt($x, $y, $z) - $this->skyLightReduction;
+		return $light < 0 ? 0 : $light;
+	}
+
+	/**
+	 * Gets the raw block light level
+	 *
+	 * @return int 0-15
+	 */
+	public function getBlockLightAt(int $x, int $y, int $z) : int{
+		if(!$this->isInWorld($x, $y, $z)){
+			return 0;
+		}
+		if(($chunk = $this->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)) !== null && $chunk->isLightPopulated() === true){
+			return $chunk->getSubChunk($y >> Chunk::COORD_BIT_SIZE)->getBlockLightArray()->get($x & SubChunk::COORD_MASK, $y & SubChunk::COORD_MASK, $z & SubChunk::COORD_MASK);
+		}
+		return 0; //TODO: this should probably throw instead (light not calculated yet)
+	}
+
+	public function updateAllLight(int $x, int $y, int $z) : void{
+		if(($chunk = $this->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)) === null || $chunk->isLightPopulated() !== true){
+			return;
+		}
+
+		$blockFactory = $this->blockStateRegistry;
+		$this->timings->doBlockSkyLightUpdates->startTiming();
+		if($this->skyLightUpdate === null){
+			$this->skyLightUpdate = new SkyLightUpdate(new SubChunkExplorer($this), $blockFactory->lightFilter, $blockFactory->blocksDirectSkyLight);
+		}
+		$this->skyLightUpdate->recalculateNode($x, $y, $z);
+		$this->timings->doBlockSkyLightUpdates->stopTiming();
+
+		$this->timings->doBlockLightUpdates->startTiming();
+		if($this->blockLightUpdate === null){
+			$this->blockLightUpdate = new BlockLightUpdate(new SubChunkExplorer($this), $blockFactory->lightFilter, $blockFactory->light);
+		}
+		$this->blockLightUpdate->recalculateNode($x, $y, $z);
+		$this->timings->doBlockLightUpdates->stopTiming();
+	}
+
+	/**
+	 * @phpstan-param \Closure(int $x, int $y, int $z) : int $lightGetter
+	 */
+	private function getHighestAdjacentLight(int $x, int $y, int $z, \Closure $lightGetter) : int{
+		$max = 0;
+		foreach(Facing::OFFSET as [$offsetX, $offsetY, $offsetZ]){
+			$x1 = $x + $offsetX;
+			$y1 = $y + $offsetY;
+			$z1 = $z + $offsetZ;
+			if(
+				!$this->isInWorld($x1, $y1, $z1) ||
+				($chunk = $this->getChunk($x1 >> Chunk::COORD_BIT_SIZE, $z1 >> Chunk::COORD_BIT_SIZE)) === null ||
+				$chunk->isLightPopulated() !== true
+			){
+				continue;
+			}
+			$max = max($max, $lightGetter($x1, $y1, $z1));
+		}
+		return $max;
+	}
+
+	/**
+	 * Returns the highest potential level of sky light in the positions adjacent to the specified block coordinates.
+	 */
+	public function getHighestAdjacentPotentialBlockSkyLight(int $x, int $y, int $z) : int{
+		return $this->getHighestAdjacentLight($x, $y, $z, $this->getPotentialBlockSkyLightAt(...));
+	}
+
+	/**
+	 * Returns the highest block sky light available in the positions adjacent to the given coordinates, adjusted for
+	 * the world's current time of day and weather conditions.
+	 */
+	public function getHighestAdjacentRealBlockSkyLight(int $x, int $y, int $z) : int{
+		return $this->getHighestAdjacentPotentialBlockSkyLight($x, $y, $z) - $this->skyLightReduction;
+	}
+
+	/**
+	 * Returns the highest block light level available in the positions adjacent to the specified block coordinates.
+	 */
+	public function getHighestAdjacentBlockLight(int $x, int $y, int $z) : int{
+		return $this->getHighestAdjacentLight($x, $y, $z, $this->getBlockLightAt(...));
+	}
+
+	private function executeQueuedLightUpdates() : void{
+		if($this->blockLightUpdate !== null){
+			$this->timings->doBlockLightUpdates->startTiming();
+			$this->blockLightUpdate->execute();
+			$this->blockLightUpdate = null;
+			$this->timings->doBlockLightUpdates->stopTiming();
+		}
+
+		if($this->skyLightUpdate !== null){
+			$this->timings->doBlockSkyLightUpdates->startTiming();
+			$this->skyLightUpdate->execute();
+			$this->skyLightUpdate = null;
+			$this->timings->doBlockSkyLightUpdates->stopTiming();
+		}
+	}
+
+	public function isInWorld(int $x, int $y, int $z) : bool{
+		return (
+			$x <= Limits::INT32_MAX && $x >= Limits::INT32_MIN &&
+			$y < $this->maxY && $y >= $this->minY &&
+			$z <= Limits::INT32_MAX && $z >= Limits::INT32_MIN
+		);
+	}
+
+	/**
+	 * Gets the Block object at the Vector3 location. This method wraps around {@link getBlockAt}, converting the
+	 * vector components to integers.
+	 *
+	 * Note: If you're using this for performance-sensitive code, and you're guaranteed to be supplying ints in the
+	 * specified vector, consider using {@link getBlockAt} instead for better performance.
+	 *
+	 * @param bool $cached     Whether to use the block cache for getting the block (faster, but may be inaccurate)
+	 * @param bool $addToCache Whether to cache the block object created by this method call.
+	 */
+	public function getBlock(Vector3 $pos, bool $cached = true, bool $addToCache = true) : Block{
+		return $this->getBlockAt((int) floor($pos->x), (int) floor($pos->y), (int) floor($pos->z), $cached, $addToCache);
+	}
+
+	/**
+	 * Gets the Block object at the specified coordinates.
+	 *
+	 * Note for plugin developers: If you are using this method a lot (thousands of times for many positions for
+	 * example), you may want to set addToCache to false to avoid using excessive amounts of memory.
+	 *
+	 * @param bool $cached     Whether to use the block cache for getting the block (faster, but may be inaccurate)
+	 * @param bool $addToCache Whether to cache the block object created by this method call.
+	 */
+	public function getBlockAt(int $x, int $y, int $z, bool $cached = true, bool $addToCache = true) : Block{
+		$relativeBlockHash = null;
+		$chunkHash = World::chunkHash($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE);
+
+		if($this->isInWorld($x, $y, $z)){
+			$relativeBlockHash = World::chunkBlockHash($x, $y, $z);
+
+			if($cached && isset($this->blockCache[$chunkHash][$relativeBlockHash])){
+				return $this->blockCache[$chunkHash][$relativeBlockHash];
+			}
+
+			$chunk = $this->chunks[$chunkHash] ?? null;
+			if($chunk !== null){
+				$block = $this->blockStateRegistry->fromStateId($chunk->getBlockStateId($x & Chunk::COORD_MASK, $y, $z & Chunk::COORD_MASK));
+			}else{
+				$addToCache = false;
+				$block = VanillaBlocks::AIR();
+			}
+		}else{
+			$block = VanillaBlocks::AIR();
+		}
+
+		$block->position($this, $x, $y, $z);
+
+		if($this->inDynamicStateRecalculation){
+			//this call was generated by a parent getBlock() call calculating dynamic stateinfo
+			//don't calculate dynamic state and don't add to block cache (since it won't have dynamic state calculated).
+			//this ensures that it's impossible for dynamic state properties to recursively depend on each other.
+			$addToCache = false;
+		}else{
+			$this->inDynamicStateRecalculation = true;
+			$replacement = $block->readStateFromWorld();
+			if($replacement !== $block){
+				$replacement->position($this, $x, $y, $z);
+				$block = $replacement;
+			}
+			$this->inDynamicStateRecalculation = false;
+		}
+
+		if($addToCache && $relativeBlockHash !== null){
+			$this->blockCache[$chunkHash][$relativeBlockHash] = $block;
+
+			if(++$this->blockCacheSize >= self::BLOCK_CACHE_SIZE_CAP){
+				$this->trimBlockCache();
+			}
+		}
+
+		return $block;
+	}
+
+	/**
+	 * Sets the block at the given Vector3 coordinates.
+	 *
+	 * @throws \InvalidArgumentException if the position is out of the world bounds
+	 */
+	public function setBlock(Vector3 $pos, Block $block, bool $update = true) : void{
+		$this->setBlockAt((int) floor($pos->x), (int) floor($pos->y), (int) floor($pos->z), $block, $update);
+	}
+
+	/**
+	 * Sets the block at the given coordinates.
+	 *
+	 * If $update is true, it'll get the neighbour blocks (6 sides) and update them, and also update local lighting.
+	 * If you are doing big changes, you might want to set this to false, then update manually.
+	 *
+	 * @throws \InvalidArgumentException if the position is out of the world bounds
+	 */
+	public function setBlockAt(int $x, int $y, int $z, Block $block, bool $update = true) : void{
+		if(!$this->isInWorld($x, $y, $z)){
+			throw new \InvalidArgumentException("Pos x=$x,y=$y,z=$z is outside of the world bounds");
+		}
+		$chunkX = $x >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $z >> Chunk::COORD_BIT_SIZE;
+		if($this->loadChunk($chunkX, $chunkZ) === null){ //current expected behaviour is to try to load the terrain synchronously
+			throw new WorldException("Cannot set a block in un-generated terrain");
+		}
+
+		//TODO: this computes state ID twice (we do it again in writeStateToWorld()). Not great for performance :(
+		$stateId = $block->getStateId();
+		if(!$this->blockStateRegistry->hasStateId($stateId)){
+			throw new \LogicException("Block state ID not known to RuntimeBlockStateRegistry (probably not registered)");
+		}
+		if(!GlobalBlockStateHandlers::getSerializer()->isRegistered($block)){
+			throw new \LogicException("Block not registered with GlobalBlockStateHandlers serializer");
+		}
+
+		$this->timings->setBlock->startTiming();
+
+		$this->unlockChunk($chunkX, $chunkZ, null);
+
+		$block = clone $block;
+
+		$block->position($this, $x, $y, $z);
+		$block->writeStateToWorld();
+		$pos = new Vector3($x, $y, $z);
+
+		$chunkHash = World::chunkHash($chunkX, $chunkZ);
+		$relativeBlockHash = World::chunkBlockHash($x, $y, $z);
+
+		unset($this->blockCache[$chunkHash][$relativeBlockHash]);
+		$this->blockCacheSize--;
+		unset($this->blockCollisionBoxCache[$chunkHash][$relativeBlockHash]);
+		//blocks like fences have collision boxes that reach into neighbouring blocks, so we need to invalidate the
+		//caches for those blocks as well
+		foreach(Facing::OFFSET as [$offsetX, $offsetY, $offsetZ]){
+			$sideChunkPosHash = World::chunkHash(($x + $offsetX) >> Chunk::COORD_BIT_SIZE, ($z + $offsetZ) >> Chunk::COORD_BIT_SIZE);
+			$sideChunkBlockHash = World::chunkBlockHash($x + $offsetX, $y + $offsetY, $z + $offsetZ);
+			unset($this->blockCollisionBoxCache[$sideChunkPosHash][$sideChunkBlockHash]);
+		}
+
+		if(!isset($this->changedBlocks[$chunkHash])){
+			$this->changedBlocks[$chunkHash] = [];
+		}
+		$this->changedBlocks[$chunkHash][$relativeBlockHash] = $pos;
+
+		foreach($this->getChunkListeners($chunkX, $chunkZ) as $listener){
+			$listener->onBlockChanged($pos);
+		}
+
+		if($update){
+			$this->updateAllLight($x, $y, $z);
+			$this->internalNotifyNeighbourBlockUpdate($x, $y, $z);
+		}
+
+		$this->timings->setBlock->stopTiming();
+	}
+
+	public function dropItem(Vector3 $source, Item $item, ?Vector3 $motion = null, int $delay = 10) : ?ItemEntity{
+		if($item->isNull()){
+			return null;
+		}
+
+		$itemEntity = new ItemEntity(Location::fromObject($source, $this, Utils::getRandomFloat() * 360, 0), $item);
+
+		$itemEntity->setPickupDelay($delay);
+		$itemEntity->setMotion($motion ?? new Vector3(Utils::getRandomFloat() * 0.2 - 0.1, 0.2, Utils::getRandomFloat() * 0.2 - 0.1));
+
+		$ev = new ItemEntityDropEvent($itemEntity);
+		$ev->call();
+
+		if($ev->isCancelled()){
+			$itemEntity->flagForDespawn();
+			return null;
+		}
+
+		$itemEntity->spawnToAll();
+
+		return $itemEntity;
+	}
+
+	/**
+	 * Drops XP orbs into the world for the specified amount, splitting the amount into several orbs if necessary.
+	 *
+	 * @return ExperienceOrb[]
+	 * @phpstan-return list<ExperienceOrb>
+	 */
+	public function dropExperience(Vector3 $pos, int $amount) : array{
+		$orbs = [];
+
+		foreach(ExperienceOrb::splitIntoOrbSizes($amount) as $split){
+			$orb = new ExperienceOrb(Location::fromObject($pos, $this, Utils::getRandomFloat() * 360, 0), $split);
+
+			$orb->setMotion(new Vector3((Utils::getRandomFloat() * 0.2 - 0.1) * 2, Utils::getRandomFloat() * 0.4, (Utils::getRandomFloat() * 0.2 - 0.1) * 2));
+			$orb->spawnToAll();
+
+			$orbs[] = $orb;
+		}
+
+		return $orbs;
+	}
+
+	/**
+	 * Tries to break a block using a item, including Player time checks if available
+	 * It'll try to lower the durability if Item is a tool, and set it to Air if broken.
+	 *
+	 * @param Item   &$item          reference parameter (if null, can break anything)
+	 * @param Item[] &$returnedItems Items to be added to the target's inventory (or dropped, if the inventory is full)
+	 * @phpstan-param-out Item $item
+	 */
+	public function useBreakOn(Vector3 $vector, ?Item &$item = null, ?Player $player = null, bool $createParticles = false, array &$returnedItems = []) : bool{
+		$vector = $vector->floor();
+
+		$chunkX = $vector->getFloorX() >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $vector->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+		if(!$this->isChunkLoaded($chunkX, $chunkZ) || $this->isChunkLocked($chunkX, $chunkZ)){
+			return false;
+		}
+
+		$target = $this->getBlock($vector);
+		$affectedBlocks = $target->getAffectedBlocks();
+
+		if($item === null){
+			$item = VanillaItems::AIR();
+		}
+
+		$drops = [];
+		if($player === null || $player->hasFiniteResources()){
+			$drops = array_merge(...array_map(fn(Block $block) => $block->getDrops($item), $affectedBlocks));
+		}
+
+		$xpDrop = 0;
+		if($player !== null && $player->hasFiniteResources()){
+			$xpDrop = array_sum(array_map(fn(Block $block) => $block->getXpDropForTool($item), $affectedBlocks));
+		}
+
+		if($player !== null){
+			$ev = new BlockBreakEvent($player, $target, $item, $player->isCreative(), $drops, $xpDrop);
+
+			if($target instanceof Air || ($player->isSurvival() && !$target->getBreakInfo()->isBreakable()) || $player->isSpectator()){
+				$ev->cancel();
+			}
+
+			if($player->isAdventure(true) && !$ev->isCancelled()){
+				$canBreak = false;
+				$itemParser = LegacyStringToItemParser::getInstance();
+				foreach($item->getCanDestroy() as $v){
+					$entry = $itemParser->parse($v);
+					if($entry->getBlock()->hasSameTypeId($target)){
+						$canBreak = true;
+						break;
+					}
+				}
+
+				if(!$canBreak){
+					$ev->cancel();
+				}
+			}
+
+			$ev->call();
+			if($ev->isCancelled()){
+				return false;
+			}
+
+			$drops = $ev->getDrops();
+			$xpDrop = $ev->getXpDropAmount();
+
+		}elseif(!$target->getBreakInfo()->isBreakable()){
+			return false;
+		}
+
+		foreach($affectedBlocks as $t){
+			$this->destroyBlockInternal($t, $item, $player, $createParticles, $returnedItems);
+		}
+
+		$item->onDestroyBlock($target, $returnedItems);
+
+		if(count($drops) > 0){
+			$dropPos = $vector->add(0.5, 0.5, 0.5);
+			foreach($drops as $drop){
+				if(!$drop->isNull()){
+					$this->dropItem($dropPos, $drop);
+				}
+			}
+		}
+
+		if($xpDrop > 0){
+			$this->dropExperience($vector->add(0.5, 0.5, 0.5), $xpDrop);
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param Item[] &$returnedItems
+	 */
+	private function destroyBlockInternal(Block $target, Item $item, ?Player $player, bool $createParticles, array &$returnedItems) : void{
+		if($createParticles){
+			$this->addParticle($target->getPosition()->add(0.5, 0.5, 0.5), new BlockBreakParticle($target));
+		}
+
+		$target->onBreak($item, $player, $returnedItems);
+
+		$tile = $this->getTile($target->getPosition());
+		if($tile !== null){
+			$tile->onBlockDestroyed();
+		}
+	}
+
+	/**
+	 * Uses a item on a position and face, placing it or activating the block
+	 *
+	 * @param Player|null $player         default null
+	 * @param bool        $playSound      Whether to play a block-place sound if the block was placed successfully.
+	 * @param Item[]      &$returnedItems Items to be added to the target's inventory (or dropped if the inventory is full)
+	 */
+	public function useItemOn(Vector3 $vector, Item &$item, int $face, ?Vector3 $clickVector = null, ?Player $player = null, bool $playSound = false, array &$returnedItems = []) : bool{
+		$blockClicked = $this->getBlock($vector);
+		$blockReplace = $blockClicked->getSide($face);
+
+		if($clickVector === null){
+			$clickVector = new Vector3(0.0, 0.0, 0.0);
+		}else{
+			$clickVector = new Vector3(
+				min(1.0, max(0.0, $clickVector->x)),
+				min(1.0, max(0.0, $clickVector->y)),
+				min(1.0, max(0.0, $clickVector->z))
+			);
+		}
+
+		if(!$this->isInWorld($blockReplace->getPosition()->x, $blockReplace->getPosition()->y, $blockReplace->getPosition()->z)){
+			//TODO: build height limit messages for custom world heights and mcregion cap
+			return false;
+		}
+		$chunkX = $blockReplace->getPosition()->getFloorX() >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $blockReplace->getPosition()->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+		if(!$this->isChunkLoaded($chunkX, $chunkZ) || $this->isChunkLocked($chunkX, $chunkZ)){
+			return false;
+		}
+
+		if($blockClicked->getTypeId() === BlockTypeIds::AIR){
+			return false;
+		}
+
+		if($player !== null){
+			$ev = new PlayerInteractEvent($player, $item, $blockClicked, $clickVector, $face, PlayerInteractEvent::RIGHT_CLICK_BLOCK);
+			if($player->isSneakPressed()){
+				$ev->setUseItem(false);
+				$ev->setUseBlock($item->isNull()); //opening doors is still possible when sneaking if using an empty hand
+			}
+			if($player->isSpectator()){
+				$ev->cancel(); //set it to cancelled so plugins can bypass this
+			}
+
+			$ev->call();
+			if(!$ev->isCancelled()){
+				if($ev->useBlock() && $blockClicked->onInteract($item, $face, $clickVector, $player, $returnedItems)){
+					return true;
+				}
+
+				if($ev->useItem()){
+					$result = $item->onInteractBlock($player, $blockReplace, $blockClicked, $face, $clickVector, $returnedItems);
+					if($result !== ItemUseResult::NONE){
+						return $result === ItemUseResult::SUCCESS;
+					}
+				}
+			}else{
+				return false;
+			}
+		}elseif($blockClicked->onInteract($item, $face, $clickVector, $player, $returnedItems)){
+			return true;
+		}
+
+		if($item->isNull() || !$item->canBePlaced()){
+			return false;
+		}
+
+		//TODO: while passing Facing::UP mimics the vanilla behaviour with replaceable blocks, we should really pass
+		//some other value like NULL and let place() deal with it. This will look like a bug to anyone who doesn't know
+		//about the vanilla behaviour.
+		$tx =
+			$item->getPlacementTransaction($blockClicked, $blockClicked, Facing::UP, $clickVector, $player) ??
+			$item->getPlacementTransaction($blockReplace, $blockClicked, $face, $clickVector, $player);
+		if($tx === null){
+			//no placement options available
+			return false;
+		}
+
+		foreach($tx->getBlocks() as [$x, $y, $z, $block]){
+			$block->position($this, $x, $y, $z);
+			foreach($block->getCollisionBoxes() as $collisionBox){
+				if(count($this->getCollidingEntities($collisionBox)) > 0){
+					return false;  //Entity in block
+				}
+			}
+		}
+
+		if($player !== null){
+			$ev = new BlockPlaceEvent($player, $tx, $blockClicked, $item);
+			if($player->isSpectator()){
+				$ev->cancel();
+			}
+
+			if($player->isAdventure(true) && !$ev->isCancelled()){
+				$canPlace = false;
+				$itemParser = LegacyStringToItemParser::getInstance();
+				foreach($item->getCanPlaceOn() as $v){
+					$entry = $itemParser->parse($v);
+					if($entry->getBlock()->hasSameTypeId($blockClicked)){
+						$canPlace = true;
+						break;
+					}
+				}
+
+				if(!$canPlace){
+					$ev->cancel();
+				}
+			}
+
+			$ev->call();
+			if($ev->isCancelled()){
+				return false;
+			}
+		}
+
+		if(!$tx->apply()){
+			return false;
+		}
+		$first = true;
+		foreach($tx->getBlocks() as [$x, $y, $z, $_]){
+			$tile = $this->getTileAt($x, $y, $z);
+			if($tile !== null){
+				//TODO: seal this up inside block placement
+				$tile->copyDataFromItem($item);
+			}
+
+			$placed = $this->getBlockAt($x, $y, $z);
+			$placed->onPostPlace();
+			if($first && $playSound){
+				$this->addSound($placed->getPosition(), new BlockPlaceSound($placed));
+			}
+			$first = false;
+		}
+
+		$item->pop();
+
+		return true;
+	}
+
+	public function getEntity(int $entityId) : ?Entity{
+		return $this->entities[$entityId] ?? null;
+	}
+
+	/**
+	 * Returns a list of all the entities in this world, indexed by their entity runtime IDs
+	 *
+	 * @return Entity[]
+	 * @phpstan-return array<int, Entity>
+	 */
+	public function getEntities() : array{
+		return $this->entities;
+	}
+
+	/**
+	 * Returns all collidable entities whose bounding boxes intersect the given bounding box.
+	 * If an entity is given, it will be excluded from the result.
+	 * If a non-collidable entity is given, the result will be empty.
+	 *
+	 * This function is the same as {@link World::getNearbyEntities()}, but with additional collidability filters.
+	 *
+	 * @return Entity[]
+	 * @phpstan-return array<int, Entity>
+	 */
+	public function getCollidingEntities(AxisAlignedBB $bb, ?Entity $entity = null) : array{
+		$nearby = [];
+
+		foreach($this->getNearbyEntities($bb, $entity) as $ent){
+			if($ent->canBeCollidedWith() && ($entity === null || $entity->canCollideWith($ent))){
+				$nearby[] = $ent;
+			}
+		}
+
+		return $nearby;
+	}
+
+	/**
+	 * Returns all entities whose bounding boxes intersect the given bounding box, excluding the given entity.
+	 *
+	 * @return Entity[]
+	 * @phpstan-return array<int, Entity>
+	 */
+	public function getNearbyEntities(AxisAlignedBB $bb, ?Entity $entity = null) : array{
+		$nearby = [];
+
+		$minX = ((int) floor($bb->minX - 2)) >> Chunk::COORD_BIT_SIZE;
+		$maxX = ((int) floor($bb->maxX + 2)) >> Chunk::COORD_BIT_SIZE;
+		$minZ = ((int) floor($bb->minZ - 2)) >> Chunk::COORD_BIT_SIZE;
+		$maxZ = ((int) floor($bb->maxZ + 2)) >> Chunk::COORD_BIT_SIZE;
+
+		for($x = $minX; $x <= $maxX; ++$x){
+			for($z = $minZ; $z <= $maxZ; ++$z){
+				foreach($this->getChunkEntities($x, $z) as $ent){
+					if($ent !== $entity && $ent->boundingBox->intersectsWith($bb)){
+						$nearby[] = $ent;
+					}
+				}
+			}
+		}
+
+		return $nearby;
+	}
+
+	/**
+	 * Returns the closest Entity to the specified position, within the given radius.
+	 *
+	 * @param string $entityType  Class of entity to use for instanceof
+	 * @param bool   $includeDead Whether to include entitites which are dead
+	 * @phpstan-template TEntity of Entity
+	 * @phpstan-param class-string<TEntity> $entityType
+	 *
+	 * @return Entity|null an entity of type $entityType, or null if not found
+	 * @phpstan-return TEntity
+	 */
+	public function getNearestEntity(Vector3 $pos, float $maxDistance, string $entityType = Entity::class, bool $includeDead = false) : ?Entity{
+		assert(is_a($entityType, Entity::class, true));
+
+		$minX = ((int) floor($pos->x - $maxDistance)) >> Chunk::COORD_BIT_SIZE;
+		$maxX = ((int) floor($pos->x + $maxDistance)) >> Chunk::COORD_BIT_SIZE;
+		$minZ = ((int) floor($pos->z - $maxDistance)) >> Chunk::COORD_BIT_SIZE;
+		$maxZ = ((int) floor($pos->z + $maxDistance)) >> Chunk::COORD_BIT_SIZE;
+
+		$currentTargetDistSq = $maxDistance ** 2;
+
+		/**
+		 * @var Entity|null $currentTarget
+		 * @phpstan-var TEntity|null $currentTarget
+		 */
+		$currentTarget = null;
+
+		for($x = $minX; $x <= $maxX; ++$x){
+			for($z = $minZ; $z <= $maxZ; ++$z){
+				foreach($this->getChunkEntities($x, $z) as $entity){
+					if(!($entity instanceof $entityType) || $entity->isFlaggedForDespawn() || (!$includeDead && !$entity->isAlive())){
+						continue;
+					}
+					$distSq = $entity->getPosition()->distanceSquared($pos);
+					if($distSq < $currentTargetDistSq){
+						$currentTargetDistSq = $distSq;
+						$currentTarget = $entity;
+					}
+				}
+			}
+		}
+
+		return $currentTarget;
+	}
+
+	/**
+	 * Returns a list of the players in this world
+	 *
+	 * @return Player[] entity runtime ID => Player
+	 * @phpstan-return array<int, Player>
+	 */
+	public function getPlayers() : array{
+		return $this->players;
+	}
+
+	/**
+	 * Returns the Tile in a position, or null if not found.
+	 *
+	 * Note: This method wraps getTileAt(). If you're guaranteed to be passing integers, and you're using this method
+	 * in performance-sensitive code, consider using getTileAt() instead of this method for better performance.
+	 */
+	public function getTile(Vector3 $pos) : ?Tile{
+		return $this->getTileAt((int) floor($pos->x), (int) floor($pos->y), (int) floor($pos->z));
+	}
+
+	/**
+	 * Returns the tile at the specified x,y,z coordinates, or null if it does not exist.
+	 */
+	public function getTileAt(int $x, int $y, int $z) : ?Tile{
+		return ($chunk = $this->loadChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)) !== null ? $chunk->getTile($x & Chunk::COORD_MASK, $y, $z & Chunk::COORD_MASK) : null;
+	}
+
+	public function getBiomeId(int $x, int $y, int $z) : int{
+		if(($chunk = $this->loadChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE)) !== null){
+			return $chunk->getBiomeId($x & Chunk::COORD_MASK, $y & Chunk::COORD_MASK, $z & Chunk::COORD_MASK);
+		}
+		return BiomeIds::OCEAN; //TODO: this should probably throw instead (terrain not generated yet)
+	}
+
+	public function getBiome(int $x, int $y, int $z) : Biome{
+		return BiomeRegistry::getInstance()->getBiome($this->getBiomeId($x, $y, $z));
+	}
+
+	public function setBiomeId(int $x, int $y, int $z, int $biomeId) : void{
+		$chunkX = $x >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $z >> Chunk::COORD_BIT_SIZE;
+		$this->unlockChunk($chunkX, $chunkZ, null);
+		if(($chunk = $this->loadChunk($chunkX, $chunkZ)) !== null){
+			$chunk->setBiomeId($x & Chunk::COORD_MASK, $y & Chunk::COORD_MASK, $z & Chunk::COORD_MASK, $biomeId);
+		}else{
+			//if we allowed this, the modifications would be lost when the chunk is created
+			throw new WorldException("Cannot set biome in a non-generated chunk");
+		}
+	}
+
+	/**
+	 * @return Chunk[] chunkHash => Chunk
+	 * @phpstan-return array<ChunkPosHash, Chunk>
+	 */
+	public function getLoadedChunks() : array{
+		return $this->chunks;
+	}
+
+	public function getChunk(int $chunkX, int $chunkZ) : ?Chunk{
+		return $this->chunks[World::chunkHash($chunkX, $chunkZ)] ?? null;
+	}
+
+	/**
+	 * @return Entity[] entity runtime ID => Entity
+	 * @phpstan-return array<int, Entity>
+	 */
+	public function getChunkEntities(int $chunkX, int $chunkZ) : array{
+		return $this->entitiesByChunk[World::chunkHash($chunkX, $chunkZ)] ?? [];
+	}
+
+	/**
+	 * Returns the chunk containing the given Vector3 position.
+	 */
+	public function getOrLoadChunkAtPosition(Vector3 $pos) : ?Chunk{
+		return $this->loadChunk($pos->getFloorX() >> Chunk::COORD_BIT_SIZE, $pos->getFloorZ() >> Chunk::COORD_BIT_SIZE);
+	}
+
+	/**
+	 * Returns the chunks adjacent to the specified chunk.
+	 *
+	 * @return Chunk[]|null[] chunkHash => Chunk|null
+	 * @phpstan-return array<ChunkPosHash, Chunk|null>
 	 */
 	public function getAdjacentChunks(int $x, int $z) : array{
 		$result = [];
