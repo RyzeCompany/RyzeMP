@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace pocketmine\command;
 
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\command\CommandData;
 use pocketmine\network\mcpe\protocol\types\command\ConstrainedEnumValue;
 use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
@@ -39,40 +38,6 @@ final class CommandMetadata{
 		return $result;
 	}
 
-
-	/**
-	 * VanillaMine-compatible Bedrock 1.26 command fallback.
-	 *
-	 * VanillaMine sends the typed overloads first and appends a permissive,
-	 * optional RAWTEXT argument to non-exhaustive plugin commands. This avoids
-	 * client-side syntax rejection when an overload is not understood.
-	 *
-	 * Only the packet-local overload list is changed. Execution, permissions
-	 * and registered command definitions are unaffected. This is a diagnostic
-	 * compatibility change until validated by a real 1.26.40/1.26.60 client.
-	 *
-	 * @param list<CommandOverload> $overloads
-	 * @return list<CommandOverload>
-	 */
-	public static function withVanillaCompatibleFallback(Command $command, array $overloads, int $protocol) : array{
-		if(!$command instanceof CommandOverloadProvider || $protocol < ProtocolInfo::PROTOCOL_1_26_40 || $overloads === []){
-			return $overloads;
-		}
-		foreach($overloads as $overload){
-			$parameters = $overload->getParameters();
-			if(count($parameters) !== 1){continue;}
-			$parameter = $parameters[0];
-			if($parameter->enum === null && $parameter->postfix === null &&
-				$parameter->paramType === AvailableCommandsPacket::ARG_TYPE_RAWTEXT &&
-				$parameter->isOptional){
-				return $overloads; // Existing optional free-text fallback.
-			}
-		}
-		$overloads[] = new CommandOverload(false, [
-			CommandParameter::standard("args", AvailableCommandsPacket::ARG_TYPE_RAWTEXT, 0, true)
-		]);
-		return $overloads;
-	}
 
 	/**
 	 * Intern equivalent command enums before building AvailableCommandsPacket.
@@ -181,90 +146,6 @@ final class CommandMetadata{
 			}
 		}
 		return $lines === [] ? ['{"status":"no_crate_edit_or_remove_overloads"}'] : $lines;
-	}
-
-	/**
-	 * Read the actual low-level enum symbol references instead of only
-	 * disassembling them back to high-level objects. This helps identify whether
-	 * a custom command becomes linked to the value "default" on the wire.
-	 *
-	 * The output contains only the fixed, synthetic crate probes, never raw
-	 * packet bytes, private player data, or arguments from unrelated commands.
-	 *
-	 * @return list<string>
-	 */
-	public static function describeProbeRawPacket(AvailableCommandsPacket $packet) : array{
-		$lines = [];
-		foreach($packet->commandData as $command){
-			$name = strtolower($command->getName());
-			if($name !== "crateprobe" && $name !== "crateprobenative"){continue;}
-			foreach($command->getOverloads() as $overloadIndex => $overload){
-				foreach($overload->getParameters() as $parameterIndex => $parameter){
-					$typeInfo = $parameter->getTypeInfo();
-					$enumIndex = $typeInfo & (AvailableCommandsPacket::ARG_FLAG_VALID - 1);
-					$isHardEnum = ($typeInfo & AvailableCommandsPacket::ARG_FLAG_ENUM) !== 0;
-					$enum = $isHardEnum ? ($packet->enums[$enumIndex] ?? null) : null;
-					$values = [];
-					$valid = $isHardEnum && $enum !== null;
-					if($enum !== null){
-						foreach($enum->getValueIndexes() as $valueIndex){
-							if(!isset($packet->enumValues[$valueIndex])){
-								$valid = false;
-								$values[] = "<missing>";
-							}else{
-								$values[] = $packet->enumValues[$valueIndex];
-							}
-						}
-					}
-					$lines[] = json_encode([
-						"command" => $name,
-						"overload" => $overloadIndex,
-						"parameter" => $parameterIndex,
-						"name" => $parameter->getName(),
-						"type_info" => $typeInfo,
-						"hard_enum" => $isHardEnum,
-						"enum_index" => $enumIndex,
-						"enum_name" => $enum?->getName(),
-						"values" => $values,
-						"valid" => $valid,
-						"optional" => $parameter->isOptional(),
-						"flags" => $parameter->getFlags()
-					], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES);
-				}
-			}
-		}
-		return $lines;
-	}
-
-	/**
-	 * Diagnostic C: A/B-test the client handling of hard-enum identifiers.
-	 * Keep /crateprobe with the original namespaced enum names. Publish the
-	 * same values in /crateprobenative with short alphanumeric enum names.
-	 *
-	 * This alters only packet-local data for a single synthetic test command.
-	 * It must not be used as evidence of a permanent fix until tested in-game.
-	 *
-	 * @param list<CommandData> $commands
-	 * @return list<CommandData>
-	 */
-	public static function rewriteDiagnosticProbeEnumNames(array $commands) : array{
-		foreach($commands as $command){
-			if(strtolower($command->getName()) !== "crateprobenative"){continue;}
-			foreach($command->getOverloads() as $overload){
-				foreach($overload->getParameters() as $parameter){
-					if(!$parameter->enum instanceof CommandHardEnum || $parameter->enum instanceof CommandSoftEnum){continue;}
-					$name = match($parameter->paramName){
-						"namecrate" => "RyzeProbeNativeNamesB",
-						"effect" => "RyzeProbeNativeEffectsB",
-						default => null
-					};
-					if($name !== null){
-						$parameter->enum = new CommandHardEnum($name, $parameter->enum->getValues());
-					}
-				}
-			}
-		}
-		return $commands;
 	}
 
 	/** Refresh after dynamic names or visibility change; use only on the server thread. */
