@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace pocketmine\world\mobs;
 
 use PHPUnit\Framework\TestCase;
+use pocketmine\data\bedrock\BiomeIds;
+use pocketmine\world\mobs\spawn\BiomeFilter;
 use pocketmine\world\mobs\spawn\NaturalSpawnPolicy as Policy;
 use pocketmine\world\World;
 
@@ -37,6 +39,19 @@ final class NaturalSpawnPolicyTest extends TestCase{
 		self::assertFalse(Policy::canSpawnFarmAnimalBiome("mushroom_island"));
 		self::assertFalse(Policy::canSpawnFarmAnimalBiome("deep_ocean"));
 		self::assertFalse(Policy::canSpawnFarmAnimalBiome(null));
+	}
+	public function testVanillaBiomeTagsFromBedrockData() : void{
+		self::assertTrue(Policy::canSpawnFarmAnimalBiomeId(BiomeIds::PLAINS));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiomeId(BiomeIds::DESERT));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiomeId(BiomeIds::RIVER));
+		self::assertTrue(Policy::canSpawnSquidBiomeId(BiomeIds::RIVER));
+		self::assertTrue(Policy::canSpawnSquidBiomeId(BiomeIds::OCEAN));
+		self::assertFalse(Policy::canSpawnSquidBiomeId(BiomeIds::PLAINS));
+		self::assertFalse(Policy::canSpawnFarmAnimalBiomeId(99999));
+		self::assertFalse(Policy::canSpawnSquidBiomeId(99999));
+		self::assertTrue(BiomeFilter::test(["none_of" => [
+			["test" => "has_biome_tag", "value" => "desert"]
+		]], ["animal" => true], false));
 	}
 	public function testNineByNineChunkDensityCapAccounting() : void{
 		$counts = ["0:0"=>3, "4:0"=>5, "-4:0"=>7, "5:0"=>11, "0:5"=>13];

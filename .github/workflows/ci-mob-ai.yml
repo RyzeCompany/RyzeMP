@@ -4,6 +4,7 @@ on:
     paths:
       - 'src/entity/ai/**'
       - 'src/entity/animal/**'
+      - 'src/entity/utils/MobBiomeInfo.php'
       - 'src/entity/Mob.php'
       - 'src/entity/Zombie.php'
       - 'src/entity/Skeleton.php'
@@ -40,7 +41,7 @@ jobs:
       - name: Analyze Mob AI and natural spawning
         run: |
           php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
-            src/entity/ai src/entity/animal src/entity/Mob.php src/entity/Zombie.php src/entity/Skeleton.php src/entity/Creeper.php src/entity/Villager.php \
+            src/entity/ai src/entity/animal src/entity/utils/MobBiomeInfo.php src/entity/Mob.php src/entity/Zombie.php src/entity/Skeleton.php src/entity/Creeper.php src/entity/Villager.php \
             src/entity/SpawnerEntityRegistry.php src/entity/EntityFactory.php src/world/mobs \
             src/world/World.php src/world/GameRules.php src/event/entity/MobPreSpawnEvent.php \
             src/event/entity/EntityNaturalSpawnEvent.php \

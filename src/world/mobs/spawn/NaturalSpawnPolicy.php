@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace pocketmine\world\mobs\spawn;
 
+use pocketmine\entity\utils\MobBiomeInfo;
 use pocketmine\world\World;
 
 /** Pure rules, independent of worlds and network protocol, for regression testing. */
@@ -65,6 +66,15 @@ final class NaturalSpawnPolicy{
 			(str_contains($biomeName, "ocean") || str_contains($biomeName, "river"));
 	}
 
+	/** Apply the actual Bedrock biome tags used by VanillaMine's squid rules. */
+	public static function canSpawnSquidBiomeId(int $biomeId) : bool{
+		$tags = array_fill_keys(MobBiomeInfo::getTagsById($biomeId), true);
+		return BiomeFilter::test(["any_of" => [
+			["test" => "has_biome_tag", "value" => "ocean"],
+			["test" => "has_biome_tag", "value" => "river"]
+		]], $tags, MobBiomeInfo::getTemperatureById($biomeId) < 0.15);
+	}
+
 	/**
 	 * Cows, pigs, sheep and chickens should not replace missing habitat-specific
 	 * mobs in deserts, oceans, mushroom islands, beaches or other dimensions.
@@ -76,6 +86,13 @@ final class NaturalSpawnPolicy{
 			if(str_contains($biomeName, $excluded)){return false;}
 		}
 		return true;
+	}
+
+	/** VanillaMine's cow/pig/sheep/chicken rules require the Bedrock animal tag. */
+	public static function canSpawnFarmAnimalBiomeId(int $biomeId) : bool{
+		$tags = array_fill_keys(MobBiomeInfo::getTagsById($biomeId), true);
+		return BiomeFilter::test(["test" => "has_biome_tag", "value" => "animal"],
+			$tags, MobBiomeInfo::getTemperatureById($biomeId) < 0.15);
 	}
 
 	/** @param array<string, int> $populationByChunk */

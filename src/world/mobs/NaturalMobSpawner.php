@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace pocketmine\world\mobs;
 
 use pocketmine\block\Water;
-use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
 use pocketmine\entity\ai\navigation\GroundPathFinder;
 use pocketmine\entity\animal\Animal;
 use pocketmine\entity\animal\Chicken;
@@ -139,10 +138,7 @@ final class NaturalMobSpawner{
 			if($world->getBlockAt($x, $height, $z) instanceof Water){
 				$y = $height - 2;
 				if(!($world->getBlockAt($x, $y, $z) instanceof Water)){continue;}
-				$biome = LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
-					$chunk->getBiomeId($x & 15, $y, $z & 15)
-				);
-				if(!Policy::canSpawnSquidBiome($biome)){continue;}
+				if(!Policy::canSpawnSquidBiomeId($chunk->getBiomeId($x & 15, $y, $z & 15))){continue;}
 				$category = "water_animal";
 				$identifier = Squid::getNetworkTypeId();
 			}elseif($allowMonsters || $allowAnimals){
@@ -164,9 +160,7 @@ final class NaturalMobSpawner{
 						default => Zombie::getNetworkTypeId()
 					};
 				}elseif($allowAnimals && !$underground && Policy::canSpawnAnimal($light) &&
-					Policy::canSpawnFarmAnimalBiome(LegacyBiomeIdToStringIdMap::getInstance()->legacyToString(
-						$chunk->getBiomeId($x & 15, $y, $z & 15)
-					))){
+					Policy::canSpawnFarmAnimalBiomeId($chunk->getBiomeId($x & 15, $y, $z & 15))){
 					$type = match(mt_rand(0, 3)){
 						0 => Cow::class, 1 => Pig::class, 2 => Sheep::class,
 						default => Chicken::class
