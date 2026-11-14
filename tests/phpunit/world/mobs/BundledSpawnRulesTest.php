@@ -41,6 +41,12 @@ final class BundledSpawnRulesTest extends TestCase{
 			"minecraft:grass_block", "minecraft:air", 1, 15, BiomeIds::PLAINS, 30.0);
 		self::assertTrue($zombies[0]->matchesSpot($dark, $night));
 		self::assertFalse($zombies[0]->matchesSpot($lit, $night));
+		$spiders = array_values(array_filter($rules->forBiome(BiomeIds::PLAINS),
+			static fn($rule) => $rule->identifier === "minecraft:spider"));
+		self::assertNotEmpty($spiders);
+		self::assertSame("monster", $spiders[0]->population);
+		self::assertTrue($spiders[0]->matchesSpot($dark, $night));
+		self::assertFalse($spiders[0]->matchesSpot($lit, $night));
 	}
 
 	public function testSquidUsesAnimalPopulationAndCreeperDensity() : void{

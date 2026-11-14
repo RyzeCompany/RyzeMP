@@ -15,6 +15,7 @@ use pocketmine\entity\Creeper;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
 use pocketmine\entity\Skeleton;
+use pocketmine\entity\Spider;
 use pocketmine\entity\SpawnReason;
 use pocketmine\entity\SpawnerEntityRegistry;
 use pocketmine\entity\Squid;
@@ -357,7 +358,7 @@ final class NaturalMobSpawner{
 		$population = $category === "water_animal" ? "animal" : $category;
 		$allowed = match($category){
 			"animal" => [Cow::getNetworkTypeId(), Pig::getNetworkTypeId(), Sheep::getNetworkTypeId(), Chicken::getNetworkTypeId()],
-			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId()],
+			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId(), Spider::getNetworkTypeId()],
 			"water_animal" => [Squid::getNetworkTypeId()],
 			default => []
 		};
@@ -384,7 +385,7 @@ final class NaturalMobSpawner{
 			$entity instanceof Animal => "animal",
 			$entity instanceof Squid => $this->settings->mode === MobSpawningSettings::MODE_VANILLA ? "animal" : "water_animal",
 			$entity instanceof Zombie || $entity instanceof Skeleton ||
-				$entity instanceof Creeper => "monster",
+				$entity instanceof Creeper || $entity instanceof Spider => "monster",
 			default => null
 		};
 	}

@@ -29,6 +29,7 @@ final class SpawnerEntityRegistry{
 		$this->register("minecraft:zombie", fn(Location $l, ?CompoundTag $nbt) : Entity => new Zombie($l, $nbt));
 		$this->register("minecraft:skeleton", fn(Location $l, ?CompoundTag $nbt) : Entity => new Skeleton($l, $nbt));
 		$this->register("minecraft:creeper", fn(Location $l, ?CompoundTag $nbt) : Entity => new Creeper($l, $nbt));
+		$this->register("minecraft:spider", fn(Location $l, ?CompoundTag $nbt) : Entity => new Spider($l, $nbt));
 		$this->register("minecraft:squid", fn(Location $l, ?CompoundTag $nbt) : Entity => new Squid($l, $nbt));
 		$this->register("minecraft:villager", fn(Location $l, ?CompoundTag $nbt) : Entity => new Villager($l, $nbt));
 	}

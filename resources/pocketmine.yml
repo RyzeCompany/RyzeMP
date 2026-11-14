@@ -5,7 +5,7 @@
 
 # VanillaMine-compatible Mob AI and natural spawning configuration.
 # RyzeMP Phase 3 currently supports cows, pigs, sheep, chickens, squid,
-# zombies, skeletons and creepers. Other VanillaMine actors are pending.
+# zombies, skeletons, creepers and spiders. Other VanillaMine actors are pending.
 mobs:
   enabled: true
   # Folder names; disables both mob AI and spawning in those worlds.
