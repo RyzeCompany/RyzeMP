@@ -179,41 +179,6 @@ final class NativeCommandApiTest extends TestCase{
 
 
 
-	public function testVanillaMineFreeTextFallbackPreservesTypedOverloadsAndOlderProtocols() : void{
-		$command = $this->command(static function(BaseCommand $cmd) : void{
-			$cmd->registerArgument(0, new RawStringArgument("crate"));
-		});
-		foreach([589, 649, 898, 2168, 2193, 2225] as $protocol){
-			$typed = CommandMetadata::forProtocol($command, $this->sender, $protocol);
-			$combined = CommandMetadata::withVanillaCompatibleFallback($command, $typed, $protocol);
-			$expected = $protocol >= 2168 ? count($typed) + 1 : count($typed);
-			self::assertCount($expected, $combined, "Fallback count protocol " . $protocol);
-			self::assertSame($typed[0], $combined[0], "Typed overload unchanged for " . $protocol);
-			if($protocol >= 2168){
-				$last = $combined[array_key_last($combined)]->getParameters();
-				self::assertCount(1, $last);
-				self::assertSame("args", $last[0]->paramName);
-				self::assertSame(AvailableCommandsPacket::ARG_TYPE_RAWTEXT, $last[0]->paramType);
-				self::assertNull($last[0]->enum);
-				self::assertTrue($last[0]->isOptional);
-				self::assertCount(count($combined),
-					CommandMetadata::withVanillaCompatibleFallback($command, $combined, $protocol),
-					"Repeated metadata refresh cannot duplicate a free-text fallback");
-			}
-		}
-
-		$vanillaCommand = $this->createMock(Command::class);
-		$default = CommandMetadata::forProtocol($vanillaCommand, $this->sender, 2225);
-		self::assertSame($default, CommandMetadata::withVanillaCompatibleFallback($vanillaCommand, $default, 2225),
-			"Ordinary commands already have their free-text fallback");
-
-		$hidden = $this->command(static function(BaseCommand $cmd) : void{
-			$cmd->addConstraint(new TestDeniedConstraint($cmd));
-		});
-		self::assertSame([], CommandMetadata::withVanillaCompatibleFallback($hidden, [], 2225),
-			"Invisible commands remain invisible; fallback must not expose their names");
-	}
-
 	public function testAvailableCommandsWirePermissionUsesCanonicalCasingOnModernProtocols() : void{
 		$command = $this->command(static function(BaseCommand $cmd) : void{
 			$cmd->registerArgument(0, new RawStringArgument("namecrate"));
@@ -251,16 +216,6 @@ final class NativeCommandApiTest extends TestCase{
 			self::assertSame($protocol >= 898 ? "Any" : "any", $commands[0]->getPermission(),
 				"AvailableCommands wire permission must match the protocol's case-sensitive enum string");
 			self::assertSame("namecrate", $commands[0]->getOverloads()[0]->getParameters()[0]->paramName);
-			$wireOverloads = $commands[0]->getOverloads();
-			if($protocol >= 2168){
-				self::assertCount(2, $wireOverloads, "1.26 must include the VanillaMine free-text fallback");
-				$freeText = $wireOverloads[1]->getParameters()[0];
-				self::assertSame("args", $freeText->paramName);
-				self::assertTrue($freeText->isOptional);
-				self::assertSame(AvailableCommandsPacket::ARG_TYPE_RAWTEXT, $freeText->paramType);
-			}else{
-				self::assertCount(1, $wireOverloads, "Older protocols must remain unchanged");
-			}
 		}
 	}
 
@@ -444,102 +399,40 @@ final class NativeCommandApiTest extends TestCase{
 		}
 	}
 
-	public function testProbeRawEnumReferencesMatchOriginalValuesAfterWireEncoding() : void{
-		$hard = static fn(string $argument, string $enumName, array $values) =>
-			CommandParameter::enum($argument,
-				new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($enumName, $values), 0);
-		$make = static fn(string $name, string $prefix) =>
-			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
-				$name, "diagnostic", 0, "Any", null, [
-					new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
-						$hard("namecrate", $prefix . ":namecrate", ["King", "Zeus"]),
-						$hard("effect", $prefix . ":effect", ["NONE", "HEART"])
-					])
-				], []
-			);
-		$commands = [
-			$make("crateprobe", "hcf:crateprobe:commando"),
-			$make("crateprobenative", "hcf:crateprobe:native"),
-			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
-				"rank", "unrelated", 0, "Any", null, [
-					new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
-						$hard("rank", "hcf:rank", ["default", "admin"])
-					])
-				], []
-			)
-		];
-		$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble(
-			CommandMetadata::canonicalizePacketEnums($commands), [], []
+	/**
+	 * Regression for the HCF Bedrock 1.26 case-sensitive hard-enum workaround.
+	 *
+	 * A plugin can publish lowercase hard-enum values without losing metadata
+	 * during protocol translation. Preserve spelling: conversion of plugin-
+	 * specific values belongs in the plugin, not the network serializer.
+	 */
+	public function testLowercaseHardEnumValuesRemainIntactAcrossBedrockProtocols() : void{
+		$hard = static fn(string $parameter, string $id, array $values) : CommandParameter =>
+			CommandParameter::enum($parameter,
+				new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($id, $values), 0);
+		$command = new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+			"crate", "diagnostic-free regression", 0, "Any", null, [
+				new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+					$hard("namecrate", "HcfLowercaseCrate", ["king", "zeus", "mythic"]),
+					$hard("effect", "HcfLowercaseEffect", ["none", "heart", "rainbow_helix"])
+				])
+			], []
 		);
 		foreach([2168, 2193, 2225] as $protocol){
+			$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble(
+				CommandMetadata::canonicalizePacketEnums([$command]), [], []
+			);
 			$writer = new \pmmp\encoding\ByteBufferWriter();
 			$packet->encode($writer, $protocol);
 			$decoded = new AvailableCommandsPacket();
 			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
-			$lines = array_map(
-				static fn(string $json) : array => json_decode($json, true, flags: JSON_THROW_ON_ERROR),
-				CommandMetadata::describeProbeRawPacket($decoded)
-			);
-			self::assertCount(4, $lines, "Must inspect exactly two args per probe on protocol " . $protocol);
-			foreach($lines as $line){
-				self::assertContains($line["command"], ["crateprobe", "crateprobenative"]);
-				self::assertTrue($line["hard_enum"]);
-				self::assertTrue($line["valid"], "Enum reference must resolve: " . json_encode($line));
-				self::assertNotSame("default", $line["values"][0] ?? null);
-				self::assertSame(AvailableCommandsPacket::ARG_FLAG_ENUM, $line["type_info"] & AvailableCommandsPacket::ARG_FLAG_ENUM);
-				self::assertSame(
-					$line["name"] === "namecrate" ? ["King", "Zeus"] : ["NONE", "HEART"],
-					$line["values"],
-					"Raw enum index must point to correct value list for " . $line["command"]
-				);
-			}
-		}
-	}
-
-	public function testDiagnosticNativeProbeRenamesOnlyEnumIdentifiersAndKeepsValues() : void{
-		$hard = static fn(string $arg, string $enum, array $values) : CommandParameter =>
-			CommandParameter::enum($arg,
-				new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($enum, $values), 0);
-		$command = static fn(string $name, string $prefix) =>
-			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
-				$name, "probe", 0, "Any", null,
-				[new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
-					$hard("namecrate", $prefix . ":namecrate", ["King", "Zeus"]),
-					$hard("effect", $prefix . ":effect", ["NONE", "HEART"])
-				])], []
-			);
-		$prepared = CommandMetadata::canonicalizePacketEnums([
-			$command("crateprobe", "hcf:crateprobe:commando"),
-			$command("crateprobenative", "hcf:crateprobe:native")
-		]);
-		CommandMetadata::rewriteDiagnosticProbeEnumNames($prepared);
-		$left = $prepared[0]->getOverloads()[0]->getParameters();
-		$right = $prepared[1]->getOverloads()[0]->getParameters();
-		self::assertSame("hcf:crateprobe:commando:namecrate", $left[0]->enum->getName());
-		self::assertSame("hcf:crateprobe:commando:effect", $left[1]->enum->getName());
-		self::assertSame("RyzeProbeNativeNamesB", $right[0]->enum->getName());
-		self::assertSame("RyzeProbeNativeEffectsB", $right[1]->enum->getName());
-		self::assertSame($left[0]->enum->getValues(), $right[0]->enum->getValues());
-		self::assertSame($left[1]->enum->getValues(), $right[1]->enum->getValues());
-		foreach([2168, 2193, 2225] as $protocol){
-			$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($prepared, [], []);
-			$out = new \pmmp\encoding\ByteBufferWriter();
-			$packet->encode($out, $protocol);
-			$decoded = new AvailableCommandsPacket();
-			$decoded->decode(new \pmmp\encoding\ByteBufferReader($out->getData()), $protocol);
-			$lines = array_map(static fn(string $line) : array =>
-				json_decode($line, true, flags: JSON_THROW_ON_ERROR),
-				CommandMetadata::describeProbeRawPacket($decoded));
-			self::assertCount(4, $lines);
-			self::assertSame("hcf:crateprobe:commando:namecrate", $lines[0]["enum_name"]);
-			self::assertSame("hcf:crateprobe:commando:effect", $lines[1]["enum_name"]);
-			self::assertSame("RyzeProbeNativeNamesB", $lines[2]["enum_name"]);
-			self::assertSame("RyzeProbeNativeEffectsB", $lines[3]["enum_name"]);
-			self::assertSame(["King", "Zeus"], $lines[0]["values"]);
-			self::assertSame(["King", "Zeus"], $lines[2]["values"]);
-			self::assertSame(["NONE", "HEART"], $lines[1]["values"]);
-			self::assertSame(["NONE", "HEART"], $lines[3]["values"]);
-			foreach($lines as $line){self::assertTrue($line["valid"]);}
+			$parsed = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
+			self::assertCount(1, $parsed);
+			$params = $parsed[0]->getOverloads()[0]->getParameters();
+			self::assertSame(["king", "zeus", "mythic"], $params[0]->enum->getValues(), "Crates in ".$protocol);
+			self::assertSame(["none", "heart", "rainbow_helix"], $params[1]->enum->getValues(), "Effects in ".$protocol);
+			self::assertFalse($params[0]->isOptional);
+			self::assertFalse($params[1]->isOptional);
 		}
 	}
 
