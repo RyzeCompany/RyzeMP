@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace pocketmine\world\mobs;
 
 use pocketmine\block\Water;
+use pocketmine\data\bedrock\block\BlockStateSerializeException;
 use pocketmine\entity\ai\navigation\GroundPathFinder;
 use pocketmine\entity\animal\Animal;
 use pocketmine\entity\animal\Chicken;
@@ -25,7 +26,13 @@ use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
 use pocketmine\world\GameRules;
 use pocketmine\world\mobs\spawn\MobSpawningSettings;
+use pocketmine\world\mobs\spawn\BundledSpawnRules;
 use pocketmine\world\mobs\spawn\NaturalSpawnPolicy as Policy;
+use pocketmine\world\mobs\spawn\SpawnCondition;
+use pocketmine\world\mobs\spawn\SpawnContext;
+use pocketmine\world\mobs\spawn\SpawnRules;
+use pocketmine\world\mobs\spawn\SpawnSpot;
+use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\World;
 
 /**
@@ -43,6 +50,7 @@ final class NaturalMobSpawner{
 	private \WeakMap $naturalSurface;
 	private int $attempted = 0;
 	private int $spawned = 0;
+	private SpawnRules $rules;
 
 	public function __construct(
 		private World $world,
@@ -50,6 +58,7 @@ final class NaturalMobSpawner{
 	){
 		$this->natural = new \WeakMap();
 		$this->naturalSurface = new \WeakMap();
+		$this->rules = BundledSpawnRules::get() ?? SpawnRules::builtin();
 	}
 
 	public function getAttemptCount() : int{ return $this->attempted; }
@@ -134,11 +143,13 @@ final class NaturalMobSpawner{
 			$identifier = null;
 			$surface = true;
 			$category = "animal";
+			$biomeId = 0;
 			$y = $height + 1;
 			if($world->getBlockAt($x, $height, $z) instanceof Water){
 				$y = $height - 2;
 				if(!($world->getBlockAt($x, $y, $z) instanceof Water)){continue;}
-				if(!Policy::canSpawnSquidBiomeId($chunk->getBiomeId($x & 15, $y, $z & 15))){continue;}
+				$biomeId = $chunk->getBiomeId($x & 15, $y, $z & 15);
+				if(!Policy::canSpawnSquidBiomeId($biomeId)){continue;}
 				$category = "water_animal";
 				$identifier = Squid::getNetworkTypeId();
 			}elseif($allowMonsters || $allowAnimals){
@@ -149,6 +160,7 @@ final class NaturalMobSpawner{
 					$y = mt_rand($world->getMinY() + 2, $maxY);
 				}
 				$surface = !$underground;
+				$biomeId = $chunk->getBiomeId($x & 15, $y, $z & 15);
 				if(!$world->isInWorld($x, $y, $z) ||
 					!GroundPathFinder::walkable($world, $x, $y, $z)){continue;}
 				$light = $world->getFullLightAt($x, $y, $z);
@@ -159,8 +171,9 @@ final class NaturalMobSpawner{
 						1 => Creeper::getNetworkTypeId(),
 						default => Zombie::getNetworkTypeId()
 					};
-				}elseif($allowAnimals && !$underground && Policy::canSpawnAnimal($light) &&
-					Policy::canSpawnFarmAnimalBiomeId($chunk->getBiomeId($x & 15, $y, $z & 15))){
+				}elseif($allowAnimals && !$underground &&
+					($this->settings->mode === MobSpawningSettings::MODE_VANILLA || Policy::canSpawnAnimal($light)) &&
+					Policy::canSpawnFarmAnimalBiomeId($biomeId)){
 					$type = match(mt_rand(0, 3)){
 						0 => Cow::class, 1 => Pig::class, 2 => Sheep::class,
 						default => Chicken::class
@@ -171,8 +184,10 @@ final class NaturalMobSpawner{
 			if($identifier === null){continue;}
 			$pos = new Vector3($x + 0.5, $y, $z + 0.5);
 			$eligible = false;
+			$nearestDistanceSquared = INF;
 			foreach($players as $player){
 				$distanceSquared = $player->getPosition()->distanceSquared($pos);
+				$nearestDistanceSquared = min($nearestDistanceSquared, $distanceSquared);
 				if($distanceSquared < Policy::MIN_PLAYER_DISTANCE ** 2){
 					$eligible = false;
 					break;
@@ -182,6 +197,25 @@ final class NaturalMobSpawner{
 				}
 			}
 			if(!$eligible){continue;}
+			if($this->settings->mode === MobSpawningSettings::MODE_VANILLA){
+				try{
+					$serializer = GlobalBlockStateHandlers::getSerializer();
+					$below = $serializer->serialize($world->getBlockAt($x, $y - 1, $z)->getStateId())->getName();
+					$feet = $serializer->serialize($world->getBlockAt($x, $y, $z)->getStateId())->getName();
+				}catch(BlockStateSerializeException){
+					continue;
+				}
+				$spot = new SpawnSpot($x, $y, $z, $surface,
+					$category === "water_animal" ? SpawnSpot::MEDIUM_WATER : SpawnSpot::MEDIUM_AIR,
+					$below, $feet, $world->getBlockLightAt($x, $y, $z),
+					$world->getPotentialBlockSkyLightAt($x, $y, $z), $biomeId, sqrt($nearestDistanceSquared));
+				$context = new SpawnContext($world->getDifficulty(), $world->getSkyLightReduction(),
+					$world->getSkyLightReduction(), DimensionIds::OVERWORLD, Policy::MIN_PLAYER_DISTANCE,
+					$this->settings->maxDistance);
+				$rule = $this->pickSupportedRule($spot, $context, $category);
+				if($rule === null){continue;}
+				$identifier = $rule->identifier;
+			}
 
 			$localCap = $this->settings->populationCap($category, $surface);
 			if($this->settings->mode === MobSpawningSettings::MODE_LEGACY){
@@ -230,6 +264,31 @@ final class NaturalMobSpawner{
 			++$created;
 			++$this->spawned;
 		}
+	}
+
+	private function pickSupportedRule(SpawnSpot $spot, SpawnContext $context, string $category) : ?SpawnCondition{
+		$allowed = match($category){
+			"animal" => [Cow::getNetworkTypeId(), Pig::getNetworkTypeId(), Sheep::getNetworkTypeId(), Chicken::getNetworkTypeId()],
+			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId()],
+			"water_animal" => [Squid::getNetworkTypeId()],
+			default => []
+		};
+		$total = 0;
+		$choices = [];
+		foreach($this->rules->forBiome($spot->biomeId) as $condition){
+			if($condition->population !== $category || !in_array($condition->identifier, $allowed, true) ||
+				!$condition->matchesSpot($spot, $context)){
+				continue;
+			}
+			$total += $condition->weight;
+			$choices[] = [$total, $condition];
+		}
+		if($total === 0){return null;}
+		$roll = mt_rand(1, $total);
+		foreach($choices as [$threshold, $condition]){
+			if($roll <= $threshold){return $condition;}
+		}
+		return null;
 	}
 
 	private static function category(Living $entity) : ?string{
