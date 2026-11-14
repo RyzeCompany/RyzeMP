@@ -12,6 +12,30 @@ los comandos comparten el sistema de envío de metadatos y el cliente, y el
 round-trip interno del servidor no reemplaza un cliente real ni un decodificador
 de protocolo independiente.
 
+## Prueba diferencial C: nombres de enums con y sin `:`
+
+En el **último PHAR experimental** de este PR, los probes siguen anunciando
+exactamente los mismos valores, pero con nombres internos distintos:
+
+| Comando | nombre de enum de primer argumento | segundo |
+|---|---|---|
+| `/crateprobe` (control) | `hcf:crateprobe:commando:namecrate` | `hcf:crateprobe:commando:effect` |
+| `/crateprobenative` (variante) | `RyzeProbeNativeNamesB` | `RyzeProbeNativeEffectsB` |
+
+Esta transformación se hace en `NetworkSession::syncAvailableCommands()`,
+**solo en los metadatos del comando de prueba nativo**, no modifica el comando
+registrado en el mapa, los parámetros reales, su ejecución, la base de datos
+ni la serialización de los demás comandos de RyzeMP.
+
+Si el segundo comando empieza a sugerir `King/Zeus` y `NONE/HEART`
+mientras el primero sigue mostrando `default`, la evidencia señalará los
+**identificadores de los enums**, no los valores, como causa probable.
+Si ninguno funciona, descartaremos esta hipótesis y continuaremos con el
+paquete global y el parser de comandos del cliente/protocolo.
+
+Este cambio requiere instalar un **nuevo PHAR de RyzeMP** de esta rama,
+reiniciar y reconectar; conservar el PHAR experimental de HCF PR #4.
+
 ## Cambios en esta rama
 - Únicamente instrumentación de los paquetes `AvailableCommandsPacket`
   **ya serializados, después de `DataPacketSendEvent`**.
