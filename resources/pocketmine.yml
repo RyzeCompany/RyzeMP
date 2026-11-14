@@ -24,14 +24,16 @@ mobs:
     # vanilla = chunk-chance and 9x9 population controls; legacy = interval-based.
     # RyzeMP vanilla mode is a conservative SUBSET, not full VanillaMine parity.
     mode: vanilla
-    # Official Mojang data-based rules have not been ported; false avoids a misleading setting.
+    # The pinned VanillaMine/Mojang rules for registered mobs are bundled in vanilla mode.
+    # This option is reserved for the full VanillaMine rule update mechanism.
     vanilla-rules: false
     chunk-chance: 11
     max-attempts-per-tick: 32
     global-cap: 200
     count-all-mobs-for-spawning: true
     # -1 = default Bedrock limits by surface/cave: animal 4 (surface);
-    # monster 8 (surface)/16 (cave); ambient 2, aquatic 36, pillager 8.
+    # monster 8 (surface)/16 (cave); ambient 2, water_animal 36, pillager 8.
+    # Squid belongs to the animal population in its Bedrock spawn rule.
     spawn-limits:
       animal: -1
       monster: -1

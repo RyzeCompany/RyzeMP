@@ -61,7 +61,7 @@ final class MobSpawningSettings{
 		$worldEnabled = $aiEnabled && !in_array($worldFolder, $names, true);
 		$warnings = [];
 		if($cfg->getPropertyBool("mobs.spawning.vanilla-rules", false)){
-			$warnings[] = "vanilla-rules=true is not yet available: only RyzeMP's limited built-in biome rules are applied";
+			$warnings[] = "vanilla-rules=true cannot update all species yet: vanilla mode uses the bundled pinned Bedrock rules for registered mobs";
 		}
 		foreach([
 			"mobs.spawning.phantoms" => "phantom spawning",
