@@ -148,6 +148,59 @@ final class CommandMetadata{
 		return $lines === [] ? ['{"status":"no_crate_edit_or_remove_overloads"}'] : $lines;
 	}
 
+	/**
+	 * Read the actual low-level enum symbol references instead of only
+	 * disassembling them back to high-level objects. This helps identify whether
+	 * a custom command becomes linked to the value "default" on the wire.
+	 *
+	 * The output contains only the fixed, synthetic crate probes, never raw
+	 * packet bytes, private player data, or arguments from unrelated commands.
+	 *
+	 * @return list<string>
+	 */
+	public static function describeProbeRawPacket(AvailableCommandsPacket $packet) : array{
+		$lines = [];
+		foreach($packet->commandData as $command){
+			$name = strtolower($command->getName());
+			if($name !== "crateprobe" && $name !== "crateprobenative"){continue;}
+			foreach($command->getOverloads() as $overloadIndex => $overload){
+				foreach($overload->getParameters() as $parameterIndex => $parameter){
+					$typeInfo = $parameter->getTypeInfo();
+					$enumIndex = $typeInfo & (AvailableCommandsPacket::ARG_FLAG_VALID - 1);
+					$isHardEnum = ($typeInfo & AvailableCommandsPacket::ARG_FLAG_ENUM) !== 0;
+					$enum = $isHardEnum ? ($packet->enums[$enumIndex] ?? null) : null;
+					$values = [];
+					$valid = $isHardEnum && $enum !== null;
+					if($enum !== null){
+						foreach($enum->getValueIndexes() as $valueIndex){
+							if(!isset($packet->enumValues[$valueIndex])){
+								$valid = false;
+								$values[] = "<missing>";
+							}else{
+								$values[] = $packet->enumValues[$valueIndex];
+							}
+						}
+					}
+					$lines[] = json_encode([
+						"command" => $name,
+						"overload" => $overloadIndex,
+						"parameter" => $parameterIndex,
+						"name" => $parameter->getName(),
+						"type_info" => $typeInfo,
+						"hard_enum" => $isHardEnum,
+						"enum_index" => $enumIndex,
+						"enum_name" => $enum?->getName(),
+						"values" => $values,
+						"valid" => $valid,
+						"optional" => $parameter->isOptional(),
+						"flags" => $parameter->getFlags()
+					], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES);
+				}
+			}
+		}
+		return $lines;
+	}
+
 	/** Refresh after dynamic names or visibility change; use only on the server thread. */
 	public static function refresh(Server $server) : void{
 		foreach($server->getOnlinePlayers() as $player){
