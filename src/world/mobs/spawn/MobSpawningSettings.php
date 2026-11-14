@@ -92,7 +92,7 @@ final class MobSpawningSettings{
 		$requestedDistance = $cfg->getPropertyInt("mobs.spawning.max-distance", 0);
 		$maxDistance = $requestedDistance <= 0 ? $autoSpawnDistance : max(25, $requestedDistance);
 		$requestedDespawn = $cfg->getPropertyInt("mobs.spawning.instant-despawn-distance", 0);
-		$despawnDistance = $requestedDespawn <= 0 ? $autoDespawnDistance : max(25, $requestedDespawn);
+		$despawnDistance = $requestedDespawn <= 0 ? $autoDespawnDistance : $requestedDespawn;
 
 		// Old PR #61 configs used these fields. Honor them during upgrade,
 		// without adding them to the new VanillaMine-shaped template.

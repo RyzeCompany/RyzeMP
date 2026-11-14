@@ -49,6 +49,9 @@ final class MobSpawningSettingsTest extends TestCase{
 		$largerRadius = $this->settings(["enabled" => true], "world", 6);
 		self::assertSame(96, $largerRadius->maxDistance);
 		self::assertSame(128, $largerRadius->despawnDistance);
+		self::assertSame(10, $this->settings(["enabled" => true, "spawning" => [
+			"instant-despawn-distance" => 10
+		]], "world", 6)->despawnDistance);
 	}
 
 	public function testDisabledWorldsAndLegacyMode() : void{
