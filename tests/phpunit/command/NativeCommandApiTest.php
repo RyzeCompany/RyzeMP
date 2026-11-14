@@ -399,6 +399,58 @@ final class NativeCommandApiTest extends TestCase{
 		}
 	}
 
+	public function testProbeRawEnumReferencesMatchOriginalValuesAfterWireEncoding() : void{
+		$hard = static fn(string $argument, string $enumName, array $values) =>
+			CommandParameter::enum($argument,
+				new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($enumName, $values), 0);
+		$make = static fn(string $name, string $prefix) =>
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				$name, "diagnostic", 0, "Any", null, [
+					new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+						$hard("namecrate", $prefix . ":namecrate", ["King", "Zeus"]),
+						$hard("effect", $prefix . ":effect", ["NONE", "HEART"])
+					])
+				], []
+			);
+		$commands = [
+			$make("crateprobe", "hcf:crateprobe:commando"),
+			$make("crateprobenative", "hcf:crateprobe:native"),
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				"rank", "unrelated", 0, "Any", null, [
+					new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+						$hard("rank", "hcf:rank", ["default", "admin"])
+					])
+				], []
+			)
+		];
+		$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble(
+			CommandMetadata::canonicalizePacketEnums($commands), [], []
+		);
+		foreach([2168, 2193, 2225] as $protocol){
+			$writer = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($writer, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($writer->getData()), $protocol);
+			$lines = array_map(
+				static fn(string $json) : array => json_decode($json, true, flags: JSON_THROW_ON_ERROR),
+				CommandMetadata::describeProbeRawPacket($decoded)
+			);
+			self::assertCount(4, $lines, "Must inspect exactly two args per probe on protocol " . $protocol);
+			foreach($lines as $line){
+				self::assertContains($line["command"], ["crateprobe", "crateprobenative"]);
+				self::assertTrue($line["hard_enum"]);
+				self::assertTrue($line["valid"], "Enum reference must resolve: " . json_encode($line));
+				self::assertNotSame("default", $line["values"][0] ?? null);
+				self::assertSame(AvailableCommandsPacket::ARG_FLAG_ENUM, $line["type_info"] & AvailableCommandsPacket::ARG_FLAG_ENUM);
+				self::assertSame(
+					$line["name"] === "namecrate" ? ["King", "Zeus"] : ["NONE", "HEART"],
+					$line["values"],
+					"Raw enum index must point to correct value list for " . $line["command"]
+				);
+			}
+		}
+	}
+
 	public function testNativeSetupNeedsNoOutgoingInterceptor() : void{
 		self::assertSame(1, CommandMetadata::API_VERSION);self::assertTrue(PacketHooker::isRegistered());
 		PacketHooker::register($this->plugin);PacketHooker::register($this->plugin);
