@@ -106,6 +106,8 @@ final class NaturalMobSpawner{
 
 		/** @var array<string, array<string, int>> $byChunk */
 		$byChunk = [];
+		/** @var array<string, array<string, int>> $byType */
+		$byType = [];
 		/** @var list<Living> $counted */
 		$counted = [];
 		$count = 0;
@@ -113,7 +115,7 @@ final class NaturalMobSpawner{
 			if(!$entity instanceof Living || $entity->isClosed() || $entity->isFlaggedForDespawn()){
 				continue;
 			}
-			$category = self::category($entity);
+			$category = $this->category($entity);
 			if($category === null || (!$this->settings->countAll && !isset($this->natural[$entity]))){
 				continue;
 			}
@@ -124,6 +126,8 @@ final class NaturalMobSpawner{
 			$surface = $this->naturalSurface[$entity] ?? true;
 			$group = $category . ($surface ? ":surface" : ":cave");
 			$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
+			$typeGroup = $entity::getNetworkTypeId() . ($surface ? ":surface" : ":cave");
+			$byType[$key][$typeGroup] = ($byType[$key][$typeGroup] ?? 0) + 1;
 		}
 		if($count >= $this->settings->globalCap){return;}
 
@@ -141,6 +145,7 @@ final class NaturalMobSpawner{
 				$height > $world->getMaxY() - 3){continue;}
 
 			$identifier = null;
+			$rule = null;
 			$surface = true;
 			$category = "animal";
 			$biomeId = 0;
@@ -215,6 +220,7 @@ final class NaturalMobSpawner{
 				$rule = $this->pickSupportedRule($spot, $context, $category);
 				if($rule === null){continue;}
 				$identifier = $rule->identifier;
+				$category = $rule->population;
 			}
 
 			$localCap = $this->settings->populationCap($category, $surface);
@@ -222,7 +228,7 @@ final class NaturalMobSpawner{
 				// Legacy caps are per player, measured within 64 blocks.
 				$nearCount = 0;
 				foreach($counted as $existing){
-					if(self::category($existing) === $category &&
+					if($this->category($existing) === $category &&
 						$existing->getPosition()->distanceSquared($pos) <= 64 ** 2){
 						++$nearCount;
 					}
@@ -232,6 +238,11 @@ final class NaturalMobSpawner{
 					$x >> 4, $z >> 4, $category, $surface);
 			}
 			if(!Policy::underCap($nearCount, $localCap)){continue;}
+			if($rule !== null && ($density = $rule->getDensityLimit($surface)) !== null &&
+				!Policy::underCap(Policy::populationInChunkRadiusForGroup($byType,
+					$x >> 4, $z >> 4, $identifier, $surface), $density)){
+				continue;
+			}
 
 			$location = new Location($x + 0.5, $y, $z + 0.5, $world, 0.0, 0.0);
 			if(MobPreSpawnEvent::hasHandlers()){
@@ -260,6 +271,8 @@ final class NaturalMobSpawner{
 			$key = ($x >> 4) . ":" . ($z >> 4);
 			$group = $category . ($surface ? ":surface" : ":cave");
 			$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
+			$typeGroup = $mob::getNetworkTypeId() . ($surface ? ":surface" : ":cave");
+			$byType[$key][$typeGroup] = ($byType[$key][$typeGroup] ?? 0) + 1;
 			++$count;
 			++$created;
 			++$this->spawned;
@@ -267,6 +280,9 @@ final class NaturalMobSpawner{
 	}
 
 	private function pickSupportedRule(SpawnSpot $spot, SpawnContext $context, string $category) : ?SpawnCondition{
+		// Bedrock's squid spawn rules belong to the animal population, even though the
+		// old RyzeMP selector grouped all aquatic mobs under water_animal.
+		$population = $category === "water_animal" ? "animal" : $category;
 		$allowed = match($category){
 			"animal" => [Cow::getNetworkTypeId(), Pig::getNetworkTypeId(), Sheep::getNetworkTypeId(), Chicken::getNetworkTypeId()],
 			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId()],
@@ -276,7 +292,7 @@ final class NaturalMobSpawner{
 		$total = 0;
 		$choices = [];
 		foreach($this->rules->forBiome($spot->biomeId) as $condition){
-			if($condition->population !== $category || !in_array($condition->identifier, $allowed, true) ||
+			if($condition->population !== $population || !in_array($condition->identifier, $allowed, true) ||
 				!$condition->matchesSpot($spot, $context)){
 				continue;
 			}
@@ -291,10 +307,10 @@ final class NaturalMobSpawner{
 		return null;
 	}
 
-	private static function category(Living $entity) : ?string{
+	private function category(Living $entity) : ?string{
 		return match(true){
 			$entity instanceof Animal => "animal",
-			$entity instanceof Squid => "water_animal",
+			$entity instanceof Squid => $this->settings->mode === MobSpawningSettings::MODE_VANILLA ? "animal" : "water_animal",
 			$entity instanceof Zombie || $entity instanceof Skeleton ||
 				$entity instanceof Creeper => "monster",
 			default => null
