@@ -172,6 +172,8 @@ class NetworkSession{
 	private \PrefixedLogger $logger;
 	/** Temporary: trace the first command synchronization only, per session. */
 	private bool $crateCommandTraceCompleted = false;
+	/** Number of outgoing probe metadata packets inspected, limited per session. */
+	private int $enumProbeTraceCount = 0;
 	private ?Player $player = null;
 	/** @phpstan-var DimensionIds::* */
 	private int $clientDimension = DimensionIds::OVERWORLD;
@@ -735,6 +737,38 @@ class NetworkSession{
 					}catch(\Throwable $e){
 						// Diagnostics must never interrupt a valid connection.
 						$this->logger->warning("[CrateCommandTrace] stage=wire_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
+					}
+				}
+				// Experimental RyzeMP diagnosis after DataPacketSendEvent, using the
+				// exact encoded bytes that will be queued for the client. Inspect
+				// only the two synthetic probe commands, for up to four packets
+				// per session to cover login plus later metadata refreshes.
+				if($evPacket instanceof AvailableCommandsPacket && $this->enumProbeTraceCount < 4){
+					$hasProbe = false;
+					foreach($evPacket->commandData as $rawCommand){
+						if(in_array(strtolower($rawCommand->getName()), ["crateprobe", "crateprobenative"], true)){
+							$hasProbe = true;
+							break;
+						}
+					}
+					if($hasProbe){
+						++$this->enumProbeTraceCount;
+						try{
+							$probePacket = new AvailableCommandsPacket();
+							$probePacket->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
+							$this->logger->info("[EnumProbeTrace] stage=wire packet=" . $this->enumProbeTraceCount .
+								" protocol=" . $this->getProtocolId() . " bytes=" . strlen($encoded) .
+								" sha256=" . substr(hash("sha256", $encoded), 0, 24) .
+								" commands=" . count($probePacket->commandData) .
+								" hard_enums=" . count($probePacket->enums));
+							foreach(\pocketmine\command\CommandMetadata::describeProbeRawPacket($probePacket) as $line){
+								$this->logger->info("[EnumProbeTrace] stage=raw " . $line);
+							}
+						}catch(\Throwable $e){
+							// Never disconnect users because of test instrumentation.
+							$this->logger->warning("[EnumProbeTrace] stage=error protocol=" .
+								$this->getProtocolId() . " error=" . get_class($e));
+						}
 					}
 				}
 				$this->addToSendBuffer($encoded);
