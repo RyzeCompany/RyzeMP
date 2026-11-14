@@ -179,6 +179,41 @@ final class NativeCommandApiTest extends TestCase{
 
 
 
+	public function testVanillaMineFreeTextFallbackPreservesTypedOverloadsAndOlderProtocols() : void{
+		$command = $this->command(static function(BaseCommand $cmd) : void{
+			$cmd->registerArgument(0, new RawStringArgument("crate"));
+		});
+		foreach([589, 649, 898, 2168, 2193, 2225] as $protocol){
+			$typed = CommandMetadata::forProtocol($command, $this->sender, $protocol);
+			$combined = CommandMetadata::withVanillaCompatibleFallback($command, $typed, $protocol);
+			$expected = $protocol >= 2168 ? count($typed) + 1 : count($typed);
+			self::assertCount($expected, $combined, "Fallback count protocol " . $protocol);
+			self::assertSame($typed[0], $combined[0], "Typed overload unchanged for " . $protocol);
+			if($protocol >= 2168){
+				$last = $combined[array_key_last($combined)]->getParameters();
+				self::assertCount(1, $last);
+				self::assertSame("args", $last[0]->paramName);
+				self::assertSame(AvailableCommandsPacket::ARG_TYPE_RAWTEXT, $last[0]->paramType);
+				self::assertNull($last[0]->enum);
+				self::assertTrue($last[0]->isOptional);
+				self::assertCount(count($combined),
+					CommandMetadata::withVanillaCompatibleFallback($command, $combined, $protocol),
+					"Repeated metadata refresh cannot duplicate a free-text fallback");
+			}
+		}
+
+		$vanillaCommand = $this->createMock(Command::class);
+		$default = CommandMetadata::forProtocol($vanillaCommand, $this->sender, 2225);
+		self::assertSame($default, CommandMetadata::withVanillaCompatibleFallback($vanillaCommand, $default, 2225),
+			"Ordinary commands already have their free-text fallback");
+
+		$hidden = $this->command(static function(BaseCommand $cmd) : void{
+			$cmd->addConstraint(new TestDeniedConstraint($cmd));
+		});
+		self::assertSame([], CommandMetadata::withVanillaCompatibleFallback($hidden, [], 2225),
+			"Invisible commands remain invisible; fallback must not expose their names");
+	}
+
 	public function testAvailableCommandsWirePermissionUsesCanonicalCasingOnModernProtocols() : void{
 		$command = $this->command(static function(BaseCommand $cmd) : void{
 			$cmd->registerArgument(0, new RawStringArgument("namecrate"));
@@ -216,6 +251,16 @@ final class NativeCommandApiTest extends TestCase{
 			self::assertSame($protocol >= 898 ? "Any" : "any", $commands[0]->getPermission(),
 				"AvailableCommands wire permission must match the protocol's case-sensitive enum string");
 			self::assertSame("namecrate", $commands[0]->getOverloads()[0]->getParameters()[0]->paramName);
+			$wireOverloads = $commands[0]->getOverloads();
+			if($protocol >= 2168){
+				self::assertCount(2, $wireOverloads, "1.26 must include the VanillaMine free-text fallback");
+				$freeText = $wireOverloads[1]->getParameters()[0];
+				self::assertSame("args", $freeText->paramName);
+				self::assertTrue($freeText->isOptional);
+				self::assertSame(AvailableCommandsPacket::ARG_TYPE_RAWTEXT, $freeText->paramType);
+			}else{
+				self::assertCount(1, $wireOverloads, "Older protocols must remain unchanged");
+			}
 		}
 	}
 
