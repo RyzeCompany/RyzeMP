@@ -46,7 +46,9 @@ final class MobSpawningSettingsTest extends TestCase{
 		self::assertSame(16, $s->populationCap("monster", false));
 		self::assertSame(36, $s->populationCap("water_animal", true));
 		self::assertSame(0, $s->populationCap("water_animal", false));
-		self::assertSame(96, $this->settings(["enabled" => true], "world", 6)->maxDistance);
+		$largerRadius = $this->settings(["enabled" => true], "world", 6);
+		self::assertSame(96, $largerRadius->maxDistance);
+		self::assertSame(128, $largerRadius->despawnDistance);
 	}
 
 	public function testDisabledWorldsAndLegacyMode() : void{

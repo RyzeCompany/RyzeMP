@@ -85,11 +85,14 @@ final class MobSpawningSettings{
 		foreach(["animal", "monster", "ambient", "water_animal", "pillager"] as $category){
 			$limits[$category] = max(-1, $cfg->getPropertyInt("mobs.spawning.spawn-limits.$category", -1));
 		}
-		$autoDistance = $tickRadius <= 4 ? 44 : min(128, max(44, $tickRadius * 16));
+		$autoSpawnDistance = $tickRadius <= 4 ? 44 : min(128, $tickRadius * 16);
+		// Bedrock keeps naturally spawned mobs up to 128 blocks away once the
+		// simulation radius exceeds four chunks, even if the spawn range is smaller.
+		$autoDespawnDistance = $tickRadius <= 4 ? 44 : 128;
 		$requestedDistance = $cfg->getPropertyInt("mobs.spawning.max-distance", 0);
-		$maxDistance = $requestedDistance <= 0 ? $autoDistance : max(25, $requestedDistance);
+		$maxDistance = $requestedDistance <= 0 ? $autoSpawnDistance : max(25, $requestedDistance);
 		$requestedDespawn = $cfg->getPropertyInt("mobs.spawning.instant-despawn-distance", 0);
-		$despawnDistance = $requestedDespawn <= 0 ? $autoDistance : max(25, $requestedDespawn);
+		$despawnDistance = $requestedDespawn <= 0 ? $autoDespawnDistance : max(25, $requestedDespawn);
 
 		// Old PR #61 configs used these fields. Honor them during upgrade,
 		// without adding them to the new VanillaMine-shaped template.
