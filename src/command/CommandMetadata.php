@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace pocketmine\command;
 
 use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\command\CommandData;
 use pocketmine\network\mcpe\protocol\types\command\ConstrainedEnumValue;
 use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
@@ -38,6 +39,40 @@ final class CommandMetadata{
 		return $result;
 	}
 
+
+	/**
+	 * VanillaMine-compatible Bedrock 1.26 command fallback.
+	 *
+	 * VanillaMine sends the typed overloads first and appends a permissive,
+	 * optional RAWTEXT argument to non-exhaustive plugin commands. This avoids
+	 * client-side syntax rejection when an overload is not understood.
+	 *
+	 * Only the packet-local overload list is changed. Execution, permissions
+	 * and registered command definitions are unaffected. This is a diagnostic
+	 * compatibility change until validated by a real 1.26.40/1.26.60 client.
+	 *
+	 * @param list<CommandOverload> $overloads
+	 * @return list<CommandOverload>
+	 */
+	public static function withVanillaCompatibleFallback(Command $command, array $overloads, int $protocol) : array{
+		if(!$command instanceof CommandOverloadProvider || $protocol < ProtocolInfo::PROTOCOL_1_26_40 || $overloads === []){
+			return $overloads;
+		}
+		foreach($overloads as $overload){
+			$parameters = $overload->getParameters();
+			if(count($parameters) !== 1){continue;}
+			$parameter = $parameters[0];
+			if($parameter->enum === null && $parameter->postfix === null &&
+				$parameter->paramType === AvailableCommandsPacket::ARG_TYPE_RAWTEXT &&
+				$parameter->isOptional){
+				return $overloads; // Existing optional free-text fallback.
+			}
+		}
+		$overloads[] = new CommandOverload(false, [
+			CommandParameter::standard("args", AvailableCommandsPacket::ARG_TYPE_RAWTEXT, 0, true)
+		]);
+		return $overloads;
+	}
 
 	/**
 	 * Intern equivalent command enums before building AvailableCommandsPacket.
