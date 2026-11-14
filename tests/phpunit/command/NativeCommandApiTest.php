@@ -451,6 +451,53 @@ final class NativeCommandApiTest extends TestCase{
 		}
 	}
 
+	public function testDiagnosticNativeProbeRenamesOnlyEnumIdentifiersAndKeepsValues() : void{
+		$hard = static fn(string $arg, string $enum, array $values) : CommandParameter =>
+			CommandParameter::enum($arg,
+				new \pocketmine\network\mcpe\protocol\types\command\CommandHardEnum($enum, $values), 0);
+		$command = static fn(string $name, string $prefix) =>
+			new \pocketmine\network\mcpe\protocol\types\command\CommandData(
+				$name, "probe", 0, "Any", null,
+				[new \pocketmine\network\mcpe\protocol\types\command\CommandOverload(false, [
+					$hard("namecrate", $prefix . ":namecrate", ["King", "Zeus"]),
+					$hard("effect", $prefix . ":effect", ["NONE", "HEART"])
+				])], []
+			);
+		$prepared = CommandMetadata::canonicalizePacketEnums([
+			$command("crateprobe", "hcf:crateprobe:commando"),
+			$command("crateprobenative", "hcf:crateprobe:native")
+		]);
+		CommandMetadata::rewriteDiagnosticProbeEnumNames($prepared);
+		$left = $prepared[0]->getOverloads()[0]->getParameters();
+		$right = $prepared[1]->getOverloads()[0]->getParameters();
+		self::assertSame("hcf:crateprobe:commando:namecrate", $left[0]->enum->getName());
+		self::assertSame("hcf:crateprobe:commando:effect", $left[1]->enum->getName());
+		self::assertSame("RyzeProbeNativeNamesB", $right[0]->enum->getName());
+		self::assertSame("RyzeProbeNativeEffectsB", $right[1]->enum->getName());
+		self::assertSame($left[0]->enum->getValues(), $right[0]->enum->getValues());
+		self::assertSame($left[1]->enum->getValues(), $right[1]->enum->getValues());
+		foreach([2168, 2193, 2225] as $protocol){
+			$packet = \pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler::assemble($prepared, [], []);
+			$out = new \pmmp\encoding\ByteBufferWriter();
+			$packet->encode($out, $protocol);
+			$decoded = new AvailableCommandsPacket();
+			$decoded->decode(new \pmmp\encoding\ByteBufferReader($out->getData()), $protocol);
+			$lines = array_map(static fn(string $line) : array =>
+				json_decode($line, true, flags: JSON_THROW_ON_ERROR),
+				CommandMetadata::describeProbeRawPacket($decoded));
+			self::assertCount(4, $lines);
+			self::assertSame("hcf:crateprobe:commando:namecrate", $lines[0]["enum_name"]);
+			self::assertSame("hcf:crateprobe:commando:effect", $lines[1]["enum_name"]);
+			self::assertSame("RyzeProbeNativeNamesB", $lines[2]["enum_name"]);
+			self::assertSame("RyzeProbeNativeEffectsB", $lines[3]["enum_name"]);
+			self::assertSame(["King", "Zeus"], $lines[0]["values"]);
+			self::assertSame(["King", "Zeus"], $lines[2]["values"]);
+			self::assertSame(["NONE", "HEART"], $lines[1]["values"]);
+			self::assertSame(["NONE", "HEART"], $lines[3]["values"]);
+			foreach($lines as $line){self::assertTrue($line["valid"]);}
+		}
+	}
+
 	public function testNativeSetupNeedsNoOutgoingInterceptor() : void{
 		self::assertSame(1, CommandMetadata::API_VERSION);self::assertTrue(PacketHooker::isRegistered());
 		PacketHooker::register($this->plugin);PacketHooker::register($this->plugin);
