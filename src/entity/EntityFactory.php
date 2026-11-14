@@ -27,6 +27,10 @@ use DaveRandom\CallbackValidator\CallbackType;
 use DaveRandom\CallbackValidator\ParameterType;
 use DaveRandom\CallbackValidator\ReturnType;
 use pocketmine\block\RuntimeBlockStateRegistry;
+use pocketmine\entity\animal\Chicken;
+use pocketmine\entity\animal\Cow;
+use pocketmine\entity\animal\Pig;
+use pocketmine\entity\animal\Sheep;
 use pocketmine\data\bedrock\LegacyEntityIdToStringIdMap;
 use pocketmine\data\bedrock\PotionTypeIdMap;
 use pocketmine\data\bedrock\PotionTypeIds;
@@ -194,6 +198,30 @@ final class EntityFactory{
 			'Trident', //backwards compat for people who used #4547 before it was merged, since it was sitting around for 4 years...
 			'ThrownTrident' //as above
 		]);
+
+		$this->register(Chicken::class, function(World $world, CompoundTag $nbt) : Chicken{
+			return new Chicken(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Chicken', 'minecraft:chicken']);
+
+		$this->register(Cow::class, function(World $world, CompoundTag $nbt) : Cow{
+			return new Cow(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Cow', 'minecraft:cow']);
+
+		$this->register(Pig::class, function(World $world, CompoundTag $nbt) : Pig{
+			return new Pig(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Pig', 'minecraft:pig']);
+
+		$this->register(Sheep::class, function(World $world, CompoundTag $nbt) : Sheep{
+			return new Sheep(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Sheep', 'minecraft:sheep']);
+
+		$this->register(Creeper::class, function(World $world, CompoundTag $nbt) : Creeper{
+			return new Creeper(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Creeper', 'minecraft:creeper']);
+
+		$this->register(Skeleton::class, function(World $world, CompoundTag $nbt) : Skeleton{
+			return new Skeleton(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Skeleton', 'minecraft:skeleton']);
 
 		$this->register(Squid::class, function(World $world, CompoundTag $nbt) : Squid{
 			return new Squid(Helper::parseLocation($nbt, $world), $nbt);

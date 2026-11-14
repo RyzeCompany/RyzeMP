@@ -18,6 +18,7 @@ final class GameRulesTest extends TestCase{
 	public function testDefaultsAndImportedWorldDefault() : void{
 		self::assertFalse((new GameRules($this->directory . "/world.yml"))->getBool("showcoordinates"));
 		self::assertTrue((new GameRules($this->directory . "/world.yml"))->getBool("doweathercycle"));
+		self::assertTrue((new GameRules($this->directory . "/world.yml"))->getBool("mobgriefing"));
 		self::assertTrue((new GameRules($this->directory . "/nether.yml", true))->getBool("showCoordinates"));
 	}
 	public function testPersistenceAndIndependentWorlds() : void{
@@ -25,9 +26,12 @@ final class GameRulesTest extends TestCase{
 		$second = new GameRules($this->directory . "/nether.yml");
 		$first->setBool("showCoordinates", true);
 		$first->setBool("doweathercycle", false);
+		$first->setBool("mobgriefing", false);
 		self::assertTrue($first->getBool("showcoordinates"));
 		self::assertFalse($second->getBool("showcoordinates"));
 		self::assertFalse($first->getBool("doweathercycle"));
+		self::assertFalse((new GameRules($this->directory . "/world.yml"))->getBool("mobgriefing"));
+		self::assertTrue($second->getBool("mobgriefing"));
 		self::assertTrue($second->getBool("doweathercycle"));
 		self::assertFalse((new GameRules($this->directory . "/world.yml"))->getBool("doweathercycle"));
 		self::assertTrue((new GameRules($this->directory . "/world.yml"))->getBool("showcoordinates"));
@@ -42,6 +46,7 @@ final class GameRulesTest extends TestCase{
 		self::assertFalse($network["naturalregeneration"]->getValue());
 		self::assertFalse($network["locatorbar"]->getValue());
 		self::assertTrue($network["doweathercycle"]->getValue());
+		self::assertTrue($network["mobgriefing"]->getValue());
 	}
 	public function testUnknownRuleRejected() : void{
 		$this->expectException(\InvalidArgumentException::class);

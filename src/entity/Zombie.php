@@ -23,14 +23,33 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
+use pocketmine\entity\ai\goal\ZombieAttackGoal;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
+use pocketmine\world\World;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use function mt_rand;
 
-class Zombie extends Living{
+class Zombie extends Mob{
 
 	public static function getNetworkTypeId() : string{ return EntityIds::ZOMBIE; }
+
+	protected function burnsInDaylight() : bool{ return true; }
+
+	protected function registerGoals() : void{
+		$this->getGoalSelector()->addGoal(1, new ZombieAttackGoal($this));
+		parent::registerGoals();
+	}
+
+
+	protected function entityBaseTick(int $tickDiff = 1) : bool{
+		$result = parent::entityBaseTick($tickDiff);
+		if($this->getWorld()->getDifficulty() === World::DIFFICULTY_PEACEFUL){
+			$this->flagForDespawn();
+			return false;
+		}
+		return $result;
+	}
 
 	protected function getInitialSizeInfo() : EntitySizeInfo{
 		return new EntitySizeInfo(1.9, 0.6); //TODO: eye height ??

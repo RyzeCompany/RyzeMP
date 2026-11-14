@@ -31,7 +31,7 @@ use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataFlags;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
 
-class Villager extends Living implements Ageable{
+class Villager extends Mob implements Ageable{
 	public const PROFESSION_FARMER = 0;
 	public const PROFESSION_LIBRARIAN = 1;
 	public const PROFESSION_PRIEST = 2;

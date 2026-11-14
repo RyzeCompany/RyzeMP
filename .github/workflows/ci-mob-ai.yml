@@ -1,0 +1,49 @@
+name: VanillaMine Mob AI and spawn PHPStan 9
+on:
+  pull_request:
+    paths:
+      - 'src/entity/ai/**'
+      - 'src/entity/animal/**'
+      - 'src/entity/utils/MobBiomeInfo.php'
+      - 'src/entity/Mob.php'
+      - 'src/entity/Zombie.php'
+      - 'src/entity/Skeleton.php'
+      - 'src/entity/Creeper.php'
+      - 'src/entity/Villager.php'
+      - 'src/entity/SpawnerEntityRegistry.php'
+      - 'src/entity/EntityFactory.php'
+      - 'src/world/mobs/**'
+      - 'resources/vanilla_spawn_rules.json'
+      - 'src/world/World.php'
+      - 'src/world/GameRules.php'
+      - 'src/event/entity/MobPreSpawnEvent.php'
+      - 'src/event/entity/EntityNaturalSpawnEvent.php'
+      - 'tests/phpunit/entity/ai/**'
+      - 'tests/phpunit/world/mobs/**'
+      - '.github/workflows/ci-mob-ai.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  phpstan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Prepare PHPStan excludes
+        run: mkdir -p build/php
+      - name: Analyze Mob AI and natural spawning
+        run: |
+          php -d memory_limit=2G vendor/bin/phpstan analyse -c phpstan.neon.dist --no-progress --memory-limit=2G \
+            src/entity/ai src/entity/animal src/entity/utils/MobBiomeInfo.php src/entity/Mob.php src/entity/Zombie.php src/entity/Skeleton.php src/entity/Creeper.php src/entity/Villager.php \
+            src/entity/SpawnerEntityRegistry.php src/entity/EntityFactory.php src/world/mobs \
+            src/world/World.php src/world/GameRules.php src/event/entity/MobPreSpawnEvent.php \
+            src/event/entity/EntityNaturalSpawnEvent.php \
+            tests/phpunit/entity/ai tests/phpunit/world/mobs
