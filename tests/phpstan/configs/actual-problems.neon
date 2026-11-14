@@ -541,12 +541,6 @@ parameters:
 			path: ../../../src/block/utils/CropGrowthHelper.php
 
 		-
-			message: '#^Cannot call method addParticle\(\) on pocketmine\\world\\World\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: ../../../src/command/defaults/ParticleCommand.php
-
-		-
 			message: '#^Cannot call method getSeed\(\) on pocketmine\\world\\World\|null\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -557,12 +551,6 @@ parameters:
 			identifier: method.nonObject
 			count: 1
 			path: ../../../src/command/defaults/SetWorldSpawnCommand.php
-
-		-
-			message: '#^Cannot call method getTime\(\) on pocketmine\\world\\World\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: ../../../src/command/defaults/TimeCommand.php
 
 		-
 			message: '#^Parameter \#1 \$array of function sort expects an array of values castable to string, array\<mixed\> given\.$#'

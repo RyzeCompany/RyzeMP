@@ -43,6 +43,7 @@ final class PlaceSettings{
 	 * @phpstan-var list<StructureProcessor>
 	 */
 	public array $processors = [];
+	public bool $ignoreEntities = false;
 	/** StructurePlaceSettings.knownShape: no shape updates after placement (jigsaw elements) */
 	public bool $knownShape = false;
 	/** LiquidSettings.APPLY_WATERLOGGING (default) or IGNORE_WATERLOGGING */

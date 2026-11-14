@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\StaticSupportTrait;
+use pocketmine\block\utils\VanillaTreeGrower;
 use pocketmine\event\block\StructureGrowEvent;
 use pocketmine\item\Fertilizer;
 use pocketmine\item\Item;
@@ -53,7 +54,6 @@ class NetherFungus extends Flowable{
 	}
 
 	private function canBeSupportedAt(Block $block) : bool{
-		//TODO: moss
 		$supportBlock = $block->getSide(Facing::DOWN);
 		return
 			$supportBlock->hasTypeTag(BlockTypeTags::DIRT) ||
@@ -63,17 +63,36 @@ class NetherFungus extends Flowable{
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
-		if($item instanceof Fertilizer){
+		//a fungus on its nylium grows with a 40% chance (FungusBlock); BDS 1.26.60 also uses the bone meal on the other
+		//nylium, without growing (Java keeps it there)
+		if(!$item instanceof Fertilizer){
+			return false;
+		}
+		$ground = $this->getSide(Facing::DOWN)->getTypeId();
+		if($ground === $this->nyliumTypeId){
 			$item->pop();
-			if($this->getSide(Facing::DOWN)->getTypeId() === $this->nyliumTypeId && ($player === null || !$player->hasFiniteResources() || mt_rand(1, 100) <= 40)){
+			if(($player !== null && !$player->hasFiniteResources()) || mt_rand(1, 100) <= 40){
 				$this->grow($player);
 			}
+			return true;
+		}
+		if($ground === BlockTypeIds::CRIMSON_NYLIUM || $ground === BlockTypeIds::WARPED_NYLIUM){
+			$item->pop();
 			return true;
 		}
 		return false;
 	}
 
 	private function grow(?Player $player) : void{
+		$feature = match($this->treeType){
+			TreeType::CRIMSON => "crimson_fungus_planted",
+			TreeType::WARPED => "warped_fungus_planted",
+			default => null
+		};
+		if($feature !== null && VanillaTreeGrower::placeFeature($this, $player, $feature, []) !== null){
+			return;
+		}
+		//PocketMine tree when the vanilla data is not available
 		$random = new Random(mt_rand());
 		$tree = TreeFactory::get($random, $this->treeType);
 		$transaction = $tree?->getBlockTransaction($this->position->getWorld(), $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ(), $random);
@@ -87,4 +106,6 @@ class NetherFungus extends Flowable{
 			$transaction->apply();
 		}
 	}
+
+	public function getCompostabilityChance() : int{ return 65; }
 }

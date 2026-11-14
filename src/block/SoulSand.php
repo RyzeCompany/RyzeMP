@@ -31,4 +31,13 @@ class SoulSand extends Opaque{
 	protected function recalculateCollisionBoxes() : array{
 		return [AxisAlignedBB::one()->trim(Facing::UP, 1 / 8)];
 	}
+
+	public function ticksRandomly() : bool{
+		return true;
+	}
+
+	public function onRandomTick() : void{
+		//builds a missing upward bubble column above (e.g. in chunks generated before bubble columns existed)
+		BubbleColumn::onColumnSourceRandomTick($this);
+	}
 }

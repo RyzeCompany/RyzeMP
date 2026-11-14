@@ -28,6 +28,8 @@ use pocketmine\block\utils\Colored;
 use pocketmine\block\utils\ColoredTrait;
 use pocketmine\block\utils\Fallable;
 use pocketmine\block\utils\FallableTrait;
+use pocketmine\block\utils\LiquidLayer;
+use pocketmine\block\utils\SupportType;
 use pocketmine\math\Facing;
 
 class ConcretePowder extends Opaque implements Fallable, Colored{
@@ -51,13 +53,17 @@ class ConcretePowder extends Opaque implements Fallable, Colored{
 		return VanillaBlocks::CONCRETE()->setColor($this->color);
 	}
 
-	private function getAdjacentWater() : ?Water{
+	/**
+	 * Returns the water (or waterlogged block holding water) touching the powder from above or a side, if any.
+	 */
+	private function getAdjacentWater() : ?Block{
 		foreach(Facing::ALL as $i){
 			if($i === Facing::DOWN){
 				continue;
 			}
 			$block = $this->getSide($i);
-			if($block instanceof Water){
+			//like Java, water behind a full face of a waterlogged block (stairs, slabs...) does not touch the powder
+			if(LiquidLayer::isWater($block) && $block->getSupportType(Facing::opposite($i)) !== SupportType::FULL){
 				return $block;
 			}
 		}

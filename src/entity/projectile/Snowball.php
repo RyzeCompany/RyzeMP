@@ -23,12 +23,27 @@ declare(strict_types=1);
 
 namespace pocketmine\entity\projectile;
 
+use pocketmine\entity\Entity;
+use pocketmine\entity\monster\Blaze;
 use pocketmine\event\entity\ProjectileHitEvent;
+use pocketmine\math\RayTraceResult;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\world\particle\SnowballPoofParticle;
 
+/**
+ * Snowballs only push mobs, except blazes which take 3 damage (vanilla Snowball.onHitEntity).
+ */
 class Snowball extends Throwable{
+	public const BLAZE_DAMAGE = 3.0;
+
 	public static function getNetworkTypeId() : string{ return EntityIds::SNOWBALL; }
+
+	protected function onHitEntity(Entity $entityHit, RayTraceResult $hitResult) : void{
+		if($entityHit instanceof Blaze){
+			$this->setBaseDamage(self::BLAZE_DAMAGE);
+		}
+		parent::onHitEntity($entityHit, $hitResult);
+	}
 
 	protected function onHit(ProjectileHitEvent $event) : void{
 		$world = $this->getWorld();

@@ -28,6 +28,7 @@ use pocketmine\data\SavedDataLoadingException;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
+use pocketmine\entity\Mob;
 use pocketmine\entity\object\EndCrystal;
 use pocketmine\event\entity\EntityCombustByEntityEvent;
 use pocketmine\event\entity\EntityDamageByChildEntityEvent;
@@ -43,6 +44,8 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\timings\Timings;
+use pocketmine\world\vibration\GameEvent;
+use function abs;
 use function atan2;
 use function ceil;
 use function count;
@@ -59,6 +62,14 @@ abstract class Projectile extends Entity{
 
 	protected float $damage = 0.0;
 	protected ?Vector3 $blockHit = null;
+	/** ID of the mob which last reflected the projectile (it passes through it from then on), -1 if none. */
+	private int $reflectedById = -1;
+	/**
+	 * Motion the viewers are already simulating: the one they last received, carried forward by the projectile's own
+	 * drag and gravity. Bedrock clients fly projectiles themselves from the AddActor motion, so BDS sends no motion
+	 * update while a projectile follows its natural flight; one is only sent when something else changes it.
+	 */
+	private ?Vector3 $clientMotion = null;
 
 	public function __construct(Location $location, ?Entity $shootingEntity, ?CompoundTag $nbt = null){
 		parent::__construct($location, $nbt);
@@ -123,6 +134,13 @@ abstract class Projectile extends Entity{
 		return (int) ceil($this->damage);
 	}
 
+	/**
+	 * Returns the damage dealt to the entity hit, which may have a fractional part (see {@link Arrow::getHitDamage()}).
+	 */
+	protected function getHitDamage() : float{
+		return $this->getResultDamage();
+	}
+
 	public function saveNBT() : CompoundTag{
 		$nbt = parent::saveNBT();
 
@@ -141,6 +159,57 @@ abstract class Projectile extends Entity{
 
 	protected function applyDragBeforeGravity() : bool{
 		return true;
+	}
+
+	/**
+	 * Returns the fraction of its speed the projectile keeps each tick while it is in water, in place of the air drag
+	 * (Bedrock minecraft:projectile liquid_inertia, 0.6 when an entity doesn't set it).
+	 */
+	protected function getLiquidInertia() : float{
+		return 0.6;
+	}
+
+	protected function onFirstUpdate(int $currentTick) : void{
+		//the motion set before the projectile was spawned went out with AddActor
+		$this->clientMotion = $this->motion;
+		parent::onFirstUpdate($currentTick);
+	}
+
+	protected function tryChangeMovement() : void{
+		$inSync = $this->isClientMotion();
+		if($this->getBoundingBoxLiquidDepth() <= 0.0){
+			parent::tryChangeMovement();
+		}else{
+			//in water: liquid_inertia replaces the air inertia, gravity still applies
+			$inertia = $this->getLiquidInertia();
+			$mY = $this->motion->y * $inertia;
+			if($this->gravityEnabled){
+				$mY -= $this->gravity;
+			}
+			$this->motion = new Vector3($this->motion->x * $inertia, $mY, $this->motion->z * $inertia);
+		}
+		$this->clientMotion = $inSync ? $this->motion : null;
+	}
+
+	/**
+	 * Whether the viewers' own simulation already has this motion. Components under MOTION_THRESHOLD are zeroed after
+	 * each step on both sides, so a difference that small doesn't count.
+	 */
+	private function isClientMotion() : bool{
+		$client = $this->clientMotion;
+		$motion = $this->motion;
+		return $client !== null &&
+			abs($motion->x - $client->x) <= self::MOTION_THRESHOLD &&
+			abs($motion->y - $client->y) <= self::MOTION_THRESHOLD &&
+			abs($motion->z - $client->z) <= self::MOTION_THRESHOLD;
+	}
+
+	protected function broadcastMotion() : void{
+		if($this->isClientMotion()){
+			return;
+		}
+		parent::broadcastMotion();
+		$this->clientMotion = $this->motion;
 	}
 
 	public function onNearbyBlockChange() : void{
@@ -185,7 +254,7 @@ abstract class Projectile extends Entity{
 
 		$newDiff = $end->subtractVector($start);
 		foreach($world->getCollidingEntities($this->boundingBox->addCoord($newDiff->x, $newDiff->y, $newDiff->z)->expand(1, 1, 1), $this) as $entity){
-			if($entity->getId() === $this->getOwningEntityId() && $this->ticksLived < 5){
+			if(($entity->getId() === $this->getOwningEntityId() && $this->ticksLived < 5) || $entity->getId() === $this->reflectedById){
 				continue;
 			}
 
@@ -215,6 +284,11 @@ abstract class Projectile extends Entity{
 		);
 		$this->recalculateBoundingBox();
 
+		if($hitResult !== null && $hitResult[0] instanceof Mob && $hitResult[0]->reflectProjectile($this)){
+			//sent away (breezes): no hit, it keeps flying with its new motion
+			$this->reflectedById = $hitResult[0]->getId();
+			$hitResult = null;
+		}
 		if($hitResult !== null){
 			[$objectHit, $rayTraceResult] = $hitResult;
 			if($objectHit instanceof Entity){
@@ -275,14 +349,15 @@ abstract class Projectile extends Entity{
 	 * Called when the projectile collides with an Entity.
 	 */
 	protected function onHitEntity(Entity $entityHit, RayTraceResult $hitResult) : void{
-		$damage = $this->getResultDamage();
+		$damage = $this->getHitDamage();
 
 		if($damage >= 0){
 			$owner = $this->getOwningEntity();
+			$cause = $this->getHitDamageCause();
 			if($owner === null){
-				$ev = new EntityDamageByEntityEvent($this, $entityHit, EntityDamageEvent::CAUSE_PROJECTILE, $damage);
+				$ev = new EntityDamageByEntityEvent($this, $entityHit, $cause, $damage);
 			}else{
-				$ev = new EntityDamageByChildEntityEvent($owner, $this, $entityHit, EntityDamageEvent::CAUSE_PROJECTILE, $damage);
+				$ev = new EntityDamageByChildEntityEvent($owner, $this, $entityHit, $cause, $damage);
 			}
 
 			$entityHit->attack($ev);
@@ -302,11 +377,25 @@ abstract class Projectile extends Entity{
 	}
 
 	/**
+	 * Damage cause of a hit: fireballs (fire damage) and wither skulls have their own.
+	 */
+	private function getHitDamageCause() : int{
+		if($this instanceof SmallFireball || $this instanceof LargeFireball){
+			return EntityDamageEvent::CAUSE_FIREBALL;
+		}
+		if($this instanceof WitherSkull){
+			return EntityDamageEvent::CAUSE_WITHER_SKULL;
+		}
+		return EntityDamageEvent::CAUSE_PROJECTILE;
+	}
+
+	/**
 	 * Called when the projectile collides with a Block.
 	 */
 	protected function onHitBlock(Block $blockHit, RayTraceResult $hitResult) : void{
 		$this->blockHit = $blockHit->getPosition()->asVector3();
 		$blockHit->onProjectileHit($this, $hitResult);
+		$this->getWorld()->addGameEvent($this->location, GameEvent::PROJECTILE_LAND, $this);
 	}
 
 	/**

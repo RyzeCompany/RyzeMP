@@ -30,5 +30,6 @@ final class LegacyBiomeIdToStringIdMap extends LegacyToStringIdMap{
 
 	public function __construct(){
 		parent::__construct(BedrockDataFiles::BIOME_ID_MAP_JSON);
+		BiomeDefinitionSupplement::addIds($this);
 	}
 }

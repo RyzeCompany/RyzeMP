@@ -27,6 +27,7 @@ use pocketmine\block\Liquid;
 use pocketmine\entity\Living;
 use pocketmine\math\Vector3;
 use pocketmine\world\sound\EndermanTeleportSound;
+use pocketmine\world\vibration\GameEvent;
 use function min;
 use function mt_rand;
 
@@ -80,6 +81,7 @@ class ChorusFruit extends Food{
 			$world->addSound($origin, new EndermanTeleportSound());
 			$consumer->teleport($target = new Vector3($x + 0.5, $y + 1, $z + 0.5));
 			$world->addSound($target, new EndermanTeleportSound());
+			$world->addGameEvent($origin, GameEvent::TELEPORT, $consumer); //Java TeleportRandomlyConsumeEffect
 
 			break;
 		}

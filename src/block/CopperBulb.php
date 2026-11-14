@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\CopperMaterial;
 use pocketmine\block\utils\CopperOxidation;
 use pocketmine\block\utils\CopperTrait;
@@ -31,8 +32,10 @@ use pocketmine\block\utils\LightableTrait;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\world\sound\CopperBulbTurnOffSound;
+use pocketmine\world\sound\CopperBulbTurnOnSound;
 
-class CopperBulb extends Opaque implements CopperMaterial, Lightable, PoweredByRedstone{
+class CopperBulb extends Opaque implements CopperMaterial, Lightable, PoweredByRedstone, ComparatorReadable{
 	use CopperTrait;
 	use PoweredByRedstoneTrait;
 	use LightableTrait{
@@ -54,6 +57,29 @@ class CopperBulb extends Opaque implements CopperMaterial, Lightable, PoweredByR
 		}
 		$this->setPowered($powered);
 		return $this;
+	}
+
+	/**
+	 * The bulb toggles its light each time it becomes powered.
+	 */
+	public function onNearbyBlockChange() : void{
+		$world = $this->position->getWorld();
+		if($world->getRedstone() === null){
+			return;
+		}
+		$powered = $world->isBlockPowered($this->position);
+		if($powered !== $this->powered){
+			$wasLit = $this->lit;
+			$world->setBlock($this->position, $this->togglePowered($powered));
+			if($this->lit !== $wasLit){
+				//vanilla CopperBulbBlock.checkAndFlip(); comparators reading the bulb are updated by World::setBlock()
+				$world->addSound($this->position, $this->lit ? new CopperBulbTurnOnSound() : new CopperBulbTurnOffSound());
+			}
+		}
+	}
+
+	public function getComparatorOutput() : int{
+		return $this->lit ? 15 : 0;
 	}
 
 	public function getLightLevel() : int{

@@ -27,6 +27,7 @@ use pocketmine\utils\RegistrySource;
 use pocketmine\world\sound\ArmorEquipChainSound;
 use pocketmine\world\sound\ArmorEquipCopperSound;
 use pocketmine\world\sound\ArmorEquipDiamondSound;
+use pocketmine\world\sound\ArmorEquipElytraSound;
 use pocketmine\world\sound\ArmorEquipGenericSound;
 use pocketmine\world\sound\ArmorEquipGoldSound;
 use pocketmine\world\sound\ArmorEquipIronSound;
@@ -59,5 +60,7 @@ final class VanillaArmorMaterialsInputs extends RegistrySource{
 		self::register("gold", new ArmorMaterial(25, new ArmorEquipGoldSound()));
 		self::register("diamond", new ArmorMaterial(10, new ArmorEquipDiamondSound()));
 		self::register("netherite", new ArmorMaterial(15, new ArmorEquipNetheriteSound()));
+		//elytra cannot be enchanted in an enchanting table (only Unbreaking, Mending and curses from an anvil)
+		self::register("elytra", new ArmorMaterial(0, new ArmorEquipElytraSound()));
 	}
 }

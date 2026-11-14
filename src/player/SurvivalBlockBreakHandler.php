@@ -34,6 +34,7 @@ use pocketmine\network\mcpe\protocol\types\LevelEvent;
 use pocketmine\world\particle\BlockPunchParticle;
 use pocketmine\world\sound\BlockPunchSound;
 use function abs;
+use function max;
 
 final class SurvivalBlockBreakHandler{
 
@@ -77,9 +78,12 @@ final class SurvivalBlockBreakHandler{
 		if($breakTimePerTick > 0){
 			$progressPerTick = 1 / $breakTimePerTick;
 
-			$haste = $this->player->getEffects()->get(VanillaEffects::HASTE());
-			if($haste !== null){
-				$hasteLevel = $haste->getEffectLevel();
+			//Conduit Power counts as Haste, the higher of the two applies (Java MobEffectUtil.getDigSpeedAmplification)
+			$hasteLevel = max(
+				$this->player->getEffects()->get(VanillaEffects::HASTE())?->getEffectLevel() ?? 0,
+				$this->player->getEffects()->get(VanillaEffects::CONDUIT_POWER())?->getEffectLevel() ?? 0
+			);
+			if($hasteLevel > 0){
 				$progressPerTick *= (1 + 0.2 * $hasteLevel) * (1.2 ** $hasteLevel);
 			}
 

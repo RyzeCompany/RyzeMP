@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Lectern as TileLectern;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\FacesOppositePlacingPlayerTrait;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\SupportType;
@@ -36,9 +37,12 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\sound\LecternPlaceBookSound;
 use function count;
+use function floor;
 
-class Lectern extends Transparent implements HorizontalFacing{
+class Lectern extends Transparent implements HorizontalFacing, ComparatorReadable{
 	use FacesOppositePlacingPlayerTrait;
+
+	private const PAGE_TURN_PULSE_TICKS = 2;
 
 	protected int $viewedPage = 0;
 	protected ?WritableBookBase $book = null;
@@ -70,8 +74,12 @@ class Lectern extends Transparent implements HorizontalFacing{
 		}
 	}
 
+	public function getFlameEncouragement() : int{
+		return 5;
+	}
+
 	public function getFlammability() : int{
-		return 30;
+		return 20;
 	}
 
 	public function getDrops(Item $item) : array{
@@ -139,6 +147,18 @@ class Lectern extends Transparent implements HorizontalFacing{
 		return false;
 	}
 
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->producingSignal ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->producingSignal && $face === Facing::DOWN ? 15 : 0;
+	}
+
 	public function onPageTurn(int $newPage) : bool{
 		if($newPage === $this->viewedPage){
 			return true;
@@ -151,10 +171,12 @@ class Lectern extends Transparent implements HorizontalFacing{
 		$world = $this->position->getWorld();
 		if(!$this->producingSignal){
 			$this->producingSignal = true;
-			$world->scheduleDelayedBlockUpdate($this->position, 1);
+			//vanilla (Java LecternBlock.signalPageChange) powers for 2 game ticks
+			$world->scheduleDelayedBlockUpdate($this->position, self::PAGE_TURN_PULSE_TICKS);
 		}
 
 		$world->setBlock($this->position, $this);
+		$world->getRedstone()?->updateAroundSide($this->position, Facing::DOWN);
 
 		return true;
 	}
@@ -163,6 +185,24 @@ class Lectern extends Transparent implements HorizontalFacing{
 		if($this->producingSignal){
 			$this->producingSignal = false;
 			$this->position->getWorld()->setBlock($this->position, $this);
+			$this->position->getWorld()->getRedstone()?->updateAroundSide($this->position, Facing::DOWN);
 		}
+	}
+
+	public function getComparatorOutput() : int{
+		if($this->book === null){
+			return 0;
+		}
+		$pages = count($this->book->getPages());
+		$progress = $pages > 1 ? $this->viewedPage / ($pages - 1) : 1.0;
+		return (int) floor($progress * 14) + 1;
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
+	}
+
+	public function getFuelTime() : int{
+		return 300;
 	}
 }

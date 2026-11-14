@@ -27,6 +27,7 @@ use pmmp\thread\Runnable;
 use pmmp\thread\ThreadSafe;
 use pmmp\thread\ThreadSafeArray;
 use pocketmine\thread\NonThreadSafeValue;
+use pocketmine\thread\ThreadCrashInfo;
 use pocketmine\timings\Timings;
 use function array_key_exists;
 use function igbinary_serialize;
@@ -78,6 +79,8 @@ abstract class AsyncTask extends Runnable{
 
 	private bool $submitted = false;
 	private bool $finished = false;
+	/** Set when onRun() threw; the worker survives and the main thread decides what to do (see AsyncPool) */
+	private ?ThreadCrashInfo $pmFaultIsolationRunFailure = null;
 
 	public function run() : void{
 		$this->result = null;
@@ -87,6 +90,10 @@ abstract class AsyncTask extends Runnable{
 
 		try{
 			$this->onRun();
+		}catch(\Throwable $e){
+			//don't let the worker thread die: the main thread decides whether this crashes the server (core task) or
+			//is only logged (plugin task), see AsyncPool::collectTasksFromWorker()
+			$this->pmFaultIsolationRunFailure = ThreadCrashInfo::fromThrowable($e, "AsyncTask " . static::class);
 		}finally{
 			$timings->stopTiming();
 		}
@@ -94,6 +101,15 @@ abstract class AsyncTask extends Runnable{
 		$this->finished = true;
 		AsyncWorker::getNotifier()->wakeupSleeper();
 		AsyncWorker::maybeCollectCycles();
+	}
+
+	/**
+	 * @internal
+	 * Returns information about the exception thrown by onRun() in the worker thread, if any.
+	 * When this is not null, onCompletion() is not called.
+	 */
+	public function getRunFailureInfo() : ?ThreadCrashInfo{
+		return $this->pmFaultIsolationRunFailure;
 	}
 
 	/**

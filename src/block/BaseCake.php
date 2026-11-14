@@ -36,6 +36,10 @@ use pocketmine\player\Player;
 abstract class BaseCake extends Transparent implements FoodSource{
 	use StaticSupportTrait;
 
+	public function getMaxStackSize() : int{
+		return 1;
+	}
+
 	public function getSupportType(int $facing) : SupportType{
 		return SupportType::NONE;
 	}
@@ -62,6 +66,10 @@ abstract class BaseCake extends Transparent implements FoodSource{
 
 	public function requiresHunger() : bool{
 		return true;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 100;
 	}
 
 	/**

@@ -25,21 +25,24 @@ namespace pocketmine\block\tile;
 
 use pocketmine\block\inventory\ChestInventory;
 use pocketmine\block\inventory\DoubleChestInventory;
+use pocketmine\inventory\CallbackInventoryListener;
+use pocketmine\inventory\Inventory;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\World;
 use function abs;
 
-class Chest extends Spawnable implements Container, Nameable{
+class Chest extends Spawnable implements ComparatorReadableContainer, Nameable{
 	use NameableTrait {
 		addAdditionalSpawnData as addNameSpawnData;
 	}
+	use ComparatorReadableContainerTrait;
 	use ContainerTrait {
 		onBlockDestroyedHook as containerTraitBlockDestroyedHook;
 	}
+	use LootTableContainerTrait;
 
 	public const TAG_PAIRX = "pairx";
 	public const TAG_PAIRZ = "pairz";
@@ -54,6 +57,42 @@ class Chest extends Spawnable implements Container, Nameable{
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new ChestInventory($this->position);
+		$this->addComparatorInventoryListener();
+		$this->addPairComparatorInventoryListener();
+	}
+
+	/**
+	 * A comparator at either half of a double chest reads both halves, so it must also be updated when the other
+	 * half's contents change.
+	 */
+	private function addPairComparatorInventoryListener() : void{
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$this->inventory->getListeners()->add(CallbackInventoryListener::onAnyChange(
+			static function(Inventory $unused) use ($world, $x, $y, $z) : void{
+				if($world->isLoaded() && ($tile = $world->getTileAt($x, $y, $z)) instanceof Chest && $tile->pairX !== null && $tile->pairZ !== null){
+					$world->getRedstone()?->updateComparatorsReading($tile->pairX, $y, $tile->pairZ);
+				}
+			}
+		));
+	}
+
+	/**
+	 * Updates the comparators reading this chest and the chest at the given position after the pairing changed (the
+	 * output of both halves depends on the size of the inventory).
+	 */
+	private function updatePairComparators(?int $otherX, ?int $otherZ) : void{
+		$world = $this->position->getWorld();
+		if(!$world->isLoaded() || ($redstone = $world->getRedstone()) === null){
+			return;
+		}
+		$y = $this->position->getFloorY();
+		$redstone->updateComparatorsReading($this->position->getFloorX(), $y, $this->position->getFloorZ());
+		if($otherX !== null && $otherZ !== null){
+			$redstone->updateComparatorsReading($otherX, $y, $otherZ);
+		}
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
@@ -72,6 +111,7 @@ class Chest extends Spawnable implements Container, Nameable{
 		}
 		$this->loadName($nbt);
 		$this->loadItems($nbt);
+		$this->loadLootTable($nbt);
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
@@ -81,6 +121,7 @@ class Chest extends Spawnable implements Container, Nameable{
 		}
 		$this->saveName($nbt);
 		$this->saveItems($nbt);
+		$this->saveLootTable($nbt);
 	}
 
 	public function getCleanedNBT() : ?CompoundTag{
@@ -111,17 +152,22 @@ class Chest extends Spawnable implements Container, Nameable{
 	}
 
 	protected function onBlockDestroyedHook() : void{
+		$this->unpackLootTable();
 		$this->unpair();
 		$this->containerTraitBlockDestroyedHook();
 	}
 
+	/**
+	 * Returns the inventory of the chest (both halves for a double chest), filling it from its loot table first if it
+	 * has one (see {@link LootTableContainerTrait}).
+	 */
 	public function getInventory() : ChestInventory|DoubleChestInventory{
-		$this->unpackWorldgenLoot();
-		if($this->isPaired()){
-			$this->getPair()?->unpackWorldgenLoot();
-		}
 		if($this->isPaired() && $this->doubleInventory === null){
 			$this->checkPairing();
+		}
+		$this->unpackLootTable();
+		if($this->doubleInventory !== null){
+			$this->getPair()?->unpackLootTable();
 		}
 		return $this->doubleInventory instanceof DoubleChestInventory ? $this->doubleInventory : $this->inventory;
 	}
@@ -186,6 +232,7 @@ class Chest extends Spawnable implements Container, Nameable{
 		$this->clearSpawnCompoundCache();
 		$tile->clearSpawnCompoundCache();
 		$this->checkPairing();
+		$this->updatePairComparators($this->pairX, $this->pairZ);
 
 		return true;
 	}
@@ -204,6 +251,8 @@ class Chest extends Spawnable implements Container, Nameable{
 		}
 
 		$tile = $this->getPair();
+		$oldPairX = $this->pairX;
+		$oldPairZ = $this->pairZ;
 		$this->pairX = $this->pairZ = null;
 
 		$this->clearSpawnCompoundCache();
@@ -214,16 +263,17 @@ class Chest extends Spawnable implements Container, Nameable{
 			$tile->clearSpawnCompoundCache();
 		}
 		$this->checkPairing();
+		$this->updatePairComparators($oldPairX, $oldPairZ);
 
 		return true;
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		if($this->isPaired()){
 			$nbt->setInt(self::TAG_PAIRX, $this->pairX);
 			$nbt->setInt(self::TAG_PAIRZ, $this->pairZ);
 		}
 
-		$this->addNameSpawnData($nbt, $typeConverter);
+		$this->addNameSpawnData($nbt);
 	}
 }

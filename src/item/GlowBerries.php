@@ -33,7 +33,11 @@ class GlowBerries extends Food{
 	}
 
 	public function getSaturationRestore() : float{
-		return 0.4;
+		return 1.2;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 
 	public function getBlock(?int $clickedFace = null) : Block{

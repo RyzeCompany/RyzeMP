@@ -27,8 +27,11 @@ use pocketmine\block\tile\Bell as TileBell;
 use pocketmine\block\utils\BellAttachmentType;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
+use pocketmine\block\utils\PoweredByRedstone;
+use pocketmine\block\utils\PoweredByRedstoneTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\entity\npc\VillagerV2;
 use pocketmine\entity\projectile\Projectile;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
@@ -38,15 +41,18 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\BellRingSound;
+use pocketmine\world\vibration\GameEvent;
 
-final class Bell extends Transparent implements HorizontalFacing{
+final class Bell extends Transparent implements HorizontalFacing, PoweredByRedstone{
 	use HorizontalFacingTrait;
+	use PoweredByRedstoneTrait;
 
 	private BellAttachmentType $attachmentType = BellAttachmentType::FLOOR;
 
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->enum($this->attachmentType);
 		$w->horizontalFacing($this->facing);
+		$w->bool($this->powered);
 	}
 
 	protected function recalculateCollisionBoxes() : array{
@@ -118,8 +124,23 @@ final class Bell extends Transparent implements HorizontalFacing{
 		} as $supportBlockDirection){
 			if(!$this->canBeSupportedAt($this, $supportBlockDirection)){
 				$this->position->getWorld()->useBreakOn($this->position);
-				break;
+				return;
 			}
+		}
+
+		//rings on a rising redstone edge (Java BellBlock.neighborChanged(), Bedrock toggle_bit)
+		$world = $this->position->getWorld();
+		$redstone = $world->getRedstone();
+		if($redstone === null){
+			return;
+		}
+		$powered = $redstone->isPowered($this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
+		if($powered !== $this->powered){
+			if($powered){
+				$this->ring($this->facing);
+			}
+			$this->powered = $powered;
+			$world->setBlock($this->position, $this);
 		}
 	}
 
@@ -147,8 +168,10 @@ final class Bell extends Transparent implements HorizontalFacing{
 		$world->addSound($this->position, new BellRingSound());
 		$tile = $world->getTile($this->position);
 		if($tile instanceof TileBell){
-			$world->broadcastPacketToViewersByTypeConverter($this->position, fn($typeConverter) : array => [$tile->createFakeUpdatePacket($faceHit, $typeConverter)]);
+			$world->broadcastPacketToViewers($this->position, $tile->createFakeUpdatePacket($faceHit));
 		}
+		VillagerV2::onBellRung($world, $this->position);
+		$world->addGameEvent($this->position, GameEvent::BLOCK_CHANGE); //Java BellBlock.attemptToRing()
 	}
 
 	public function getDropsForIncompatibleTool(Item $item) : array{

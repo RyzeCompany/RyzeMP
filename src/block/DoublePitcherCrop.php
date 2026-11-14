@@ -118,4 +118,12 @@ final class DoublePitcherCrop extends DoublePlant implements Ageable{
 	public function asItem() : Item{
 		return VanillaItems::PITCHER_POD();
 	}
+
+	public function getFlameEncouragement() : int{
+		return 0;
+	}
+
+	public function getFlammability() : int{
+		return 0;
+	}
 }

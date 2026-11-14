@@ -32,7 +32,8 @@ class ArmorTypeInfo{
 		private int $armorSlot,
 		private int $toughness = 0,
 		private bool $fireProof = false,
-		?ArmorMaterial $material = null
+		?ArmorMaterial $material = null,
+		private float $knockbackResistance = 0.0
 	){
 		$this->material = $material ?? VanillaArmorMaterials::LEATHER();
 	}
@@ -51,6 +52,13 @@ class ArmorTypeInfo{
 
 	public function getToughness() : int{
 		return $this->toughness;
+	}
+
+	/**
+	 * Returns the knockback resistance this piece adds while worn (netherite: 0.1 per piece).
+	 */
+	public function getKnockbackResistance() : float{
+		return $this->knockbackResistance;
 	}
 
 	public function isFireProof() : bool{

@@ -32,14 +32,16 @@ use pocketmine\world\generator\Generator;
 use pocketmine\world\generator\InvalidGeneratorOptionsException;
 use pocketmine\world\generator\noise\Simplex;
 use pocketmine\world\generator\object\OreType;
+use pocketmine\world\generator\populator\GlowstoneCluster;
 use pocketmine\world\generator\populator\Ore;
 use pocketmine\world\generator\populator\Populator;
 use pocketmine\world\World;
 use function abs;
 
 class Nether extends Generator{
+	/** Highest Y of the lava sea (vanilla: 31). */
+	public const LAVA_SEA_LEVEL = 31;
 
-	private int $waterHeight = 32;
 	private int $emptyHeight = 64;
 	private int $emptyAmplitude = 1;
 	private float $density = 0.5;
@@ -49,6 +51,7 @@ class Nether extends Generator{
 	/** @var Populator[] */
 	private array $generationPopulators = [];
 	private Simplex $noiseBase;
+	private Simplex $surfaceNoise;
 
 	/**
 	 * @throws InvalidGeneratorOptionsException
@@ -57,6 +60,7 @@ class Nether extends Generator{
 		parent::__construct($seed, $preset);
 
 		$this->noiseBase = new Simplex($this->random, 4, 1 / 4, 1 / 64);
+		$this->surfaceNoise = new Simplex($this->random, 2, 1 / 2, 1 / 24);
 		$this->random->setSeed($this->seed);
 
 		$ores = new Ore();
@@ -64,6 +68,7 @@ class Nether extends Generator{
 			new OreType(VanillaBlocks::NETHER_QUARTZ_ORE(), VanillaBlocks::NETHERRACK(), 16, 14, 10, 117)
 		]);
 		$this->populators[] = $ores;
+		$this->populators[] = new GlowstoneCluster();
 	}
 
 	public function generateChunk(ChunkManager $world, int $chunkX, int $chunkZ) : void{
@@ -77,6 +82,8 @@ class Nether extends Generator{
 		$bedrock = VanillaBlocks::BEDROCK()->getStateId();
 		$netherrack = VanillaBlocks::NETHERRACK()->getStateId();
 		$stillLava = VanillaBlocks::LAVA()->getStateId();
+		$soulSand = VanillaBlocks::SOUL_SAND()->getStateId();
+		$gravel = VanillaBlocks::GRAVEL()->getStateId();
 
 		for($x = 0; $x < Chunk::EDGE_LENGTH; ++$x){
 			for($z = 0; $z < Chunk::EDGE_LENGTH; ++$z){
@@ -85,7 +92,8 @@ class Nether extends Generator{
 				}
 
 				for($y = 0; $y < 128; ++$y){
-					if($y === 0 || $y === 127){
+					if($y === 0 || $y === 127 || ($y < 5 && $this->random->nextBoundedInt(5) >= $y) || ($y > 122 && $this->random->nextBoundedInt(5) >= 127 - $y)){
+						//bedrock floor and roof, ragged like vanilla
 						$chunk->setBlockStateId($x, $y, $z, $bedrock);
 						continue;
 					}
@@ -94,8 +102,22 @@ class Nether extends Generator{
 
 					if($noiseValue > 0){
 						$chunk->setBlockStateId($x, $y, $z, $netherrack);
-					}elseif($y <= $this->waterHeight){
+					}elseif($y <= self::LAVA_SEA_LEVEL){
 						$chunk->setBlockStateId($x, $y, $z, $stillLava);
+					}
+				}
+
+				//soul sand and gravel shores around the lava sea
+				$surface = $this->surfaceNoise->noise2D($chunkX * Chunk::EDGE_LENGTH + $x, $chunkZ * Chunk::EDGE_LENGTH + $z, true);
+				$cover = $surface > 0.35 ? $soulSand : ($surface < -0.55 ? $gravel : null);
+				if($cover !== null){
+					for($y = self::LAVA_SEA_LEVEL + 4; $y >= self::LAVA_SEA_LEVEL - 3; --$y){
+						if($chunk->getBlockStateId($x, $y, $z) === $netherrack && $chunk->getBlockStateId($x, $y + 1, $z) !== $netherrack){
+							for($d = 0; $d < 3 && $chunk->getBlockStateId($x, $y - $d, $z) === $netherrack; ++$d){
+								$chunk->setBlockStateId($x, $y - $d, $z, $cover);
+							}
+							break;
+						}
 					}
 				}
 			}

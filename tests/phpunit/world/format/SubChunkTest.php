@@ -48,4 +48,27 @@ class SubChunkTest extends TestCase{
 		self::assertNotSame($sub1->getBlockLightArray()->get(0, 0, 0), $sub2->getBlockLightArray()->get(0, 0, 0));
 		self::assertNotSame($sub1->getBlockSkyLightArray()->get(0, 0, 0), $sub2->getBlockSkyLightArray()->get(0, 0, 0));
 	}
+
+	/**
+	 * collectGarbage() drops only the empty layers at the end (the native serializer side of this is covered by
+	 * FastChunkSerializerNativeTest::testAfterCollectGarbage()).
+	 */
+	public function testCollectGarbageDropsTrailingEmptyLayers() : void{
+		$layer0 = new PalettedBlockArray(5);
+		$layer0->set(0, 0, 0, 7);
+		$sub = new SubChunk(0, [$layer0, new PalettedBlockArray(0), new PalettedBlockArray(0)], new PalettedBlockArray(BiomeIds::OCEAN));
+		$sub->collectGarbage();
+		self::assertCount(1, $sub->getBlockLayers());
+		self::assertSame(7, $sub->getBlockStateId(0, 0, 0));
+
+		//an empty layer 0 stays while layer 1 has water in it
+		$water = new SubChunk(0, [new PalettedBlockArray(0), new PalettedBlockArray(9)], new PalettedBlockArray(BiomeIds::OCEAN));
+		$water->collectGarbage();
+		self::assertCount(2, $water->getBlockLayers());
+		self::assertSame(9, $water->getLiquidLayerStateId(0, 0, 0));
+
+		$empty = new SubChunk(0, [new PalettedBlockArray(0), new PalettedBlockArray(0)], new PalettedBlockArray(BiomeIds::OCEAN));
+		$empty->collectGarbage();
+		self::assertTrue($empty->isEmptyFast());
+	}
 }

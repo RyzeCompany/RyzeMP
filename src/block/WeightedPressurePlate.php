@@ -39,12 +39,16 @@ class WeightedPressurePlate extends PressurePlate implements AnalogRedstoneSigna
 	 * @param float $signalStrengthFactor Number of entities on the plate is divided by this value to get signal strength
 	 */
 	public function __construct(BlockIdentifier $idInfo, string $name, BlockTypeInfo $typeInfo, int $deactivationDelayTicks, float $signalStrengthFactor = 1.0){
-		parent::__construct($idInfo, $name, $typeInfo, $deactivationDelayTicks);
 		$this->signalStrengthFactor = $signalStrengthFactor;
+		parent::__construct($idInfo, $name, $typeInfo, $deactivationDelayTicks);
 	}
 
 	protected function hasOutputSignal() : bool{
 		return $this->signalStrength > 0;
+	}
+
+	protected function getOutputPower() : int{
+		return $this->signalStrength;
 	}
 
 	protected function calculatePlateState(array $entities) : array{

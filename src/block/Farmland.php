@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
@@ -31,7 +32,11 @@ use pocketmine\event\entity\EntityTrampleFarmlandEvent;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\player\Player;
 use pocketmine\utils\Utils;
+use pocketmine\world\format\Chunk;
+use pocketmine\world\format\SubChunk;
+use pocketmine\world\GameRules;
 use function intdiv;
 
 class Farmland extends Transparent{
@@ -42,6 +47,9 @@ class Farmland extends Transparent{
 	private const WATER_SEARCH_VERTICAL_LENGTH = 2;
 
 	private const WATER_POSITION_INDEX_UNKNOWN = -1;
+
+	/** Entities with width² × height at or below this never trample farmland (vanilla FarmlandBlock.fallOn) */
+	private const TRAMPLE_MIN_VOLUME = 0.512;
 	/** Total possible options for water X/Z indexes */
 	private const WATER_POSITION_INDICES_TOTAL = (self::WATER_SEARCH_HORIZONTAL_LENGTH ** 2) * 2;
 
@@ -115,7 +123,9 @@ class Farmland extends Transparent{
 		$oldWaterPositionIndex = $this->waterPositionIndex;
 		$changed = false;
 
-		if(!$this->canHydrate()){
+		//rain falling on the farmland keeps it wet too (vanilla)
+		$hydrated = $world->getWeather()->isRainingAt($this->position->getFloorX(), $this->position->getFloorY() + 1, $this->position->getFloorZ()) || $this->canHydrate();
+		if(!$hydrated){
 			if($this->wetness > 0){
 				$event = new FarmlandHydrationChangeEvent($this, $this->wetness, $this->wetness - 1);
 				$event->call();
@@ -124,7 +134,8 @@ class Farmland extends Transparent{
 					$world->setBlock($this->position, $this, false);
 					$changed = true;
 				}
-			}else{
+			}elseif(!$this->isUnderCrops()){
+				//dry farmland only reverts to dirt when nothing is planted on it (vanilla maintains_farmland)
 				$world->setBlock($this->position, VanillaBlocks::DIRT());
 				$changed = true;
 			}
@@ -144,8 +155,28 @@ class Farmland extends Transparent{
 		}
 	}
 
+	/**
+	 * Crops, stems, torchflower crops and pitcher crops keep dry farmland from turning back into dirt.
+	 */
+	private function isUnderCrops() : bool{
+		$above = $this->getSide(Facing::UP);
+		return $above instanceof Crops || $above instanceof TorchflowerCrop || $above instanceof PitcherCrop || $above instanceof DoublePitcherCrop;
+	}
+
+	/**
+	 * Players always trample; other mobs only while mobGriefing is on. Small entities (width² × height <= 0.512, such
+	 * as chickens, cats, rabbits and baby mobs) never trample.
+	 */
+	private static function canTrample(Living $entity) : bool{
+		$size = $entity->getSize();
+		if($size->getWidth() * $size->getWidth() * $size->getHeight() <= self::TRAMPLE_MIN_VOLUME){
+			return false;
+		}
+		return $entity instanceof Player || GameRules::allowsMobGriefing($entity->getWorld());
+	}
+
 	public function onEntityLand(Entity $entity) : ?float{
-		if($entity instanceof Living && Utils::getRandomFloat() < $entity->getFallDistance() - 0.5){
+		if($entity instanceof Living && Utils::getRandomFloat() < $entity->getFallDistance() - 0.5 && self::canTrample($entity)){
 			$ev = new EntityTrampleFarmlandEvent($entity, $this);
 			$ev->call();
 			if(!$ev->isCancelled()){
@@ -170,17 +201,33 @@ class Farmland extends Transparent{
 			$raw = intdiv($raw, self::WATER_SEARCH_HORIZONTAL_LENGTH);
 			$y = $raw % self::WATER_SEARCH_VERTICAL_LENGTH;
 
-			if($world->getBlockAt($startX + $x, $startY + $y, $startZ + $z) instanceof Water){
+			if(LiquidLayer::hasWaterAt($world, $startX + $x, $startY + $y, $startZ + $z)){
 				return true;
 			}
 		}
 
 		//no water found at cached position - search the whole area
 		//y will increment after x/z have been exhausted, as usually water will be at the same Y as the farmland
+		//dry farmland searches on every random tick: the subchunks are read directly, looked up once per chunk column
 		for($y = 0; $y < self::WATER_SEARCH_VERTICAL_LENGTH; $y++){
+			$worldY = $startY + $y;
+			if($worldY < $world->getMinY() || $worldY >= $world->getMaxY()){
+				continue;
+			}
+			$subChunkY = $worldY >> SubChunk::COORD_BIT_SIZE;
+			$localY = $worldY & SubChunk::COORD_MASK;
+			$lastChunkX = $lastChunkZ = null;
+			$subChunk = null;
 			for($x = 0; $x < self::WATER_SEARCH_HORIZONTAL_LENGTH; $x++){
+				$worldX = $startX + $x;
 				for($z = 0; $z < self::WATER_SEARCH_HORIZONTAL_LENGTH; $z++){
-					if($world->getBlockAt($startX + $x, $startY + $y, $startZ + $z) instanceof Water){
+					$worldZ = $startZ + $z;
+					if(($worldX >> Chunk::COORD_BIT_SIZE) !== $lastChunkX || ($worldZ >> Chunk::COORD_BIT_SIZE) !== $lastChunkZ){
+						$lastChunkX = $worldX >> Chunk::COORD_BIT_SIZE;
+						$lastChunkZ = $worldZ >> Chunk::COORD_BIT_SIZE;
+						$subChunk = $world->getChunk($lastChunkX, $lastChunkZ)?->getSubChunk($subChunkY);
+					}
+					if($subChunk !== null && LiquidLayer::hasWaterInSubChunk($subChunk, $worldX & SubChunk::COORD_MASK, $localY, $worldZ & SubChunk::COORD_MASK)){
 						$this->waterPositionIndex = $x + ($z * self::WATER_SEARCH_HORIZONTAL_LENGTH) + ($y * self::WATER_SEARCH_HORIZONTAL_LENGTH ** 2);
 						return true;
 					}

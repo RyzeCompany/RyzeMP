@@ -24,7 +24,6 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Cauldron as TileCauldron;
-use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\DyeColor;
 use pocketmine\color\Color;
 use pocketmine\entity\Entity;
@@ -32,6 +31,7 @@ use pocketmine\event\entity\EntityExtinguishEvent;
 use pocketmine\item\Armor;
 use pocketmine\item\Banner;
 use pocketmine\item\Dye;
+use pocketmine\item\DyeableItem;
 use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\item\Potion;
@@ -41,13 +41,13 @@ use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\Utils;
-use pocketmine\world\weather\Precipitation;
 use pocketmine\world\sound\CauldronAddDyeSound;
 use pocketmine\world\sound\CauldronCleanItemSound;
 use pocketmine\world\sound\CauldronDyeItemSound;
 use pocketmine\world\sound\CauldronEmptyWaterSound;
 use pocketmine\world\sound\CauldronFillWaterSound;
 use pocketmine\world\sound\Sound;
+use pocketmine\world\weather\Precipitation;
 use function array_pop;
 use function assert;
 use function count;
@@ -107,14 +107,12 @@ final class WaterCauldron extends FillableCauldron{
 		return new CauldronFillWaterSound();
 	}
 
-	/** Random precipitation fills ordinary, uncoloured water cauldrons. */
+	/**
+	 * Rain fills a water cauldron (5% chance per precipitation update; not dyed water).
+	 */
 	public function onPrecipitation(Precipitation $precipitation) : void{
-		if($precipitation === Precipitation::RAIN && $this->customWaterColor === null &&
-			$this->getFillLevel() < self::MAX_FILL_LEVEL && Utils::getRandomFloat() < 0.05
-		){
-			$next = clone $this;
-			$next->setFillLevel($this->getFillLevel() + 1);
-			BlockEventHelper::form($this, $next, $this);
+		if($precipitation === Precipitation::RAIN && $this->customWaterColor === null && Utils::getRandomFloat() < self::RAIN_FILL_CHANCE){
+			$this->fillByPrecipitation();
 		}
 	}
 
@@ -152,6 +150,19 @@ final class WaterCauldron extends FillableCauldron{
 					ItemTypeIds::LEATHER_BOOTS => true,
 					default => false
 				} && $item->getCustomColor()?->toRGBA() !== $this->customWaterColor->toRGBA()){
+					$item->setCustomColor($this->customWaterColor);
+					$world->setBlock($this->position, $this->withFillLevel($this->getFillLevel() - self::DYE_ARMOR_USE_AMOUNT));
+					$world->addSound($this->position->add(0.5, 0.5, 0.5), new CauldronDyeItemSound());
+				}
+			}elseif($item->getCustomColor() !== null){
+				$item->clearCustomColor();
+				$world->setBlock($this->position, $this->withFillLevel($this->getFillLevel() - self::CLEAN_ARMOR_USE_AMOUNT));
+				$world->addSound($this->position->add(0.5, 0.5, 0.5), new CauldronCleanItemSound());
+			}
+		}elseif($item instanceof DyeableItem){
+			//leather horse armor and wolf armor (Bedrock): dyed and washed like leather armour
+			if($this->customWaterColor !== null){
+				if($item->getCustomColor()?->toRGBA() !== $this->customWaterColor->toRGBA()){
 					$item->setCustomColor($this->customWaterColor);
 					$world->setBlock($this->position, $this->withFillLevel($this->getFillLevel() - self::DYE_ARMOR_USE_AMOUNT));
 					$world->addSound($this->position->add(0.5, 0.5, 0.5), new CauldronDyeItemSound());

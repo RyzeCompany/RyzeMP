@@ -29,7 +29,10 @@ use pocketmine\crafting\json\PotionTypeRecipeData;
 use pocketmine\crafting\json\RecipeIngredientData;
 use pocketmine\crafting\json\ShapedRecipeData;
 use pocketmine\crafting\json\ShapelessRecipeData;
+use pocketmine\crafting\json\SmithingTransformRecipeData;
+use pocketmine\crafting\json\SmithingTrimRecipeData;
 use pocketmine\data\bedrock\block\BlockStateData;
+use pocketmine\data\bedrock\block\BlockStateDeserializeException;
 use pocketmine\data\bedrock\item\BlockItemIdMap;
 use pocketmine\data\bedrock\item\ItemTypeDeserializeException;
 use pocketmine\data\bedrock\item\SavedItemData;
@@ -40,6 +43,7 @@ use pocketmine\item\Item;
 use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
+use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
 use Symfony\Component\Filesystem\Path;
 use function base64_decode;
@@ -48,6 +52,7 @@ use function get_debug_type;
 use function is_array;
 use function is_object;
 use function json_decode;
+use function str_ends_with;
 
 final class CraftingManagerFromDataHelper{
 
@@ -142,8 +147,38 @@ final class CraftingManagerFromDataHelper{
 
 		try{
 			return GlobalItemDataHandlers::getDeserializer()->deserializeStack($itemStackData);
-		}catch(ItemTypeDeserializeException){
+		}catch(ItemTypeDeserializeException $e){
+			if($blockName !== null && $blockStatesRaw === null){
+				//some recipes give a block item without its states (e.g. minecraft:purpur_block without pillar_axis in
+				//purpur stairs): the client accepts any state, so use the block's default one
+				$defaultStateData = self::getDefaultBlockStateData($blockName);
+				if($defaultStateData !== null){
+					try{
+						return GlobalItemDataHandlers::getDeserializer()->deserializeStack(new SavedItemStackData(
+							new SavedItemData($name, $meta, $defaultStateData, $nbt),
+							$count,
+							null,
+							null,
+							$canPlaceOn,
+							$canDestroy,
+						));
+					}catch(ItemTypeDeserializeException){
+						//fall through
+					}
+				}
+			}
 			//probably unknown item
+			return null;
+		}
+	}
+
+	/**
+	 * Returns the default state of the given block (the state of its legacy meta 0), or null if it has none.
+	 */
+	private static function getDefaultBlockStateData(string $blockName) : ?BlockStateData{
+		try{
+			return GlobalBlockStateHandlers::getUpgrader()->upgradeStringIdMeta($blockName, 0);
+		}catch(BlockStateDeserializeException){
 			return null;
 		}
 	}
@@ -191,7 +226,7 @@ final class CraftingManagerFromDataHelper{
 	 * @phpstan-param class-string<TRecipeData> $modelClass
 	 * @phpstan-return list<TRecipeData>
 	 */
-	public static function loadJsonObjectListIntoModel(\JsonMapper $mapper, string $modelClass, array $data) : array{
+	private static function loadJsonObjectListIntoModel(\JsonMapper $mapper, string $modelClass, array $data) : array{
 		$result = [];
 		foreach(Utils::promoteKeys($data) as $i => $item){
 			if(!is_object($item)){
@@ -204,6 +239,36 @@ final class CraftingManagerFromDataHelper{
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * Recipe book data of a recipe: BedrockData keeps the unlocking ingredients and the priority, but not the
+	 * unlocking contexts, so these come from the BDS 1.26.52 CraftingData (recipes without unlocking ingredients are
+	 * never unlocked, except the plain crafting table, the plain chest and the boats).
+	 */
+	private static function deserializeUnlocking(ShapedRecipeData|ShapelessRecipeData $data) : RecipeUnlocking{
+		if(count($data->unlockingIngredients) > 0){
+			$ingredients = [];
+			foreach($data->unlockingIngredients as $ingredientData){
+				$ingredient = self::deserializeIngredient($ingredientData);
+				if($ingredient !== null){
+					$ingredients[] = $ingredient;
+				}
+			}
+			return new RecipeUnlocking($data->priority, RecipeUnlocking::CONTEXT_NONE, $ingredients);
+		}
+		$context = RecipeUnlocking::CONTEXT_NONE;
+		if($data->block === "crafting_table" && count($data->output) === 1){
+			$output = $data->output[0]->name;
+			if($output === "minecraft:crafting_table" && $data->priority < 2){
+				$context = RecipeUnlocking::CONTEXT_ALWAYS_UNLOCKED;
+			}elseif($output === "minecraft:chest" && $data->priority === 0){
+				$context = RecipeUnlocking::CONTEXT_PLAYER_HAS_MANY_ITEMS;
+			}elseif((str_ends_with($output, "_boat") || str_ends_with($output, "_raft")) && !str_ends_with($output, "chest_boat") && !str_ends_with($output, "chest_raft")){
+				$context = RecipeUnlocking::CONTEXT_PLAYER_IN_WATER;
+			}
+		}
+		return new RecipeUnlocking($data->priority, $context);
 	}
 
 	public static function make(string $directoryPath) : CraftingManager{
@@ -241,24 +306,52 @@ final class CraftingManagerFromDataHelper{
 				}
 				$outputs[] = $output;
 			}
-			//TODO: check unlocking requirements - our current system doesn't support this
-
 			if($recipeType instanceof FurnaceType){
 				if(count($inputs) !== 1 || count($outputs) !== 1){
 					throw new SavedDataLoadingException("Furnace recipes must have exactly 1 input and 1 output");
 				}
 
-				$result->getFurnaceRecipeManager($recipeType)->register(new FurnaceRecipe(
+				//BedrockData has no experience values; campfires give none
+				$experience = $recipeType === FurnaceType::CAMPFIRE || $recipeType === FurnaceType::SOUL_CAMPFIRE ?
+					0.0 :
+					FurnaceExperienceTable::EXPERIENCE[$recipe->output[0]->name] ?? 0.0;
+				$result->getFurnaceRecipeManager($recipeType)->register($registered = new FurnaceRecipe(
 					$outputs[0],
-					$inputs[0]
+					$inputs[0],
+					$experience
 				));
 			}else{
-				$result->registerShapelessRecipe(new ShapelessRecipe(
+				$result->registerShapelessRecipe($registered = new ShapelessRecipe(
 					$inputs,
 					$outputs,
 					$recipeType
 				));
 			}
+			$result->setRecipeUnlocking($registered, self::deserializeUnlocking($recipe));
+		}
+		//dyeing bundles and shulker boxes: shapeless recipes whose result keeps the container's data
+		foreach(self::loadJsonArrayOfObjectsFile(Path::join($directoryPath, 'shapeless_shulker_box.json'), ShapelessRecipeData::class) as $recipe){
+			if($recipe->block !== "crafting_table"){
+				continue;
+			}
+			$inputs = [];
+			foreach($recipe->input as $inputData){
+				$input = self::deserializeIngredient($inputData);
+				if($input === null){ //unknown input item
+					continue 2;
+				}
+				$inputs[] = $input;
+			}
+			$outputs = [];
+			foreach($recipe->output as $outputData){
+				$output = self::deserializeItemStack($outputData);
+				if($output === null){ //unknown output item
+					continue 2;
+				}
+				$outputs[] = $output;
+			}
+			$result->registerShapelessRecipe($registered = new UserDataShapelessRecipe($inputs, $outputs, ShapelessRecipeType::CRAFTING));
+			$result->setRecipeUnlocking($registered, self::deserializeUnlocking($recipe));
 		}
 		foreach(self::loadJsonArrayOfObjectsFile(Path::join($directoryPath, 'shaped_crafting.json'), ShapedRecipeData::class) as $recipe){
 			if($recipe->block !== "crafting_table"){ //TODO: filter others out for now to avoid breaking economics
@@ -280,12 +373,12 @@ final class CraftingManagerFromDataHelper{
 				}
 				$outputs[] = $output;
 			}
-			//TODO: check unlocking requirements - our current system doesn't support this
-			$result->registerShapedRecipe(new ShapedRecipe(
+			$result->registerShapedRecipe($registered = new ShapedRecipe(
 				$recipe->shape,
 				$inputs,
 				$outputs
 			));
+			$result->setRecipeUnlocking($registered, self::deserializeUnlocking($recipe));
 		}
 
 		foreach(self::loadJsonArrayOfObjectsFile(Path::join($directoryPath, 'potion_type.json'), PotionTypeRecipeData::class) as $recipe){
@@ -324,9 +417,40 @@ final class CraftingManagerFromDataHelper{
 				$outputId
 			));
 		}
+		foreach(self::loadJsonArrayOfObjectsFile(Path::join($directoryPath, 'smithing.json'), SmithingTransformRecipeData::class) as $recipe){
+			$input = self::deserializeIngredient($recipe->input);
+			$template = self::deserializeIngredient($recipe->template);
+			$addition = self::deserializeIngredient($recipe->addition);
+			$output = self::deserializeItemStack($recipe->output);
 
-		//TODO: smithing
+			if($input === null || $template === null || $addition === null || $output === null){
+				continue;
+			}
+			$result->registerSmithingRecipe(new SmithingTransformRecipe($input, $addition, $template, $output));
+		}
+		foreach(self::loadJsonArrayOfObjectsFile(Path::join($directoryPath, 'smithing_trim.json'), SmithingTrimRecipeData::class) as $recipe){
+			$input = self::deserializeIngredient($recipe->input);
+			$addition = self::deserializeIngredient($recipe->addition);
+			$template = self::deserializeIngredient($recipe->template);
 
+			if($input === null || $template === null || $addition === null){
+				continue;
+			}
+			$result->registerSmithingRecipe(new SmithingTrimRecipe($input, $addition, $template));
+		}
+		$result->registerSpecialCraftingRecipe(new DecoratedPotRecipe());
+		$result->registerSpecialCraftingRecipe(new FireworkRecipe());
+		foreach(CartographyMapRecipe::all() as $recipe){
+			$result->registerSpecialCraftingRecipe($recipe);
+		}
+		$result->registerSpecialCraftingRecipe(new RepairItemRecipe());
+		$result->registerSpecialCraftingRecipe(new BookCloningRecipe());
+		$result->registerSpecialCraftingRecipe(new BannerDuplicateRecipe());
+		$result->registerSpecialCraftingRecipe(new BannerAddPatternRecipe());
+		$result->registerSpecialCraftingRecipe(new ShieldDecorationRecipe());
+		foreach(MapCraftingRecipe::all() as $recipe){
+			$result->registerSpecialCraftingRecipe($recipe);
+		}
 		return $result;
 	}
 }

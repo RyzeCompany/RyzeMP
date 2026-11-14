@@ -37,7 +37,13 @@ use function mb_strtoupper;
  */
 final class VanillaEnchantments{
 	private static Enchantment $_mAQUA_AFFINITY;
+	private static BaneOfArthropodsEnchantment $_mBANE_OF_ARTHROPODS;
+	private static Enchantment $_mBINDING;
 	private static ProtectionEnchantment $_mBLAST_PROTECTION;
+	private static Enchantment $_mBREACH;
+	private static Enchantment $_mCHANNELING;
+	private static Enchantment $_mDENSITY;
+	private static Enchantment $_mDEPTH_STRIDER;
 	private static Enchantment $_mEFFICIENCY;
 	private static ProtectionEnchantment $_mFEATHER_FALLING;
 	private static FireAspectEnchantment $_mFIRE_ASPECT;
@@ -45,20 +51,33 @@ final class VanillaEnchantments{
 	private static Enchantment $_mFLAME;
 	private static Enchantment $_mFORTUNE;
 	private static Enchantment $_mFROST_WALKER;
+	private static ImpalingEnchantment $_mIMPALING;
 	private static Enchantment $_mINFINITY;
 	private static KnockbackEnchantment $_mKNOCKBACK;
+	private static Enchantment $_mLOOTING;
+	private static Enchantment $_mLOYALTY;
+	private static Enchantment $_mLUCK_OF_THE_SEA;
+	private static Enchantment $_mLUNGE;
+	private static Enchantment $_mLURE;
 	private static Enchantment $_mMENDING;
+	private static Enchantment $_mMULTISHOT;
+	private static Enchantment $_mPIERCING;
 	private static Enchantment $_mPOWER;
 	private static ProtectionEnchantment $_mPROJECTILE_PROTECTION;
 	private static ProtectionEnchantment $_mPROTECTION;
 	private static Enchantment $_mPUNCH;
+	private static Enchantment $_mQUICK_CHARGE;
 	private static Enchantment $_mRESPIRATION;
+	private static Enchantment $_mRIPTIDE;
 	private static SharpnessEnchantment $_mSHARPNESS;
 	private static Enchantment $_mSILK_TOUCH;
+	private static SmiteEnchantment $_mSMITE;
+	private static Enchantment $_mSOUL_SPEED;
 	private static Enchantment $_mSWIFT_SNEAK;
 	private static Enchantment $_mTHORNS;
 	private static Enchantment $_mUNBREAKING;
 	private static Enchantment $_mVANISHING;
+	private static Enchantment $_mWIND_BURST;
 
 	/**
 	 * @var Enchantment[]
@@ -94,7 +113,13 @@ final class VanillaEnchantments{
 	private static function getInitAssigners() : array{
 		return [
 			"AQUA_AFFINITY" => fn(Enchantment $v) => self::$_mAQUA_AFFINITY = $v,
+			"BANE_OF_ARTHROPODS" => fn(BaneOfArthropodsEnchantment $v) => self::$_mBANE_OF_ARTHROPODS = $v,
+			"BINDING" => fn(Enchantment $v) => self::$_mBINDING = $v,
 			"BLAST_PROTECTION" => fn(ProtectionEnchantment $v) => self::$_mBLAST_PROTECTION = $v,
+			"BREACH" => fn(Enchantment $v) => self::$_mBREACH = $v,
+			"CHANNELING" => fn(Enchantment $v) => self::$_mCHANNELING = $v,
+			"DENSITY" => fn(Enchantment $v) => self::$_mDENSITY = $v,
+			"DEPTH_STRIDER" => fn(Enchantment $v) => self::$_mDEPTH_STRIDER = $v,
 			"EFFICIENCY" => fn(Enchantment $v) => self::$_mEFFICIENCY = $v,
 			"FEATHER_FALLING" => fn(ProtectionEnchantment $v) => self::$_mFEATHER_FALLING = $v,
 			"FIRE_ASPECT" => fn(FireAspectEnchantment $v) => self::$_mFIRE_ASPECT = $v,
@@ -102,20 +127,33 @@ final class VanillaEnchantments{
 			"FLAME" => fn(Enchantment $v) => self::$_mFLAME = $v,
 			"FORTUNE" => fn(Enchantment $v) => self::$_mFORTUNE = $v,
 			"FROST_WALKER" => fn(Enchantment $v) => self::$_mFROST_WALKER = $v,
+			"IMPALING" => fn(ImpalingEnchantment $v) => self::$_mIMPALING = $v,
 			"INFINITY" => fn(Enchantment $v) => self::$_mINFINITY = $v,
 			"KNOCKBACK" => fn(KnockbackEnchantment $v) => self::$_mKNOCKBACK = $v,
+			"LOOTING" => fn(Enchantment $v) => self::$_mLOOTING = $v,
+			"LOYALTY" => fn(Enchantment $v) => self::$_mLOYALTY = $v,
+			"LUCK_OF_THE_SEA" => fn(Enchantment $v) => self::$_mLUCK_OF_THE_SEA = $v,
+			"LUNGE" => fn(Enchantment $v) => self::$_mLUNGE = $v,
+			"LURE" => fn(Enchantment $v) => self::$_mLURE = $v,
 			"MENDING" => fn(Enchantment $v) => self::$_mMENDING = $v,
+			"MULTISHOT" => fn(Enchantment $v) => self::$_mMULTISHOT = $v,
+			"PIERCING" => fn(Enchantment $v) => self::$_mPIERCING = $v,
 			"POWER" => fn(Enchantment $v) => self::$_mPOWER = $v,
 			"PROJECTILE_PROTECTION" => fn(ProtectionEnchantment $v) => self::$_mPROJECTILE_PROTECTION = $v,
 			"PROTECTION" => fn(ProtectionEnchantment $v) => self::$_mPROTECTION = $v,
 			"PUNCH" => fn(Enchantment $v) => self::$_mPUNCH = $v,
+			"QUICK_CHARGE" => fn(Enchantment $v) => self::$_mQUICK_CHARGE = $v,
 			"RESPIRATION" => fn(Enchantment $v) => self::$_mRESPIRATION = $v,
+			"RIPTIDE" => fn(Enchantment $v) => self::$_mRIPTIDE = $v,
 			"SHARPNESS" => fn(SharpnessEnchantment $v) => self::$_mSHARPNESS = $v,
 			"SILK_TOUCH" => fn(Enchantment $v) => self::$_mSILK_TOUCH = $v,
+			"SMITE" => fn(SmiteEnchantment $v) => self::$_mSMITE = $v,
+			"SOUL_SPEED" => fn(Enchantment $v) => self::$_mSOUL_SPEED = $v,
 			"SWIFT_SNEAK" => fn(Enchantment $v) => self::$_mSWIFT_SNEAK = $v,
 			"THORNS" => fn(Enchantment $v) => self::$_mTHORNS = $v,
 			"UNBREAKING" => fn(Enchantment $v) => self::$_mUNBREAKING = $v,
 			"VANISHING" => fn(Enchantment $v) => self::$_mVANISHING = $v,
+			"WIND_BURST" => fn(Enchantment $v) => self::$_mWIND_BURST = $v,
 		];
 	}
 
@@ -159,9 +197,39 @@ final class VanillaEnchantments{
 		return self::$_mAQUA_AFFINITY;
 	}
 
+	public static function BANE_OF_ARTHROPODS() : BaneOfArthropodsEnchantment{
+		if(!isset(self::$_mBANE_OF_ARTHROPODS)){ self::init(); }
+		return self::$_mBANE_OF_ARTHROPODS;
+	}
+
+	public static function BINDING() : Enchantment{
+		if(!isset(self::$_mBINDING)){ self::init(); }
+		return self::$_mBINDING;
+	}
+
 	public static function BLAST_PROTECTION() : ProtectionEnchantment{
 		if(!isset(self::$_mBLAST_PROTECTION)){ self::init(); }
 		return self::$_mBLAST_PROTECTION;
+	}
+
+	public static function BREACH() : Enchantment{
+		if(!isset(self::$_mBREACH)){ self::init(); }
+		return self::$_mBREACH;
+	}
+
+	public static function CHANNELING() : Enchantment{
+		if(!isset(self::$_mCHANNELING)){ self::init(); }
+		return self::$_mCHANNELING;
+	}
+
+	public static function DENSITY() : Enchantment{
+		if(!isset(self::$_mDENSITY)){ self::init(); }
+		return self::$_mDENSITY;
+	}
+
+	public static function DEPTH_STRIDER() : Enchantment{
+		if(!isset(self::$_mDEPTH_STRIDER)){ self::init(); }
+		return self::$_mDEPTH_STRIDER;
 	}
 
 	public static function EFFICIENCY() : Enchantment{
@@ -199,6 +267,11 @@ final class VanillaEnchantments{
 		return self::$_mFROST_WALKER;
 	}
 
+	public static function IMPALING() : ImpalingEnchantment{
+		if(!isset(self::$_mIMPALING)){ self::init(); }
+		return self::$_mIMPALING;
+	}
+
 	public static function INFINITY() : Enchantment{
 		if(!isset(self::$_mINFINITY)){ self::init(); }
 		return self::$_mINFINITY;
@@ -209,9 +282,44 @@ final class VanillaEnchantments{
 		return self::$_mKNOCKBACK;
 	}
 
+	public static function LOOTING() : Enchantment{
+		if(!isset(self::$_mLOOTING)){ self::init(); }
+		return self::$_mLOOTING;
+	}
+
+	public static function LOYALTY() : Enchantment{
+		if(!isset(self::$_mLOYALTY)){ self::init(); }
+		return self::$_mLOYALTY;
+	}
+
+	public static function LUCK_OF_THE_SEA() : Enchantment{
+		if(!isset(self::$_mLUCK_OF_THE_SEA)){ self::init(); }
+		return self::$_mLUCK_OF_THE_SEA;
+	}
+
+	public static function LUNGE() : Enchantment{
+		if(!isset(self::$_mLUNGE)){ self::init(); }
+		return self::$_mLUNGE;
+	}
+
+	public static function LURE() : Enchantment{
+		if(!isset(self::$_mLURE)){ self::init(); }
+		return self::$_mLURE;
+	}
+
 	public static function MENDING() : Enchantment{
 		if(!isset(self::$_mMENDING)){ self::init(); }
 		return self::$_mMENDING;
+	}
+
+	public static function MULTISHOT() : Enchantment{
+		if(!isset(self::$_mMULTISHOT)){ self::init(); }
+		return self::$_mMULTISHOT;
+	}
+
+	public static function PIERCING() : Enchantment{
+		if(!isset(self::$_mPIERCING)){ self::init(); }
+		return self::$_mPIERCING;
 	}
 
 	public static function POWER() : Enchantment{
@@ -234,9 +342,19 @@ final class VanillaEnchantments{
 		return self::$_mPUNCH;
 	}
 
+	public static function QUICK_CHARGE() : Enchantment{
+		if(!isset(self::$_mQUICK_CHARGE)){ self::init(); }
+		return self::$_mQUICK_CHARGE;
+	}
+
 	public static function RESPIRATION() : Enchantment{
 		if(!isset(self::$_mRESPIRATION)){ self::init(); }
 		return self::$_mRESPIRATION;
+	}
+
+	public static function RIPTIDE() : Enchantment{
+		if(!isset(self::$_mRIPTIDE)){ self::init(); }
+		return self::$_mRIPTIDE;
 	}
 
 	public static function SHARPNESS() : SharpnessEnchantment{
@@ -247,6 +365,16 @@ final class VanillaEnchantments{
 	public static function SILK_TOUCH() : Enchantment{
 		if(!isset(self::$_mSILK_TOUCH)){ self::init(); }
 		return self::$_mSILK_TOUCH;
+	}
+
+	public static function SMITE() : SmiteEnchantment{
+		if(!isset(self::$_mSMITE)){ self::init(); }
+		return self::$_mSMITE;
+	}
+
+	public static function SOUL_SPEED() : Enchantment{
+		if(!isset(self::$_mSOUL_SPEED)){ self::init(); }
+		return self::$_mSOUL_SPEED;
 	}
 
 	public static function SWIFT_SNEAK() : Enchantment{
@@ -267,5 +395,10 @@ final class VanillaEnchantments{
 	public static function VANISHING() : Enchantment{
 		if(!isset(self::$_mVANISHING)){ self::init(); }
 		return self::$_mVANISHING;
+	}
+
+	public static function WIND_BURST() : Enchantment{
+		if(!isset(self::$_mWIND_BURST)){ self::init(); }
+		return self::$_mWIND_BURST;
 	}
 }

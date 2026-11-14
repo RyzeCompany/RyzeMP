@@ -62,6 +62,7 @@ final class HangingSign extends Item{
 	}
 
 	public function getFuelTime() : int{
-		return 200;
+		//crimson and warped signs don't burn
+		return $this->wallVariant->getFuelTime();
 	}
 }

@@ -28,16 +28,17 @@ use pocketmine\block\tile\Bed;
 use pocketmine\block\tile\Container;
 use pocketmine\block\tile\Tile;
 use pocketmine\block\tile\TileFactory;
-use pocketmine\block\tile\TrialSpawner;
-use pocketmine\block\tile\Vault;
+use pocketmine\block\tile\TrialSpawner as TileTrialSpawner;
+use pocketmine\block\tile\Vault as TileVault;
 use pocketmine\block\utils\DyeColor;
 use pocketmine\block\vault\VaultConfig;
 use pocketmine\data\bedrock\DyeColorIdMap;
-use pocketmine\item\VanillaItems;
 use pocketmine\loot\LootItemConverter;
-use pocketmine\loot\LootStack;
+use pocketmine\loot\LootTables;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\DoubleTag;
+use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
@@ -56,7 +57,7 @@ use function substr;
 
 /**
  * Bedrock tile data for the blocks structures place: the loot containers and suspicious blocks of the templates
- * (BlockEntityData), spawners and a plain tile for every other block that
+ * (BlockEntityData), spawners, the configs of trial spawners and vaults, and a plain tile for every other block that
  * needs one in PocketMine (beds with their colour, banners, flower pots with their plant, furnaces, lecterns, signs...),
  * so the blocks work like placed ones.
  */
@@ -84,13 +85,11 @@ final class StructureBlockEntities{
 			if($name === "minecraft:spawner" && $entity !== null && $entity->getString("id", "") !== ""){
 				return BlockEntityData::spawner(EntityConversion::bedrockId($entity->getString("id")));
 			}
-			if($blocks->hasStructureContent && $name === "minecraft:trial_spawner"){
-				$tag = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(TrialSpawner::class));
-				TrialSpawner::copyConfiguration($javaNbt, $tag);
-				return $tag;
+			if($name === "minecraft:trial_spawner"){
+				return self::trialSpawner($javaNbt);
 			}
-			if($blocks->hasStructureContent && $name === "minecraft:vault"){
-				return self::vault($blocks, $state, $javaNbt);
+			if($name === "minecraft:vault"){
+				return self::vault($javaNbt);
 			}
 		}
 		$tileId = self::tileId($blocks, $state);
@@ -106,7 +105,8 @@ final class StructureBlockEntities{
 				if(!$entry instanceof CompoundTag){
 					continue;
 				}
-				$item = LootItemConverter::toItem(new LootStack($entry->getString("id", "minecraft:air")), $blocks->getDataDir());
+				[$bedrockId, $meta] = LootItemConverter::bedrockItem($entry->getString("id", "minecraft:air"));
+				$item = LootItemConverter::bedrockToItem($bedrockId, $meta);
 				if($item !== null && !$item->isNull()){
 					$item->setCount(max(1, min($item->getMaxStackSize(), $entry->getInt("count", $entry->getByte("Count", 1)))));
 					$converted[] = $item->nbtSerialize($entry->getByte("Slot", 0));
@@ -141,27 +141,50 @@ final class StructureBlockEntities{
 		return $nbt;
 	}
 
-	private static function vault(JavaBlocks $blocks, int $state, CompoundTag $javaNbt) : CompoundTag{
-		$nbt = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(Vault::class));
-		$defaults = $blocks->getBool($state, "ominous") ? VaultConfig::ominous() : new VaultConfig();
-		$config = $javaNbt->getCompoundTag(Vault::TAG_CONFIG);
-		if($config === null){
-			return $nbt->setTag(Vault::TAG_CONFIG, $defaults->toNbt());
+	/**
+	 * A trial spawner keeps its configs (trial chamber templates name them, e.g.
+	 * "minecraft:trial_chamber/melee/zombie/normal"), range and cooldown; Bedrock uses the same field names.
+	 */
+	private static function trialSpawner(CompoundTag $javaNbt) : CompoundTag{
+		$nbt = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(TileTrialSpawner::class));
+		foreach([TileTrialSpawner::TAG_NORMAL_CONFIG, TileTrialSpawner::TAG_OMINOUS_CONFIG, TileTrialSpawner::TAG_REQUIRED_PLAYER_RANGE, TileTrialSpawner::TAG_TARGET_COOLDOWN_LENGTH] as $tagName){
+			$tag = $javaNbt->getTag($tagName);
+			if($tag instanceof StringTag || $tag instanceof CompoundTag || $tag instanceof IntTag){
+				$nbt->setTag($tagName, clone $tag);
+			}
 		}
-		$key = $defaults->getKeyItem();
-		if(($keyTag = $config->getCompoundTag(VaultConfig::TAG_KEY_ITEM)) !== null){
-			$key = LootItemConverter::toItem(new LootStack($keyTag->getString("id", "minecraft:air")), $blocks->getDataDir()) ?? VanillaItems::AIR();
-			$key->setCount(max(1, min($key->getMaxStackSize(), $keyTag->getInt("count", 1))));
+		return $nbt;
+	}
+
+	/**
+	 * A vault keeps its key item and loot table (trial chamber templates give the ominous vaults an ominous trial key and
+	 * chests/trial_chambers/reward_ominous), saved like Bedrock.
+	 */
+	private static function vault(CompoundTag $javaNbt) : CompoundTag{
+		$nbt = CompoundTag::create()->setString(Tile::TAG_ID, TileFactory::getInstance()->getSaveId(TileVault::class));
+		$config = $javaNbt->getCompoundTag(TileVault::TAG_CONFIG);
+		if($config === null){
+			return $nbt;
+		}
+		$key = null;
+		$keyTag = $config->getCompoundTag(VaultConfig::TAG_KEY_ITEM);
+		if($keyTag !== null){
+			[$bedrockId, $meta] = LootItemConverter::bedrockItem($keyTag->getString("id", "minecraft:air"));
+			$key = LootItemConverter::bedrockToItem($bedrockId, $meta);
+			$key?->setCount(max(1, $keyTag->getInt("count", 1)));
 		}
 		$lootTable = $config->getTag(VaultConfig::TAG_LOOT_TABLE);
 		$override = $config->getTag(VaultConfig::TAG_OVERRIDE_LOOT_TABLE_TO_DISPLAY);
-		return $nbt->setTag(Vault::TAG_CONFIG, (new VaultConfig(
-			$lootTable instanceof StringTag ? BlockEntityData::toBedrockPath($lootTable->getValue()) : $defaults->getLootTable(),
-			VaultConfig::readRange($config, VaultConfig::TAG_ACTIVATION_RANGE, $defaults->getActivationRange()),
-			VaultConfig::readRange($config, VaultConfig::TAG_DEACTIVATION_RANGE, $defaults->getDeactivationRange()),
+		$activation = $config->getTag(VaultConfig::TAG_ACTIVATION_RANGE);
+		$deactivation = $config->getTag(VaultConfig::TAG_DEACTIVATION_RANGE);
+		$nbt->setTag(TileVault::TAG_CONFIG, (new VaultConfig(
+			$lootTable instanceof StringTag ? LootTables::toBedrockPath($lootTable->getValue()) : VaultConfig::DEFAULT_LOOT_TABLE,
+			$activation instanceof DoubleTag ? $activation->getValue() : VaultConfig::DEFAULT_ACTIVATION_RANGE,
+			$deactivation instanceof DoubleTag ? $deactivation->getValue() : VaultConfig::DEFAULT_DEACTIVATION_RANGE,
 			$key,
-			$override instanceof StringTag ? BlockEntityData::toBedrockPath($override->getValue()) : null
+			$override instanceof StringTag ? LootTables::toBedrockPath($override->getValue()) : null
 		))->toNbt());
+		return $nbt;
 	}
 
 	private static function color(string $name) : ?DyeColor{

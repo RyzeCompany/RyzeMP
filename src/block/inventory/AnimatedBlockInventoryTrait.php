@@ -23,8 +23,11 @@ declare(strict_types=1);
 
 namespace pocketmine\block\inventory;
 
+use pocketmine\block\TrappedChest;
+use pocketmine\entity\monster\PiglinAi;
 use pocketmine\player\Player;
 use pocketmine\world\sound\Sound;
+use pocketmine\world\vibration\GameEvent;
 use function count;
 
 trait AnimatedBlockInventoryTrait{
@@ -51,6 +54,21 @@ trait AnimatedBlockInventoryTrait{
 			//TODO: this crap really shouldn't be managed by the inventory
 			$this->animateBlock(true);
 			$this->holder->getWorld()->addSound($this->holder->add(0.5, 0.5, 0.5), $this->getOpenSound());
+			$this->holder->getWorld()->addGameEvent($this->holder, GameEvent::CONTAINER_OPEN, $who);
+		}
+		if($this->holder->isValid()){
+			//chests, barrels, ender chests and shulker boxes are guarded by piglins
+			PiglinAi::onContainerOpened($who);
+		}
+		$this->notifyTrappedChestViewers();
+	}
+
+	private function notifyTrappedChestViewers() : void{
+		if($this->holder->isValid()){
+			$block = $this->holder->getWorld()->getBlock($this->holder);
+			if($block instanceof TrappedChest){
+				$block->onViewerCountChange();
+			}
 		}
 	}
 
@@ -61,7 +79,9 @@ trait AnimatedBlockInventoryTrait{
 			//TODO: this crap really shouldn't be managed by the inventory
 			$this->animateBlock(false);
 			$this->holder->getWorld()->addSound($this->holder->add(0.5, 0.5, 0.5), $this->getCloseSound());
+			$this->holder->getWorld()->addGameEvent($this->holder, GameEvent::CONTAINER_CLOSE, $who);
 		}
 		parent::onClose($who);
+		$this->notifyTrappedChestViewers();
 	}
 }

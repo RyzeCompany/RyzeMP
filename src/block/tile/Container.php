@@ -29,9 +29,10 @@ use pocketmine\inventory\InventoryHolder;
 interface Container extends InventoryHolder{
 	public const TAG_ITEMS = "Items";
 	public const TAG_LOCK = "Lock";
-	public const TAG_LOOT_TABLE = "LootTable";
-	public const TAG_LOOT_TABLE_SEED = "LootTableSeed";
-	public const TAG_LOOT_TABLE_SEED_LONG = "LootTableSeedLong";
+	/** @see LootTableContainerTrait */
+	public const TAG_LOOT_TABLE = "LootTable"; //TAG_String
+	public const TAG_LOOT_TABLE_SEED = "LootTableSeed"; //TAG_Int
+	public const TAG_LOOT_TABLE_SEED_LONG = "LootTableSeedLong"; //TAG_Long
 
 	public function getRealInventory() : Inventory;
 

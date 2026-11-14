@@ -23,247 +23,258 @@ declare(strict_types=1);
 
 namespace pocketmine\entity\projectile;
 
-use pocketmine\anticheat\AntiCheatManager;
-use pocketmine\block\Block;
 use pocketmine\block\Water;
-use pocketmine\entity\animation\FishingHookBiteAnimation;
 use pocketmine\entity\Entity;
 use pocketmine\entity\EntitySizeInfo;
 use pocketmine\entity\Location;
+use pocketmine\entity\Mob;
 use pocketmine\entity\NeverSavedWithChunkEntity;
-use pocketmine\event\entity\FishingHookEntityEvent;
-use pocketmine\event\player\PlayerFishEvent;
+use pocketmine\entity\object\ItemEntity;
+use pocketmine\entity\utils\MobBiomeInfo;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\FishingRod;
 use pocketmine\item\Item;
-use pocketmine\item\VanillaItems;
-use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\RayTraceResult;
 use pocketmine\math\Vector3;
-use pocketmine\math\VoxelRayTrace;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\mcpe\NetworkBroadcastUtils;
+use pocketmine\network\mcpe\protocol\ActorEventPacket;
+use pocketmine\network\mcpe\protocol\types\ActorEvent;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\player\Player;
-use pocketmine\ServerProperties;
 use pocketmine\world\sound\WaterSplashSound;
-use function max;
+use function floor;
+use function mt_getrandmax;
 use function mt_rand;
+use function sqrt;
 
+/**
+ * Fishing bobber (vanilla FishingHook). Cast with a fishing rod; it floats on water, where after 5 to 30 seconds (5
+ * seconds less per level of Lure; faster in the rain, slower under a roof) a fish swims to it, then bites within 1 to 4
+ * seconds and stays on the hook for 1 to 2 seconds. Reeling in while a fish bites gives an item of the fishing loot
+ * table (see {@link FishingLoot}; the jungle tables when cast in a jungle biome) thrown towards the player, and 1 to 6 experience.
+ * A hooked mob or item is pulled towards the player instead. The rod loses 1 durability per catch, 5 per pulled mob, 3
+ * per pulled item and 2 when the bobber was stuck in a block. The bobber
+ * disappears when the player stops holding the rod, dies or goes more than 32 blocks away.
+ */
 class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
-	private ?Vector3 $waterBlock = null;
-	private int $waitTicks = 0;
-	private int $biteTicks = 0;
-	private bool $reeled = false;
-	private int $rodSlot;
-	private Item $rod;
+	private const MAX_DISTANCE = 32.0;
 
-	public function __construct(Location $location, Player $owner, private FishingSettings $settings){
-		$this->rodSlot = $owner->getInventory()->getHeldItemIndex();
-		$this->rod = $owner->getInventory()->getItemInHand();
-		parent::__construct($location, $owner);
-		$this->setCanSaveWithChunk(false);
+	/** @var self[] player entity ID => their bobber */
+	private static array $active = [];
+
+	private ?Entity $hookedEntity = null;
+	private bool $bobbing = false;
+	private int $nibble = 0;
+	private int $timeUntilHooked = 0;
+	private int $timeUntilLured = 0;
+	/** Cast in a jungle biome: Bedrock's fishing_hook.json switches to jungle_fishing.json when it spawns. */
+	private bool $jungle;
+	private int $lureTicks;
+	private int $luck;
+
+	public static function getNetworkTypeId() : string{ return EntityIds::FISHING_HOOK; }
+
+	public function __construct(Location $location, ?Entity $shootingEntity, ?Item $rod = null, ?CompoundTag $nbt = null){
+		parent::__construct($location, $shootingEntity, $nbt);
+		$this->lureTicks = $rod !== null ? 100 * $rod->getEnchantmentLevel(VanillaEnchantments::LURE()) : 0;
+		$this->luck = $rod !== null ? $rod->getEnchantmentLevel(VanillaEnchantments::LUCK_OF_THE_SEA()) : 0;
+		$this->jungle = MobBiomeInfo::hasTag($this->getWorld(), $this->location, "jungle");
+		if($shootingEntity instanceof Player){
+			if(isset(self::$active[$shootingEntity->getId()])){
+				self::$active[$shootingEntity->getId()]->flagForDespawn();
+			}
+			self::$active[$shootingEntity->getId()] = $this;
+		}
 	}
 
-	public static function getNetworkTypeId() : string{
-		return EntityIds::FISHING_HOOK;
+	/**
+	 * Returns the bobber the player has out, if any.
+	 */
+	public static function getActive(Player $player) : ?self{
+		$hook = self::$active[$player->getId()] ?? null;
+		return $hook !== null && !$hook->isClosed() && !$hook->isFlaggedForDespawn() ? $hook : null;
 	}
 
-	protected function getInitialSizeInfo() : EntitySizeInfo{
-		return new EntitySizeInfo(0.25, 0.25);
+	protected function getInitialSizeInfo() : EntitySizeInfo{ return new EntitySizeInfo(0.25, 0.25); }
+
+	protected function getInitialDragMultiplier() : float{ return 0.08; }
+
+	protected function getInitialGravity() : float{ return 0.03; }
+
+	/** The hook floats on its own (see entityBaseTick()): water doesn't slow it down. */
+	protected function getLiquidInertia() : float{ return 1.0 - $this->drag; }
+
+	public function getHookedEntity() : ?Entity{
+		return $this->hookedEntity;
 	}
 
-	protected function getInitialDragMultiplier() : float{
-		return 0.01;
+	public function isBobbing() : bool{
+		return $this->bobbing;
 	}
 
-	protected function getInitialGravity() : float{
-		return 0.03;
+	/**
+	 * Whether a fish is on the hook right now (reeling in catches it).
+	 */
+	public function isBiting() : bool{
+		return $this->nibble > 0;
+	}
+
+	protected function onDispose() : void{
+		$owner = $this->getOwningEntityId();
+		if($owner !== null && (self::$active[$owner] ?? null) === $this){
+			unset(self::$active[$owner]);
+		}
+		parent::onDispose();
+	}
+
+	protected function onHitEntity(Entity $entityHit, RayTraceResult $hitResult) : void{
+		//the bobber hooks the mob instead of hurting it
+		$this->hookedEntity = $entityHit;
+		$this->motion = Vector3::zero();
 	}
 
 	public function canCollideWith(Entity $entity) : bool{
-		return $entity instanceof Player && $entity->getId() !== $this->getOwningEntityId() && parent::canCollideWith($entity);
+		return $this->hookedEntity === null && !$this->bobbing && $entity->getId() !== $this->getOwningEntityId() && parent::canCollideWith($entity);
 	}
 
-	public function hasMovementUpdate() : bool{
-		return $this->waterBlock === null && $this->getTargetEntityId() === null && parent::hasMovementUpdate();
+	private static function randomFloat() : float{
+		return mt_rand() / mt_getrandmax();
 	}
 
-	/** Also checked after plugin callbacks, which can teleport players or change their equipment. */
-	public function isValidFor(Player $owner) : bool{
-		return !$this->isClosed() && !$this->isFlaggedForDespawn()
-			&& $owner->getId() === $this->getOwningEntityId()
-			&& !$owner->isClosed() && $owner->isConnected() && $owner->isAlive() && !$owner->isSpectator()
-			&& $owner->getWorld() === $this->getWorld()
-			&& $owner->getPosition()->distanceSquared($this->location) <= $this->settings->range ** 2
-			&& $owner->getInventory()->getHeldItemIndex() === $this->rodSlot
-			&& $owner->getInventory()->getItemInHand() instanceof FishingRod
-			&& $this->rod->equalsExact($owner->getInventory()->getItemInHand());
+	private function shouldStayOut(Player $owner) : bool{
+		if(!$owner->isAlive() || $owner->isClosed() || $owner->getWorld() !== $this->getWorld()){
+			return false;
+		}
+		if(!$owner->getInventory()->getItemInHand() instanceof FishingRod && !$owner->getOffHandInventory()->getItem(0) instanceof FishingRod){
+			return false;
+		}
+		return $owner->getPosition()->distanceSquared($this->location) <= self::MAX_DISTANCE ** 2;
 	}
 
-	private function canHook(Player $owner, Player $target) : bool{
-		return $this->settings->pvpEnabled
-			&& $this->server->getConfigGroup()->getConfigBool(ServerProperties::PVP)
-			&& $this->isValidFor($owner)
-			&& $target !== $owner && !$target->isClosed() && $target->isConnected() && $target->isAlive()
-			&& !$target->isCreative() && !$target->isSpectator() && $target->noDamageTicks === 0
-			&& $target->getWorld() === $owner->getWorld()
-			&& $owner->getPosition()->distanceSquared($target->getPosition()) <= $this->settings->range ** 2
-			&& $this->hasClearLine($owner->getEyePos(), $target->getPosition()->add(0, $target->getSize()->getHeight() / 2, 0));
-	}
+	protected function entityBaseTick(int $tickDiff = 1) : bool{
+		$hasUpdate = parent::entityBaseTick($tickDiff);
+		if($this->closed){
+			return false;
+		}
+		$owner = $this->getOwningEntity();
+		if(!$owner instanceof Player || !$this->shouldStayOut($owner)){
+			$this->flagForDespawn();
+			return false;
+		}
 
-	private function hasClearLine(Vector3 $start, Vector3 $end) : bool{
-		foreach(VoxelRayTrace::betweenPoints($start, $end) as $pos){
-			if(!$this->getWorld()->isInLoadedTerrain($pos) || $this->getWorld()->getBlock($pos)->calculateIntercept($start, $end) !== null){
-				return false;
+		if($this->hookedEntity !== null){
+			if($this->hookedEntity->isClosed() || !$this->hookedEntity->isAlive() || $this->hookedEntity->getWorld() !== $this->getWorld()){
+				$this->hookedEntity = null;
+			}else{
+				$pos = $this->hookedEntity->getPosition();
+				$this->setPosition(new Vector3($pos->x, $pos->y + $this->hookedEntity->getSize()->getHeight() * 0.8, $pos->z));
+				return true;
 			}
+		}
+
+		$world = $this->getWorld();
+		$x = (int) floor($this->location->x);
+		$y = (int) floor($this->location->y);
+		$z = (int) floor($this->location->z);
+		$block = $world->getBlockAt($x, $y, $z);
+		if($block instanceof Water){
+			if(!$this->bobbing){
+				$this->bobbing = true;
+				$this->gravity = 0.0;
+				$this->motion = $this->motion->multiply(0.3);
+				$this->blockHit = null;
+				$world->addSound($this->location, new WaterSplashSound(0.25));
+			}
+			//float at the surface (vanilla: y + motion - block y - fluid height, nudged by a random fraction)
+			$surface = $y + 1 - $block->getFluidHeightPercent();
+			$offset = $this->location->y + $this->motion->y - $surface;
+			$this->motion = new Vector3($this->motion->x * 0.9, $this->motion->y - $offset * self::randomFloat() * 0.2, $this->motion->z * 0.9);
+			$this->catchingFish($x, $y, $z, $tickDiff);
+		}elseif($this->bobbing){
+			//the water is gone
+			$this->bobbing = false;
+			$this->gravity = 0.03;
+			$this->nibble = $this->timeUntilHooked = $this->timeUntilLured = 0;
 		}
 		return true;
 	}
 
-	protected function onHitEntity(Entity $entityHit, RayTraceResult $hitResult) : void{
-		$owner = $this->getOwningEntity();
-		if($owner instanceof Player && $entityHit instanceof Player && $this->canHook($owner, $entityHit)){
-			$event = new FishingHookEntityEvent($owner, $this, $entityHit, FishingHookEntityEvent::ACTION_HOOK);
-			$event->call();
-			if(!$event->isCancelled() && $this->canHook($owner, $entityHit)){
-				$this->setTargetEntity($entityHit);
-				return;
+	/**
+	 * Vanilla FishingHook.catchingFish(): counts down to the fish approaching, biting, and escaping.
+	 */
+	private function catchingFish(int $x, int $y, int $z, int $tickDiff) : void{
+		$world = $this->getWorld();
+		$speed = 1;
+		if($this->isInRain() && self::randomFloat() < 0.25){
+			++$speed;
+		}
+		if(!$world->getWeather()->isExposedToSky($x, $y + 1, $z) && self::randomFloat() < 0.5){
+			--$speed;
+		}
+		$speed *= $tickDiff;
+
+		if($this->nibble > 0){
+			$this->nibble -= $tickDiff;
+			if($this->nibble <= 0){
+				//the fish got away
+				$this->nibble = $this->timeUntilHooked = $this->timeUntilLured = 0;
 			}
+		}elseif($this->timeUntilHooked > 0){
+			$this->timeUntilHooked -= $speed;
+			if($this->timeUntilHooked <= 0){
+				$this->nibble = mt_rand(20, 39);
+				$this->motion = $this->motion->add(0, -0.4 * (0.6 + self::randomFloat() * 0.4), 0);
+				$world->addSound($this->location, new WaterSplashSound(0.25));
+				$this->broadcastActorEvent(ActorEvent::FISH_HOOK_HOOK);
+			}elseif($this->timeUntilHooked % 4 === 0){
+				$this->broadcastActorEvent(ActorEvent::FISH_HOOK_TEASE);
+			}
+		}elseif($this->timeUntilLured > 0){
+			$this->timeUntilLured -= $speed;
+			if($this->timeUntilLured <= 0){
+				$this->timeUntilHooked = mt_rand(20, 80);
+				$this->broadcastActorEvent(ActorEvent::FISH_HOOK_POSITION);
+			}elseif($this->timeUntilLured < 20 * $tickDiff || mt_rand(0, 9) === 0){
+				$this->broadcastActorEvent(ActorEvent::FISH_HOOK_BUBBLE);
+			}
+		}else{
+			$this->timeUntilLured = mt_rand(100, 600) - $this->lureTicks;
+		}
+	}
+
+	private function broadcastActorEvent(int $event) : void{
+		NetworkBroadcastUtils::broadcastPackets($this->getViewers(), [ActorEventPacket::create($this->id, $event, 0, null)]);
+	}
+
+	/**
+	 * Reels the line in (the player used the rod again): pulls the hooked entity, or catches the fish that is biting.
+	 * Returns the durability the rod loses.
+	 */
+	public function retrieve(Player $player) : int{
+		$damage = 0;
+		$world = $this->getWorld();
+		if($this->hookedEntity !== null){
+			$entity = $this->hookedEntity;
+			$pull = $player->getPosition()->subtractVector($entity->getPosition())->multiply(0.1);
+			if($entity->setMotion($entity->getMotion()->addVector($pull)) && $entity instanceof Mob){
+				$entity->carryPush();
+			}
+			$damage = $entity instanceof ItemEntity ? 3 : 5;
+		}elseif($this->nibble > 0){
+			$item = FishingLoot::roll($this->luck, $this->jungle);
+			$dx = $player->getPosition()->x - $this->location->x;
+			$dy = $player->getPosition()->y - $this->location->y;
+			$dz = $player->getPosition()->z - $this->location->z;
+			$motion = new Vector3($dx * 0.1, $dy * 0.1 + sqrt(sqrt($dx * $dx + $dy * $dy + $dz * $dz)) * 0.08, $dz * 0.1);
+			$world->dropItem($this->location, $item, $motion, 0);
+			$world->dropExperience($player->getPosition()->add(0, 0.5, 0.5), mt_rand(1, 6));
+			$damage = 1;
+		}
+		if($this->blockHit !== null){
+			$damage = 2;
 		}
 		$this->flagForDespawn();
-	}
-
-	private static function waterSurface(Water $water) : float{
-		return $water->getPosition()->y + 1 - ($water->getFluidHeightPercent() - 1 / 9);
-	}
-
-	protected function calculateInterceptWithBlock(Block $block, Vector3 $start, Vector3 $end) : ?RayTraceResult{
-		if($block instanceof Water){
-			$pos = $block->getPosition();
-			return (new AxisAlignedBB($pos->x, $pos->y, $pos->z, $pos->x + 1, self::waterSurface($block), $pos->z + 1))->calculateIntercept($start, $end);
-		}
-		return parent::calculateInterceptWithBlock($block, $start, $end);
-	}
-
-	protected function onHitBlock(Block $blockHit, RayTraceResult $hitResult) : void{
-		if($blockHit instanceof Water){
-			$this->waterBlock = $blockHit->getPosition()->asVector3();
-			$this->waitTicks = mt_rand($this->settings->biteWaitMin, $this->settings->biteWaitMax);
-			$this->setPosition($this->location->withComponents(null, self::waterSurface($blockHit), null));
-			$this->broadcastSound(new WaterSplashSound(0.25));
-		}else{
-			parent::onHitBlock($blockHit, $hitResult);
-		}
-	}
-
-	public function onUpdate(int $currentTick) : bool{
-		if($this->isClosed()){
-			return false;
-		}
-		$owner = $this->getOwningEntity();
-		if($this->reeled || !$owner instanceof Player || !$this->isValidFor($owner)
-			|| $this->ticksLived >= $this->settings->lifetimeTicks
-			|| !$this->getWorld()->isInLoadedTerrain($this->location->addVector($this->motion))){
-			$this->flagForDespawn();
-			return true;
-		}
-		if($this->getTargetEntityId() !== null){
-			$target = $this->getTargetEntity();
-			if(!$target instanceof Player || !$this->canHook($owner, $target)){
-				$this->flagForDespawn();
-				return true;
-			}
-			$this->setPosition($target->getPosition()->add(0, $target->getSize()->getHeight() / 2, 0));
-		}
-		return parent::onUpdate($currentTick);
-	}
-
-	protected function entityBaseTick(int $tickDiff = 1) : bool{
-		parent::entityBaseTick($tickDiff);
-		if($this->waterBlock !== null){
-			$water = $this->getWorld()->getBlock($this->waterBlock);
-			if(!$water instanceof Water){
-				$this->waterBlock = null;
-				$this->biteTicks = 0;
-				$this->onGround = false;
-			}else{
-				$this->setPosition($this->location->withComponents(null, self::waterSurface($water) - ($this->biteTicks > 0 ? 0.15 : 0), null));
-				// Only exposed water can yield a catch; water under a solid ceiling cannot.
-				$above = $this->getWorld()->getBlock($this->waterBlock->add(0, 1, 0));
-				if($above instanceof Water || $above->isSolid()){
-					$this->biteTicks = 0;
-					$this->waitTicks = $this->settings->biteWaitMin;
-				}elseif($this->biteTicks > 0){
-					$this->biteTicks = max(0, $this->biteTicks - $tickDiff);
-					if($this->biteTicks === 0){
-						$this->waitTicks = mt_rand($this->settings->biteWaitMin, $this->settings->biteWaitMax);
-					}
-				}else{
-					$this->waitTicks -= $tickDiff;
-					if($this->waitTicks <= 0){
-						$this->biteTicks = $this->settings->biteWindow;
-						$this->broadcastAnimation(new FishingHookBiteAnimation($this));
-						$this->broadcastSound(new WaterSplashSound(0.6));
-					}
-				}
-			}
-		}
-		return true; //Keep stationary hooks ticking for bites, expiry and owner checks.
-	}
-
-	/** Reel exactly once. Returns the durability cost; the held item applies Unbreaking. */
-	public function reelIn(Player $owner) : int{
-		if($this->reeled || !$this->isValidFor($owner)){
-			return 0;
-		}
-		$this->reeled = true; //Set before events to prevent recursive rewards or pulls.
-		try{
-			$target = $this->getTargetEntity();
-			if($target instanceof Player){
-				if($this->canHook($owner, $target)){
-					$event = new FishingHookEntityEvent($owner, $this, $target, FishingHookEntityEvent::ACTION_PULL);
-					$event->call();
-					if(!$event->isCancelled() && $this->canHook($owner, $target)){
-						$impulses = AntiCheatManager::getInstance()->getSession($target)->getImpulseTracker();
-						$impulses->pushSource("fishing_pull");
-						try{
-							if($target->setMotion($this->settings->getPullMotion($owner->getPosition()->subtractVector($target->getPosition())))){
-								return 5;
-							}
-						}finally{
-							$impulses->popSource();
-						}
-					}
-				}
-				return 0;
-			}
-			if($this->waterBlock !== null && $this->biteTicks > 0 && $this->getWorld()->getBlock($this->waterBlock) instanceof Water){
-				$roll = mt_rand(1, 100);
-				$catch = match(true){
-					$roll <= 60 => VanillaItems::RAW_FISH(),
-					$roll <= 85 => VanillaItems::RAW_SALMON(),
-					$roll <= 98 => VanillaItems::PUFFERFISH(),
-					default => VanillaItems::CLOWNFISH()
-				};
-				$event = new PlayerFishEvent($owner, $this, $catch, mt_rand(1, 6));
-				$event->call();
-				if(!$event->isCancelled() && $this->isValidFor($owner)){
-					$motion = $owner->getEyePos()->subtractVector($this->location)->normalize()->multiply(0.4);
-					$this->getWorld()->dropItem($this->location, $event->getCatch(), $motion->add(0, 0.2, 0));
-					$this->getWorld()->dropExperience($owner->getPosition(), $event->getExperience());
-					return 1;
-				}
-				return 0;
-			}
-			return $this->blockHit !== null ? 2 : 0;
-		}finally{
-			$this->flagForDespawn();
-		}
-	}
-
-	protected function onDispose() : void{
-		$owner = $this->getOwningEntity();
-		if($owner instanceof Player && $owner->getFishingHook() === $this){
-			$owner->setFishingHook(null);
-		}
-		parent::onDispose();
+		return $damage;
 	}
 }

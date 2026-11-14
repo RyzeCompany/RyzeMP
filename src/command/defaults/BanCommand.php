@@ -25,6 +25,10 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\CommandTargets;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
@@ -33,7 +37,7 @@ use function array_shift;
 use function count;
 use function implode;
 
-class BanCommand extends NativeCommand{
+class BanCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,21 +48,35 @@ class BanCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_BAN_PLAYER);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::target("name"), CommandParameter::message("reason", true)]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$name = array_shift($args);
+		$target = array_shift($args);
 		$reason = implode(" ", $args);
 
-		$sender->getServer()->getNameBans()->addBan($name, $reason, null, $sender->getName());
-
-		if(($player = $sender->getServer()->getPlayerExact($name)) instanceof Player){
-			$player->kick($reason !== "" ? KnownTranslationFactory::pocketmine_disconnect_ban($reason) : KnownTranslationFactory::pocketmine_disconnect_ban_noReason());
+		$names = [$target];
+		if(TargetSelector::isSelectorArgument($target)){
+			$names = [];
+			foreach(CommandTargets::players($sender, $target) as $player){
+				$names[] = $player->getName();
+			}
 		}
 
-		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_ban_success($player !== null ? $player->getName() : $name));
+		foreach($names as $name){
+			$sender->getServer()->getNameBans()->addBan($name, $reason, null, $sender->getName());
+
+			if(($player = $sender->getServer()->getPlayerExact($name)) instanceof Player){
+				$player->kick($reason !== "" ? KnownTranslationFactory::pocketmine_disconnect_ban($reason) : KnownTranslationFactory::pocketmine_disconnect_ban_noReason());
+			}
+
+			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_ban_success($player !== null ? $player->getName() : $name));
+		}
 
 		return true;
 	}

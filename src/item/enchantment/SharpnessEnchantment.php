@@ -25,6 +25,10 @@ namespace pocketmine\item\enchantment;
 
 use pocketmine\entity\Entity;
 
+/**
+ * Sharpness: 1.25 extra damage per level against any mob (Bedrock; Java uses 0.5 x level + 0.5). Bedrock rounds the
+ * weapon damage plus this bonus down to a whole number (see {@link \pocketmine\entity\CombatRules::getMeleeWeaponDamage()}).
+ */
 class SharpnessEnchantment extends MeleeWeaponEnchantment{
 
 	public function isApplicableTo(Entity $victim) : bool{
@@ -32,6 +36,6 @@ class SharpnessEnchantment extends MeleeWeaponEnchantment{
 	}
 
 	public function getDamageBonus(int $enchantmentLevel) : float{
-		return 0.5 * ($enchantmentLevel + 1);
+		return 1.25 * $enchantmentLevel;
 	}
 }

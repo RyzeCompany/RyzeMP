@@ -26,7 +26,9 @@ namespace pocketmine\block;
 use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\CoralMaterial;
 use pocketmine\block\utils\CoralTypeTrait;
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\item\Item;
+use pocketmine\math\Facing;
 use function mt_rand;
 
 final class CoralBlock extends Opaque implements CoralMaterial{
@@ -41,10 +43,14 @@ final class CoralBlock extends Opaque implements CoralMaterial{
 	public function onScheduledUpdate() : void{
 		if(!$this->dead){
 			$world = $this->position->getWorld();
+			$x = $this->position->getFloorX();
+			$y = $this->position->getFloorY();
+			$z = $this->position->getFloorZ();
 
+			//waterlogged neighbours count as water
 			$hasWater = false;
-			foreach($this->position->sides() as $vector3){
-				if($world->getBlock($vector3) instanceof Water){
+			foreach(Facing::OFFSET as [$dx, $dy, $dz]){
+				if(LiquidLayer::hasWaterAt($world, $x + $dx, $y + $dy, $z + $dz)){
 					$hasWater = true;
 					break;
 				}

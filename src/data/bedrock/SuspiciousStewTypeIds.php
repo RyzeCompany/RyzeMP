@@ -34,4 +34,7 @@ final class SuspiciousStewTypeIds{
 	public const ALLIUM = 7;
 	public const OXEYE_DAISY = 8;
 	public const WITHER_ROSE = 9;
+	public const TORCHFLOWER = 10;
+	public const OPEN_EYEBLOSSOM = 11;
+	public const CLOSED_EYEBLOSSOM = 12;
 }

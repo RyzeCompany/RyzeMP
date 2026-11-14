@@ -116,13 +116,6 @@ function buildPhar(string $pharPath, string $basePath, array $includedPaths, arr
 	$regexIterator = new \RegexIterator($iterator, $regex);
 
 	$count = count($phar->buildFromIterator($regexIterator, $basePath));
-	foreach(['LICENSE', 'COPYING'] as $licenseFile){
-		if(!file_exists($basePath . $licenseFile)){
-			throw new \RuntimeException("Missing distribution license: " . $licenseFile);
-		}
-		$phar->addFile($basePath . $licenseFile, $licenseFile);
-		++$count;
-	}
 	yield "Added $count files";
 
 	if($compression !== null){
@@ -164,14 +157,15 @@ function main() : void{
 		}
 		$pharPath = $opts["out"];
 	}else{
-		$pharPath = getcwd() . DIRECTORY_SEPARATOR . "RyzeMP.phar";
+		$pharPath = getcwd() . DIRECTORY_SEPARATOR . "PocketMine-MP.phar";
 	}
 	foreach(buildPhar(
 		$pharPath,
 		dirname(__DIR__) . DIRECTORY_SEPARATOR,
 		[
-			'lib',
 			'generated',
+			'native/nethernet/bin', //pm-nethernet bridge binaries, if present (downloaded by build/ci/build-native.sh, see native/nethernet/README.md)
+			'native/vanillagen/bin', //vanillagen terrain core binaries, if built (native/vanillagen/build.ps1)
 			'resources',
 			'src',
 			'vendor'
@@ -189,4 +183,3 @@ function main() : void{
 }
 
 main();
-

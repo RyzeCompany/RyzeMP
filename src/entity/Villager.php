@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
+use pocketmine\entity\monster\MobConversion;
+use pocketmine\entity\monster\Witch;
+use pocketmine\entity\object\LightningBolt;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\nbt\tag\CompoundTag;
@@ -30,6 +33,7 @@ use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataFlags;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
+use pocketmine\world\World;
 
 class Villager extends Living implements Ageable{
 	public const PROFESSION_FARMER = 0;
@@ -91,6 +95,17 @@ class Villager extends Living implements Ageable{
 
 	public function getPickedItem() : ?Item{
 		return VanillaItems::VILLAGER_SPAWN_EGG();
+	}
+
+	/**
+	 * Lightning turns villagers into witches (not on Peaceful).
+	 */
+	public function onStruckByLightning(LightningBolt $bolt) : void{
+		if($this->getWorld()->getDifficulty() === World::DIFFICULTY_PEACEFUL){
+			parent::onStruckByLightning($bolt);
+			return;
+		}
+		MobConversion::convertByLightning($this, new Witch($this->location->asLocation()));
 	}
 
 	protected function syncNetworkData(EntityMetadataCollection $properties) : void{

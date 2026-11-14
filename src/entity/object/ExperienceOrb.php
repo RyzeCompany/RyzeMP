@@ -27,12 +27,16 @@ use pocketmine\entity\Entity;
 use pocketmine\entity\EntitySizeInfo;
 use pocketmine\entity\Human;
 use pocketmine\entity\Location;
+use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
 use pocketmine\player\Player;
+use function abs;
+use function floatval;
 use function max;
+use function min;
 use function sqrt;
 
 class ExperienceOrb extends Entity{
@@ -178,6 +182,7 @@ class ExperienceOrb extends Entity{
 
 	protected function entityBaseTick(int $tickDiff = 1) : bool{
 		$hasUpdate = parent::entityBaseTick($tickDiff);
+		$this->updateWaterDepth();
 
 		$this->despawnDelay -= $tickDiff;
 		if($this->despawnDelay <= 0){
@@ -224,9 +229,79 @@ class ExperienceOrb extends Entity{
 		return $hasUpdate;
 	}
 
+	/** How deep the orb is in water, and whether its eyes are under water, worked out at the end of each tick. */
+	private float $waterDepth = 0.0;
+	private bool $floatsUp = false;
+	/**
+	 * The orb stopped at the surface of the water (see restsOnWaterSurface()) and nothing changed since: its water
+	 * depth stays the same until its next movement update.
+	 */
+	private bool $restingOnWater = false;
+
+	/**
+	 * Called each tick after the block intersection check: works out how the orb floats during the next tick.
+	 */
+	private function updateWaterDepth() : void{
+		if($this->restingOnWater){
+			return;
+		}
+		if($this->blocksAround === []){
+			//nothing with entity actions around (the usual case): no water
+			$this->waterDepth = 0.0;
+			$this->floatsUp = false;
+			return;
+		}
+		$this->waterDepth = $depth = $this->getBoundingBoxLiquidDepth();
+		$this->floatsUp = $depth > 0.0 && $depth > $this->getEyeHeight();
+		if($this->floatsUp){
+			//an orb lying at the bottom of a pool floats up (a movement update here instead of an override of
+			//hasMovementUpdate(), which is called several times a tick)
+			$this->forceMovementUpdate = true;
+		}elseif($depth > 0.0 && $this->onGround && floatval($this->motion->x) === 0.0 && floatval($this->motion->y) === 0.0 && floatval($this->motion->z) === 0.0){
+			$this->restingOnWater = true;
+		}
+	}
+
 	protected function tryChangeMovement() : void{
+		$this->restingOnWater = false;
 		$this->checkObstruction($this->location->x, $this->location->y, $this->location->z);
-		parent::tryChangeMovement();
+
+		//vanilla ExperienceOrb.tick(): orbs whose eyes are in water float up instead of falling
+		if(!$this->floatsUp){
+			if($this->waterDepth > 0.0 && $this->targetPlayerRuntimeId === null && $this->restsOnWaterSurface()){
+				return;
+			}
+			parent::tryChangeMovement();
+			return;
+		}
+		$friction = 1 - $this->drag;
+		$this->motion = new Vector3(
+			$this->motion->x * self::WATER_FLOAT_HORIZONTAL_KEPT * $friction,
+			min($this->motion->y + self::FLOAT_RISE_ACCELERATION, self::FLOAT_MAX_RISE_SPEED) * $friction,
+			$this->motion->z * self::WATER_FLOAT_HORIZONTAL_KEPT * $friction
+		);
+	}
+
+	/** Vertical speed gained each tick while floating up, up to FLOAT_MAX_RISE_SPEED (vanilla setUnderwaterMovement()). */
+	private const FLOAT_RISE_ACCELERATION = 0.0005;
+	private const FLOAT_MAX_RISE_SPEED = 0.06;
+	/** Horizontal speed kept each tick while floating in water (vanilla setUnderwaterMovement()). */
+	private const WATER_FLOAT_HORIZONTAL_KEPT = 0.99;
+	/** Below this speed an orb that reached the surface of still water stops there, see restsOnWaterSurface(). */
+	private const FLOAT_REST_MAX_SPEED = 0.05;
+
+	/**
+	 * Called when the orb touches water at the surface (its eyes out of the water): an orb that floated up slowly
+	 * stops there instead of bobbing up and down every tick, like {@link ItemEntity}.
+	 */
+	private function restsOnWaterSurface() : bool{
+		$motion = $this->motion;
+		if(abs($motion->y) >= self::FLOAT_REST_MAX_SPEED || $motion->x * $motion->x + $motion->z * $motion->z > 1.0e-4){
+			return false;
+		}
+		$this->motion = Vector3::zero();
+		$this->onGround = true;
+		return true;
 	}
 
 	public function canBeCollidedWith() : bool{

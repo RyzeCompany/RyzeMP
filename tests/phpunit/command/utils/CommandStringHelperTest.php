@@ -44,6 +44,18 @@ class CommandStringHelperTest extends TestCase{
 			'say dontspliton"half"wayquotes',
 			['say', 'dontspliton"half"wayquotes']
 		];
+		yield [
+			'kill @e[type=cow, r=20]',
+			['kill', '@e[type=cow, r=20]']
+		];
+		yield [
+			'tp @a[name="Big Bob", tag=x] ~ ~10 ~',
+			['tp', '@a[name="Big Bob", tag=x]', '~', '~10', '~']
+		];
+		yield [
+			'say @everyone [hi] @e[ unterminated',
+			['say', '@everyone', '[hi]', '@e[', 'unterminated']
+		];
 	}
 
 	/**

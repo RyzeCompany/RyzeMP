@@ -72,7 +72,7 @@ abstract class PluginBase implements Plugin, CommandExecutor{
 
 		$prefix = $this->description->getPrefix();
 		$this->logger = new PluginLogger($server->getLogger(), $prefix !== "" ? $prefix : $this->getName());
-		$this->scheduler = new TaskScheduler($this->getFullName());
+		$this->scheduler = new TaskScheduler($this->getFullName(), $this);
 
 		$this->onLoad();
 

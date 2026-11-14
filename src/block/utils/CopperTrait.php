@@ -30,9 +30,11 @@ use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
-use pocketmine\world\sound\CopperWaxApplySound;
-use pocketmine\world\sound\CopperWaxRemoveSound;
-use pocketmine\world\sound\ScrapeSound;
+use pocketmine\world\format\Chunk;
+use pocketmine\world\particle\CopperWaxParticle;
+use function abs;
+use function mt_getrandmax;
+use function mt_rand;
 
 trait CopperTrait{
 	private CopperOxidation $oxidation = CopperOxidation::NONE;
@@ -67,8 +69,9 @@ trait CopperTrait{
 		if(!$this->waxed && $item->getTypeId() === ItemTypeIds::HONEYCOMB){
 			$this->waxed = true;
 			$this->position->getWorld()->setBlock($this->position, $this);
-			//TODO: orange particles are supposed to appear when applying wax
-			$this->position->getWorld()->addSound($this->position, new CopperWaxApplySound());
+			//only the level event: the client plays the sound with the particles (BDS sends no separate sound for these
+			//feedback events, checked for bone meal, turtle eggs and lightning)
+			$this->position->getWorld()->addParticle($this->position, new CopperWaxParticle(CopperWaxParticle::WAX_ON));
 			$item->pop();
 			return true;
 		}
@@ -77,8 +80,7 @@ trait CopperTrait{
 			if($this->waxed){
 				$this->waxed = false;
 				$this->position->getWorld()->setBlock($this->position, $this);
-				//TODO: white particles are supposed to appear when removing wax
-				$this->position->getWorld()->addSound($this->position, new CopperWaxRemoveSound());
+				$this->position->getWorld()->addParticle($this->position, new CopperWaxParticle(CopperWaxParticle::WAX_OFF));
 				$item->applyDamage(1);
 				return true;
 			}
@@ -87,13 +89,89 @@ trait CopperTrait{
 			if($previousOxidation !== null){
 				$this->oxidation = $previousOxidation;
 				$this->position->getWorld()->setBlock($this->position, $this);
-				//TODO: turquoise particles are supposed to appear when removing oxidation
-				$this->position->getWorld()->addSound($this->position, new ScrapeSound());
+				$this->position->getWorld()->addParticle($this->position, new CopperWaxParticle(CopperWaxParticle::SCRAPE));
 				$item->applyDamage(1);
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Unwaxed copper weathers on random ticks until it is fully oxidized: only those states are registered for random
+	 * ticks.
+	 */
+	public function ticksRandomly() : bool{
+		return !$this->waxed && $this->oxidation->getNext() !== null;
+	}
+
+	public function onRandomTick() : void{
+		$next = $this->getWeatheringResult();
+		if($next !== null){
+			$this->oxidation = $next;
+			$this->position->getWorld()->setBlock($this->position, $this);
+		}
+	}
+
+	/**
+	 * Vanilla weathering, for copper blocks that oxidize over time (call it from onRandomTick()).
+	 * Returns the next oxidation stage if the block should oxidize on this random tick, null otherwise.
+	 *
+	 * Like vanilla, there is a 1 in ~17.6 chance to try; the attempt fails if an unwaxed copper block within 4 blocks
+	 * (Manhattan distance) is less oxidized, and otherwise succeeds with a chance of ((more oxidized + 1) / (same or
+	 * more oxidized + 1))², times 0.75 for unoxidized copper.
+	 */
+	protected function getWeatheringResult() : ?CopperOxidation{
+		$next = $this->oxidation->getNext();
+		if($this->waxed || $next === null || mt_rand() / mt_getrandmax() >= 0.05688889){
+			return null;
+		}
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$minY = $world->getMinY();
+		$maxY = $world->getMaxY();
+		$oxidation = $this->oxidation->value;
+		$same = 0;
+		$higher = 0;
+		//unwaxed copper blocks within 4 blocks (Manhattan distance), read by state ID (unloaded chunks are skipped)
+		for($dx = -4; $dx <= 4; ++$dx){
+			$restX = 4 - abs($dx);
+			for($dz = -$restX; $dz <= $restX; ++$dz){
+				$chunk = $world->getChunk(($x + $dx) >> Chunk::COORD_BIT_SIZE, ($z + $dz) >> Chunk::COORD_BIT_SIZE);
+				if($chunk === null){
+					continue;
+				}
+				$localX = ($x + $dx) & Chunk::COORD_MASK;
+				$localZ = ($z + $dz) & Chunk::COORD_MASK;
+				$restY = $restX - abs($dz);
+				for($dy = -$restY; $dy <= $restY; ++$dy){
+					$blockY = $y + $dy;
+					if(($dx === 0 && $dy === 0 && $dz === 0) || $blockY < $minY || $blockY >= $maxY){
+						continue;
+					}
+					$other = CopperWeathering::getUnwaxedOxidation($chunk->getBlockStateId($localX, $blockY, $localZ));
+					if($other === CopperWeathering::NOT_WEATHERING_COPPER){
+						continue;
+					}
+					if($other < $oxidation){
+						return null;
+					}
+					if($other > $oxidation){
+						++$higher;
+					}else{
+						++$same;
+					}
+				}
+			}
+		}
+		$chance = ($higher + 1) / ($higher + $same + 1);
+		$chance *= $chance;
+		if($this->oxidation === CopperOxidation::NONE){
+			$chance *= 0.75;
+		}
+		return mt_rand() / mt_getrandmax() < $chance ? $next : null;
 	}
 }

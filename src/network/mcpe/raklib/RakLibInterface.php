@@ -30,7 +30,6 @@ use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\EntityEventBroadcaster;
 use pocketmine\network\mcpe\NetworkSession;
-use pocketmine\network\mcpe\nethernet\NetherNetSharedPortSocket;
 use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\PacketPool;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
@@ -38,6 +37,7 @@ use pocketmine\network\Network;
 use pocketmine\network\NetworkInterfaceStartException;
 use pocketmine\network\PacketHandlingException;
 use pocketmine\player\GameMode;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\Server;
 use pocketmine\thread\ThreadCrashException;
 use pocketmine\timings\Timings;
@@ -53,11 +53,21 @@ use raklib\server\ServerEventListener;
 use raklib\utils\InternetAddress;
 use function addcslashes;
 use function base64_encode;
+use function explode;
 use function implode;
+use function is_array;
+use function is_string;
 use function mt_rand;
 use function rtrim;
+use function socket_close;
+use function socket_create;
+use function socket_set_nonblock;
 use function substr;
+use function trim;
+use const AF_INET;
 use const PHP_INT_MAX;
+use const SOCK_DGRAM;
+use const SOL_UDP;
 
 class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	/**
@@ -73,9 +83,6 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 
 	private int $rakServerId;
 	private RakLibServer $rakLib;
-	/** @phpstan-var ThreadSafeArray<int, string> */
-	private ThreadSafeArray $netherNetIceCommands;
-	private ThreadSafeArray $netherNetPeerEvents;
 
 	/** @var NetworkSession[] */
 	private array $sessions = [];
@@ -84,6 +91,9 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	private UserToRakLibThreadMessageSender $interface;
 
 	private int $sleeperNotifierId;
+	private int $wakeNotifierId;
+	private WakingPthreadsChannelWriter $mainToThreadWriter;
+	private ?\Socket $wakeSocket = null;
 
 	private PacketBroadcaster $packetBroadcaster;
 	private EntityEventBroadcaster $entityEventBroadcaster;
@@ -96,7 +106,8 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		bool $ipV6,
 		PacketBroadcaster $packetBroadcaster,
 		EntityEventBroadcaster $entityEventBroadcaster,
-		TypeConverter $typeConverter
+		TypeConverter $typeConverter,
+		string $relayToken = ""
 	){
 		$this->server = $server;
 		$this->packetBroadcaster = $packetBroadcaster;
@@ -107,9 +118,11 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 
 		$sleeperEntry = $this->server->getTickSleeper()->addNotifier(function() : void{
 			Timings::$connection->startTiming();
+			$this->mainToThreadWriter->holdWakeups();
 			try{
 				while($this->eventReceiver->handle($this));
 			}finally{
+				$this->mainToThreadWriter->releaseWakeups();
 				Timings::$connection->stopTiming();
 			}
 		});
@@ -119,8 +132,12 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		$mainToThreadBuffer = new ThreadSafeArray();
 		/** @phpstan-var ThreadSafeArray<int, string> $threadToMainBuffer */
 		$threadToMainBuffer = new ThreadSafeArray();
-		$this->netherNetIceCommands = new ThreadSafeArray();
-		$this->netherNetPeerEvents = new ThreadSafeArray();
+
+		$wakeEntry = $this->server->getTickSleeper()->addNotifier(function() : void{
+			$this->mainToThreadWriter->wake();
+		});
+		$this->wakeNotifierId = $wakeEntry->getNotifierId();
+		$this->mainToThreadWriter = new WakingPthreadsChannelWriter($mainToThreadBuffer, $wakeEntry->createNotifier());
 
 		$this->rakLib = new RakLibServer(
 			$this->server->getLogger(),
@@ -131,59 +148,44 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 			$this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::NETWORK_MAX_MTU_SIZE, 1492),
 			self::MCPE_RAKNET_PROTOCOL_VERSION,
 			$sleeperEntry,
-			$this->netherNetIceCommands,
-			$this->netherNetPeerEvents
+			$relayToken,
+			$this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_RAKLIB_ANTI_SPOOFING_COOKIES, false),
+			$this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::NETWORK_CONNECTION_LIMITS_RAKNET_PONGS_PER_SECOND, 1000),
+			self::readExemptAddresses($this->server)
 		);
 		$this->eventReceiver = new RakLibToUserThreadMessageReceiver(
 			new PthreadsChannelReader($threadToMainBuffer)
 		);
 		$this->interface = new UserToRakLibThreadMessageSender(
-			new PthreadsChannelWriter($mainToThreadBuffer)
+			$this->mainToThreadWriter
 		);
-	}
-
-	/**
-	 * Activates ICE relay on RakLib's EXISTING UDP socket. The backend must
-	 * already be listening on 127.0.0.1:port; never expose that port in SDP.
-	 * No behavior changes until a signaling service calls this explicitly.
-	 */
-	public function configureNetherNetSharedPort(int $backendPort) : void{
-		$this->rakLib->configureNetherNetSharedPort($backendPort);
-	}
-
-	/** Main-thread observations, matched to the native selected ICE relay endpoint. */
-	public function pollNetherNetPeers() : array{
-		$events = [];
-		for($i = 0; $i < 128 && ($data = $this->netherNetPeerEvents->shift()) !== null; ++$i){
-			$events[] = json_decode($data, true, flags: JSON_THROW_ON_ERROR);
-		}
-		return $events;
-	}
-
-	/** Called only with the ICE ufrag from an authenticated, signed SDP answer. */
-	public function authorizeNetherNetUfrag(string $ufrag) : void{
-		$this->sendNetherNetUfragCommand("+", $ufrag);
-	}
-
-	public function revokeNetherNetUfrag(string $ufrag) : void{
-		$this->sendNetherNetUfragCommand("-", $ufrag);
-	}
-
-	private function sendNetherNetUfragCommand(string $kind, string $ufrag) : void{
-		if(strlen($ufrag) < 4 || strlen($ufrag) > 256 || preg_match('/\A[A-Za-z0-9+\/_=.-]+\z/D', $ufrag) !== 1){
-			throw new \InvalidArgumentException("Invalid ICE username fragment");
-		}
-		$this->netherNetIceCommands[] = $kind . $ufrag;
 	}
 
 	public function start() : void{
 		$this->server->getLogger()->debug("Waiting for RakLib to start...");
 		try{
 			$this->rakLib->startAndWait();
+			$wakePort = $this->rakLib->getWakePort();
+			if($wakePort !== 0){
+				$wakeSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+				if($wakeSocket !== false){
+					socket_set_nonblock($wakeSocket);
+					$this->wakeSocket = $wakeSocket;
+					$this->mainToThreadWriter->setTarget($wakeSocket, $wakePort);
+				}
+			}
 		}catch(SocketException $e){
 			throw new NetworkInterfaceStartException($e->getMessage(), 0, $e);
 		}
 		$this->server->getLogger()->debug("RakLib booted successfully");
+	}
+
+	/**
+	 * Loopback port the NetherNet bridge must relay RakNet datagrams to, when this interface was created with a relay
+	 * token (the bridge owns the UDP port and shares it with RakNet). 0 otherwise.
+	 */
+	public function getRelayPort() : int{
+		return $this->rakLib->getRelayPort();
 	}
 
 	public function setNetwork(Network $network) : void{
@@ -222,10 +224,20 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 
 	public function shutdown() : void{
 		$this->server->getTickSleeper()->removeNotifier($this->sleeperNotifierId);
+		$this->server->getTickSleeper()->removeNotifier($this->wakeNotifierId);
 		$this->rakLib->quit();
+		if($this->wakeSocket !== null){
+			socket_close($this->wakeSocket);
+			$this->wakeSocket = null;
+		}
 	}
 
 	public function onClientConnect(int $sessionId, string $address, int $port, int $clientID) : void{
+		if(!$this->network->getSessionManager()->acceptsNewSession($address)){
+			//too many connections from this address that have not logged in yet (logged by the session manager)
+			$this->interface->closeSession($sessionId);
+			return;
+		}
 		$session = new NetworkSession(
 			$this->server,
 			$this->network->getSessionManager(),
@@ -247,9 +259,7 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 				$this->sessions[$sessionId]->getLogger()->debug("Non-FE packet received: " . base64_encode($packet));
 				return;
 			}
-			//get this now for blocking in case the player was closed before the exception was raised
 			$session = $this->sessions[$sessionId];
-			$address = $session->getIp();
 			$buf = substr($packet, 1);
 			$name = $session->getDisplayName();
 			try{
@@ -263,14 +273,42 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 				);
 				//intentionally doesn't use logException, we don't want spammy packet error traces to appear in release mode
 				$logger->debug(implode("\n", Utils::printableExceptionInfo($e)));
-
-				$this->interface->blockAddress($address, 5);
+				//only this player is disconnected, like on BDS: blocking the address also dropped everyone sharing it
+				//(a proxy, carrier-grade NAT), and the backlog they sent when the block ended looked like a flood (300 s)
 			}catch(\Throwable $e){
-				//record the name of the player who caused the crash, to make it easier to find the reproducing steps
-				$this->server->getLogger()->emergency("Crash occurred while handling a packet from session: $name");
-				throw $e;
+				try{
+					//plugin code reached while handling the packet (e.g. a plugin-defined block, item or form) failed:
+					//log it and drop this player only, instead of crashing the server
+					PluginFaultHandler::isolate($e, null, "handling of a packet from session $name");
+				}catch(\Throwable $e){
+					//record the name of the player who caused the crash, to make it easier to find the reproducing steps
+					$this->server->getLogger()->emergency("Crash occurred while handling a packet from session: $name");
+					throw $e;
+				}
+				if($session->isConnected()){
+					//the packet was handled only halfway, so the session's state is unknown
+					$session->disconnectWithError(
+						reason: "Internal server error: " . $e->getMessage(),
+						disconnectScreenMessage: KnownTranslationFactory::pocketmine_disconnect_error_internal()
+					);
+				}
 			}
 		}
+	}
+
+	/**
+	 * network.connection-limits.exempt-addresses (a list or a comma-separated string) as a comma-separated string.
+	 */
+	private static function readExemptAddresses(Server $server) : string{
+		$value = $server->getConfigGroup()->getProperty(YmlServerProperties::NETWORK_CONNECTION_LIMITS_EXEMPT_ADDRESSES, []);
+		$entries = is_array($value) ? $value : explode(",", is_string($value) ? $value : "", 256);
+		$result = [];
+		foreach($entries as $entry){
+			if(is_string($entry) && trim($entry) !== ""){
+				$result[] = trim($entry);
+			}
+		}
+		return implode(",", $result);
 	}
 
 	public function blockAddress(string $address, int $timeout = 300) : void{

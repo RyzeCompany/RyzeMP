@@ -30,10 +30,14 @@ class DriedKelp extends Opaque{
 	}
 
 	public function getFlammability() : int{
-		return 60;
+		return 5;
 	}
 
 	public function getFuelTime() : int{
 		return 4000;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 50;
 	}
 }

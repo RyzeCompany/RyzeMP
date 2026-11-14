@@ -30,6 +30,6 @@ class RawSalmon extends Food{
 	}
 
 	public function getSaturationRestore() : float{
-		return 0.2;
+		return 0.4;
 	}
 }

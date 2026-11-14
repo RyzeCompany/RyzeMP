@@ -36,4 +36,8 @@ class Wool extends Opaque implements Colored{
 	public function getFlammability() : int{
 		return 60;
 	}
+
+	public function getFuelTime() : int{
+		return 100;
+	}
 }

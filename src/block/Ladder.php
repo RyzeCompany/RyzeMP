@@ -85,4 +85,8 @@ class Ladder extends Transparent implements HorizontalFacing{
 	private function canBeSupportedAt(Block $block, int $face) : bool{
 		return $block->getAdjacentSupportType($face) === SupportType::FULL;
 	}
+
+	public function getFuelTime() : int{
+		return 300;
+	}
 }

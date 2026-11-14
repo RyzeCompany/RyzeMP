@@ -32,6 +32,8 @@ use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
  * StrongholdPieces.PortalRoom: the end portal over a lava pool, with the silverfish spawner on the stairs.
  */
 final class PortalRoom extends StrongholdPiece{
+	private bool $hasPlacedSpawner = false;
+
 	public static function createPiece(StructurePiecesBuilder $builder, int $x, int $y, int $z, int $direction, int $genDepth) : ?self{
 		$box = BoundingBox::orientBox($x, $y, $z, -4, -1, 0, 11, 8, 16, $direction);
 		if(!self::isOkBox($box) || $builder->findCollisionPiece($box) !== null){
@@ -106,6 +108,12 @@ final class PortalRoom extends StrongholdPiece{
 				}
 			}
 		}
-		$this->placeSpawner($c, $box, 5, 3, 6, "minecraft:silverfish");
+		if(!$this->hasPlacedSpawner){
+			[$x, $y, $z] = $this->getWorldPos(5, 3, 6);
+			if($box->isInside($x, $y, $z)){
+				$this->hasPlacedSpawner = true;
+				$this->placeSpawner($c, $box, 5, 3, 6, "minecraft:silverfish");
+			}
+		}
 	}
 }

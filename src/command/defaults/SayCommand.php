@@ -24,6 +24,9 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\CommandTargets;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\console\ConsoleCommandSender;
 use pocketmine\lang\KnownTranslationFactory;
@@ -33,7 +36,7 @@ use pocketmine\utils\TextFormat;
 use function count;
 use function implode;
 
-class SayCommand extends NativeCommand{
+class SayCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,14 +47,18 @@ class SayCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SAY);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::message("message")]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
 
 		$sender->getServer()->broadcastMessage(KnownTranslationFactory::chat_type_announcement(
 			$sender instanceof Player ? $sender->getDisplayName() : ($sender instanceof ConsoleCommandSender ? "Server" : $sender->getName()),
-			implode(" ", $args)
+			CommandTargets::expandSelectors($sender, implode(" ", $args))
 		)->prefix(TextFormat::LIGHT_PURPLE));
 		return true;
 	}

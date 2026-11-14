@@ -57,9 +57,28 @@ final class StringToEnchantmentParser extends StringToTParser{
 		$result->register("sharpness", fn() => VanillaEnchantments::SHARPNESS());
 		$result->register("silk_touch", fn() => VanillaEnchantments::SILK_TOUCH());
 		$result->register("swift_sneak", fn() => VanillaEnchantments::SWIFT_SNEAK());
+		$result->register("soul_speed", fn() => VanillaEnchantments::SOUL_SPEED());
 		$result->register("thorns", fn() => VanillaEnchantments::THORNS());
 		$result->register("unbreaking", fn() => VanillaEnchantments::UNBREAKING());
 		$result->register("vanishing", fn() => VanillaEnchantments::VANISHING());
+		$result->register("multishot", fn() => VanillaEnchantments::MULTISHOT());
+		$result->register("quick_charge", fn() => VanillaEnchantments::QUICK_CHARGE());
+		$result->register("wind_burst", fn() => VanillaEnchantments::WIND_BURST());
+		$result->register("density", fn() => VanillaEnchantments::DENSITY());
+		$result->register("breach", fn() => VanillaEnchantments::BREACH());
+		$result->register("lunge", fn() => VanillaEnchantments::LUNGE());
+		$result->register("looting", fn() => VanillaEnchantments::LOOTING());
+		$result->register("channeling", fn() => VanillaEnchantments::CHANNELING());
+		$result->register("smite", fn() => VanillaEnchantments::SMITE());
+		$result->register("bane_of_arthropods", fn() => VanillaEnchantments::BANE_OF_ARTHROPODS());
+		$result->register("depth_strider", fn() => VanillaEnchantments::DEPTH_STRIDER());
+		$result->register("luck_of_the_sea", fn() => VanillaEnchantments::LUCK_OF_THE_SEA());
+		$result->register("lure", fn() => VanillaEnchantments::LURE());
+		$result->register("impaling", fn() => VanillaEnchantments::IMPALING());
+		$result->register("riptide", fn() => VanillaEnchantments::RIPTIDE());
+		$result->register("loyalty", fn() => VanillaEnchantments::LOYALTY());
+		$result->register("piercing", fn() => VanillaEnchantments::PIERCING());
+		$result->register("binding", fn() => VanillaEnchantments::BINDING());
 
 		return $result;
 	}

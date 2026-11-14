@@ -41,4 +41,16 @@ final class HangingRoots extends Flowable{
 		}
 		return [];
 	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
+	}
+
+	public function getFlameEncouragement() : int{
+		return 15;
+	}
+
+	public function getFlammability() : int{
+		return 100;
+	}
 }

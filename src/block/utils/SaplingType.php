@@ -33,9 +33,12 @@ use pocketmine\world\generator\object\TreeType;
  * @method static SaplingType ACACIA()
  * @method static SaplingType BIRCH()
  * @method static SaplingType DARK_OAK()
+ * @method static SaplingType POPLAR()
  * @method static SaplingType JUNGLE()
  * @method static SaplingType OAK()
  * @method static SaplingType SPRUCE()
+ * @method static SaplingType CHERRY()
+ * @method static SaplingType PALE_OAK()
  */
 enum SaplingType{
 	use LegacyEnumShimTrait;
@@ -46,7 +49,9 @@ enum SaplingType{
 	case JUNGLE;
 	case ACACIA;
 	case DARK_OAK;
-	//TODO: cherry
+	case POPLAR;
+	case CHERRY;
+	case PALE_OAK;
 
 	public function getTreeType() : TreeType{
 		return match($this){
@@ -56,7 +61,25 @@ enum SaplingType{
 			self::JUNGLE => TreeType::JUNGLE,
 			self::ACACIA => TreeType::ACACIA,
 			self::DARK_OAK => TreeType::DARK_OAK,
+			self::POPLAR => TreeType::POPLAR,
+			self::CHERRY => TreeType::CHERRY,
+			self::PALE_OAK => TreeType::PALE_OAK,
 		};
+	}
+
+	/**
+	 * Returns whether this sapling only grows when planted in a 2x2 square (dark oak, pale oak).
+	 */
+	public function needsTwoByTwo() : bool{
+		return $this === self::DARK_OAK || $this === self::PALE_OAK;
+	}
+
+	/**
+	 * Returns whether this sapling grows a bigger tree when planted in a 2x2 square (spruce, jungle), or only grows in
+	 * one (dark oak, pale oak).
+	 */
+	public function canGrowTwoByTwo() : bool{
+		return $this->needsTwoByTwo() || $this === self::SPRUCE || $this === self::JUNGLE;
 	}
 
 	public function getDisplayName() : string{

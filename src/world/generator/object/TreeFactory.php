@@ -39,8 +39,24 @@ final class TreeFactory{
 			TreeType::ACACIA => new AcaciaTree(),
 			TreeType::BIRCH => new BirchTree($random->nextBoundedInt(39) === 0),
 			TreeType::AZALEA => new AzaleaTree(),
+			TreeType::POPLAR => new PoplarTree($random),
+			TreeType::CHERRY => new CherryTree(),
+			TreeType::PALE_OAK => new PaleOakTree(),
 			TreeType::CRIMSON => new NetherTree(VanillaBlocks::CRIMSON_STEM(), VanillaBlocks::NETHER_WART_BLOCK(), VanillaBlocks::SHROOMLIGHT(), ($random->nextBoundedInt(9) + 4) * ($random->nextBoundedInt(12) === 0 ? 2 : 1), hasVines: true, huge: $random->nextFloat() < 0.06),
 			TreeType::WARPED => new NetherTree(VanillaBlocks::WARPED_STEM(), VanillaBlocks::WARPED_WART_BLOCK(), VanillaBlocks::SHROOMLIGHT(), ($random->nextBoundedInt(9) + 4) * ($random->nextBoundedInt(12) === 0 ? 2 : 1), hasVines: false, huge: $random->nextFloat() < 0.06),
+			default => null,
+		};
+	}
+
+	/**
+	 * Returns the tree grown from a 2x2 square of saplings of the given type, or null if that type has no such tree.
+	 */
+	public static function getTwoByTwo(Random $random, TreeType $type) : ?Tree{
+		return match($type){
+			TreeType::SPRUCE => new MegaSpruceTree(),
+			TreeType::JUNGLE => new MegaJungleTree(),
+			TreeType::DARK_OAK => new DarkOakTree(),
+			TreeType::PALE_OAK => new PaleOakTree(),
 			default => null,
 		};
 	}

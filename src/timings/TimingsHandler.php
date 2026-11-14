@@ -34,15 +34,18 @@ use pocketmine\utils\Utils;
 use Symfony\Component\Filesystem\Path;
 use function array_merge;
 use function array_push;
+use function chunkutils2_tsc;
 use function date;
 use function fclose;
 use function fopen;
+use function function_exists;
 use function fwrite;
 use function hrtime;
 use function implode;
 use function is_dir;
 use function mkdir;
 use function spl_object_id;
+use function usleep;
 use const PHP_EOL;
 
 /**
@@ -53,6 +56,9 @@ class TimingsHandler{
 
 	private static bool $enabled = false;
 	private static int $timingStart = 0;
+	/** nanoseconds per tick of the cheap clock (see now()), null = use hrtime() */
+	private static ?float $fastClockNs = null;
+	private static int $fastClockOrigin = 0;
 
 	/** @phpstan-var ObjectSet<\Closure(bool $enable) : void> */
 	private static ?ObjectSet $toggleCallbacks = null;
@@ -143,7 +149,7 @@ class TimingsHandler{
 
 		$result[] = "# FormatVersion " . self::FORMAT_VERSION;
 
-		$sampleTime = hrtime(true) - self::$timingStart;
+		$sampleTime = self::now() - self::$timingStart;
 		$result[] = "Sample time $sampleTime (" . ($sampleTime / 1000000000) . "s)";
 
 		return $result;
@@ -219,10 +225,35 @@ class TimingsHandler{
 		return self::$timingStart;
 	}
 
+	/**
+	 * Monotonic clock in nanoseconds (arbitrary origin), like hrtime(true). hrtime() costs several microseconds on
+	 * virtual machines without a paravirtualised clock, more than most timed sections; when the chunkutils2 extension
+	 * provides the CPU time stamp counter it is used instead (a few nanoseconds per read), calibrated against hrtime()
+	 * once per thread.
+	 */
+	public static function now() : int{
+		if(self::$fastClockNs === null){
+			if(!function_exists("chunkutils2_tsc")){
+				return hrtime(true);
+			}
+			$h0 = hrtime(true);
+			$t0 = chunkutils2_tsc();
+			usleep(20000);
+			$h1 = hrtime(true);
+			$t1 = chunkutils2_tsc();
+			if($t1 <= $t0 || $h1 <= $h0){
+				return hrtime(true);
+			}
+			self::$fastClockNs = ($h1 - $h0) / ($t1 - $t0);
+			self::$fastClockOrigin = $t1 - (int) ($h1 / self::$fastClockNs);
+		}
+		return (int) ((chunkutils2_tsc() - self::$fastClockOrigin) * self::$fastClockNs);
+	}
+
 	private static function internalReload() : void{
 		TimingsRecord::reset();
 		if(self::$enabled){
-			self::$timingStart = hrtime(true);
+			self::$timingStart = self::now();
 		}
 	}
 
@@ -262,7 +293,7 @@ class TimingsHandler{
 
 	public function startTiming() : void{
 		if(self::$enabled){
-			$this->internalStartTiming(hrtime(true));
+			$this->internalStartTiming(self::now());
 		}
 	}
 
@@ -291,7 +322,7 @@ class TimingsHandler{
 
 	public function stopTiming() : void{
 		if(self::$enabled){
-			$this->internalStopTiming(hrtime(true));
+			$this->internalStopTiming(self::now());
 		}
 	}
 

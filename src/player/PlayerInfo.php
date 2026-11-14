@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\player;
 
 use pocketmine\entity\Skin;
+use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\utils\TextFormat;
 use Ramsey\Uuid\UuidInterface;
 
@@ -40,7 +41,8 @@ class PlayerInfo{
 		private UuidInterface $uuid,
 		private Skin $skin,
 		private string $locale,
-		private array $extraData = []
+		private array $extraData = [],
+		private ?SkinData $networkSkinData = null
 	){
 		$this->username = TextFormat::clean($username);
 	}
@@ -55,6 +57,15 @@ class PlayerInfo{
 
 	public function getSkin() : Skin{
 		return $this->skin;
+	}
+
+	/**
+	 * Returns the skin exactly as the client sent it at login (persona pieces, tints, profile hash, ...), if known.
+	 * Since 1.26.40 the vanilla client expects this data to be echoed back faithfully in the player list, so this is
+	 * preferred over the lossy Skin -> SkinData conversion where available.
+	 */
+	public function getNetworkSkinData() : ?SkinData{
+		return $this->networkSkinData;
 	}
 
 	public function getLocale() : string{

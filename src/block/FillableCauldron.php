@@ -23,17 +23,29 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\world\particle\SmokeParticle;
+use pocketmine\world\sound\FireExtinguishSound;
 use pocketmine\world\sound\Sound;
+use pocketmine\world\vibration\GameEvent;
 use function min;
+use function mt_rand;
 
-abstract class FillableCauldron extends Transparent{
+abstract class FillableCauldron extends Transparent implements ComparatorReadable{
 	public const MIN_FILL_LEVEL = 1;
 	public const MAX_FILL_LEVEL = 6;
+	/** Levels added by rain or snow (a third of the cauldron, like a water bottle). */
+	public const PRECIPITATION_FILL_AMOUNT = 2;
+	/** Chance that rain or snow falling on a cauldron adds to it (vanilla). */
+	public const RAIN_FILL_CHANCE = 0.05;
+	public const SNOW_FILL_CHANCE = 0.1;
+	/** Smoke particles shown when incompatible contents are mixed and the cauldron empties. */
+	private const MIX_SMOKE_PARTICLES = 8;
 
 	private int $fillLevel = self::MIN_FILL_LEVEL;
 
@@ -50,6 +62,13 @@ abstract class FillableCauldron extends Transparent{
 		}
 		$this->fillLevel = $fillLevel;
 		return $this;
+	}
+
+	/**
+	 * Bedrock comparators read the fill level itself (1-6), for every kind of cauldron.
+	 */
+	public function getComparatorOutput() : int{
+		return $this->fillLevel;
 	}
 
 	protected function recalculateCollisionBoxes() : array{
@@ -80,9 +99,20 @@ abstract class FillableCauldron extends Transparent{
 		}
 		$this->position->getWorld()->setBlock($this->position, $this->withFillLevel($this->fillLevel + $amount));
 		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), $this->getFillSound());
+		$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
 
 		$usedItem->pop();
 		$returnedItems[] = $returnedItem;
+	}
+
+	/**
+	 * Adds levels from rain or snow (no item, no sound).
+	 */
+	protected function fillByPrecipitation() : void{
+		if($this->fillLevel < self::MAX_FILL_LEVEL){
+			$this->position->getWorld()->setBlock($this->position, $this->withFillLevel($this->fillLevel + self::PRECIPITATION_FILL_AMOUNT));
+			$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
+		}
 	}
 
 	/**
@@ -95,6 +125,7 @@ abstract class FillableCauldron extends Transparent{
 
 		$this->position->getWorld()->setBlock($this->position, $this->withFillLevel($this->fillLevel - $amount));
 		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), $this->getEmptySound());
+		$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
 
 		$usedItem->pop();
 		$returnedItems[] = $returnedItem;
@@ -114,8 +145,14 @@ abstract class FillableCauldron extends Transparent{
 	 * @param Item[] &$returnedItems
 	 */
 	protected function mix(Item $usedItem, Item $returnedItem, array &$returnedItems) : void{
-		$this->position->getWorld()->setBlock($this->position, VanillaBlocks::CAULDRON());
-		//TODO: sounds and particles
+		$world = $this->position->getWorld();
+		$world->setBlock($this->position, VanillaBlocks::CAULDRON());
+		$world->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
+		//incompatible contents fizz away (random.fizz) with a puff of smoke, like vanilla
+		$world->addSound($this->position->add(0.5, 0.5, 0.5), new FireExtinguishSound());
+		for($i = 0; $i < self::MIX_SMOKE_PARTICLES; ++$i){
+			$world->addParticle($this->position->add(mt_rand(2, 14) / 16, 0.8, mt_rand(2, 14) / 16), new SmokeParticle());
+		}
 
 		$usedItem->pop();
 		$returnedItems[] = $returnedItem;

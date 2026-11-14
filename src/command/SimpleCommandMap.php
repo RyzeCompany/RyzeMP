@@ -27,49 +27,62 @@ use pocketmine\command\defaults\BanCommand;
 use pocketmine\command\defaults\BanIpCommand;
 use pocketmine\command\defaults\BanListCommand;
 use pocketmine\command\defaults\ClearCommand;
+use pocketmine\command\defaults\DamageCommand;
 use pocketmine\command\defaults\DefaultGamemodeCommand;
 use pocketmine\command\defaults\DeopCommand;
 use pocketmine\command\defaults\DifficultyCommand;
 use pocketmine\command\defaults\DumpMemoryCommand;
 use pocketmine\command\defaults\EffectCommand;
 use pocketmine\command\defaults\EnchantCommand;
+use pocketmine\command\defaults\ExecuteCommand;
+use pocketmine\command\defaults\FillCommand;
 use pocketmine\command\defaults\GamemodeCommand;
+use pocketmine\command\defaults\GameruleCommand;
 use pocketmine\command\defaults\GarbageCollectorCommand;
 use pocketmine\command\defaults\GiveCommand;
 use pocketmine\command\defaults\HelpCommand;
 use pocketmine\command\defaults\KickCommand;
 use pocketmine\command\defaults\KillCommand;
 use pocketmine\command\defaults\ListCommand;
+use pocketmine\command\defaults\LocateCommand;
 use pocketmine\command\defaults\MeCommand;
 use pocketmine\command\defaults\OpCommand;
 use pocketmine\command\defaults\PardonCommand;
 use pocketmine\command\defaults\PardonIpCommand;
 use pocketmine\command\defaults\ParticleCommand;
 use pocketmine\command\defaults\PluginsCommand;
+use pocketmine\command\defaults\ReplaceItemCommand;
+use pocketmine\command\defaults\RideCommand;
 use pocketmine\command\defaults\SaveCommand;
 use pocketmine\command\defaults\SaveOffCommand;
 use pocketmine\command\defaults\SaveOnCommand;
 use pocketmine\command\defaults\SayCommand;
 use pocketmine\command\defaults\SeedCommand;
+use pocketmine\command\defaults\SetBlockCommand;
 use pocketmine\command\defaults\SetWorldSpawnCommand;
 use pocketmine\command\defaults\SpawnpointCommand;
 use pocketmine\command\defaults\StatusCommand;
 use pocketmine\command\defaults\StopCommand;
+use pocketmine\command\defaults\SummonCommand;
+use pocketmine\command\defaults\TagCommand;
 use pocketmine\command\defaults\TeleportCommand;
 use pocketmine\command\defaults\TellCommand;
 use pocketmine\command\defaults\TimeCommand;
-use pocketmine\command\defaults\WeatherCommand;
-use pocketmine\command\defaults\GameRuleCommand;
 use pocketmine\command\defaults\TimingsCommand;
 use pocketmine\command\defaults\TitleCommand;
 use pocketmine\command\defaults\TransferServerCommand;
 use pocketmine\command\defaults\VanillaCommand;
 use pocketmine\command\defaults\VersionCommand;
+use pocketmine\command\defaults\WeatherCommand;
 use pocketmine\command\defaults\WhitelistCommand;
 use pocketmine\command\defaults\XpCommand;
+use pocketmine\command\selector\TargetSelectorException;
+use pocketmine\command\utils\CommandFailureException;
 use pocketmine\command\utils\CommandStringHelper;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
+use pocketmine\plugin\PluginFaultHandler;
+use pocketmine\plugin\PluginOwned;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use pocketmine\utils\TextFormat;
@@ -101,43 +114,52 @@ class SimpleCommandMap implements CommandMap{
 			new BanIpCommand(),
 			new BanListCommand(),
 			new ClearCommand(),
+			new DamageCommand(),
 			new DefaultGamemodeCommand(),
 			new DeopCommand(),
 			new DifficultyCommand(),
 			new DumpMemoryCommand(),
 			new EffectCommand(),
 			new EnchantCommand(),
+			new ExecuteCommand(),
+			new FillCommand(),
 			new GamemodeCommand(),
-			new GameRuleCommand(),
+			new GameruleCommand(),
 			new GarbageCollectorCommand(),
 			new GiveCommand(),
 			new HelpCommand(),
 			new KickCommand(),
 			new KillCommand(),
 			new ListCommand(),
+			new LocateCommand(),
 			new MeCommand(),
 			new OpCommand(),
 			new PardonCommand(),
 			new PardonIpCommand(),
 			new ParticleCommand(),
 			new PluginsCommand(),
+			new ReplaceItemCommand(),
+			new RideCommand(),
 			new SaveCommand(),
 			new SaveOffCommand(),
 			new SaveOnCommand(),
 			new SayCommand(),
 			new SeedCommand(),
+			new SetBlockCommand(),
 			new SetWorldSpawnCommand(),
 			new SpawnpointCommand(),
 			new StatusCommand(),
 			new StopCommand(),
+			new SummonCommand(),
+			new TagCommand(),
 			new TeleportCommand(),
 			new TellCommand(),
 			new TimeCommand(),
-			new WeatherCommand(),
 			new TimingsCommand(),
 			new TitleCommand(),
 			new TransferServerCommand(),
 			new VersionCommand(),
+			new WeatherCommand(),
 			new WhitelistCommand(),
 			new XpCommand(),
 		]);
@@ -224,6 +246,18 @@ class SimpleCommandMap implements CommandMap{
 				}
 			}catch(InvalidCommandSyntaxException $e){
 				$sender->sendMessage($sender->getLanguage()->translate(KnownTranslationFactory::commands_generic_usage($target->getUsage())));
+			}catch(TargetSelectorException|CommandFailureException $e){
+				$sender->sendMessage($e->getTranslatable()->prefix(TextFormat::RED));
+			}catch(\Throwable $e){
+				//rethrown if no plugin is to blame (core command bug) or if the server is configured to crash on plugin errors
+				PluginFaultHandler::isolate(
+					$e,
+					$target instanceof PluginOwned ? $target->getOwningPlugin() : null,
+					"command /" . $target->getLabel(),
+					$target instanceof PluginCommand ? $target->getExecutor() : $target
+				);
+				//same wording as vanilla's commands.generic.exception
+				$sender->sendMessage(TextFormat::RED . "An unknown error occurred while attempting to perform this command");
 			}finally{
 				$timings->stopTiming();
 			}

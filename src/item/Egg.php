@@ -35,7 +35,9 @@ class Egg extends ProjectileItem{
 	}
 
 	protected function createEntity(Location $location, Player $thrower) : Throwable{
-		return new EggEntity($location, $thrower);
+		$entity = new EggEntity($location, $thrower);
+		$entity->setEggItem($this);
+		return $entity;
 	}
 
 	public function getThrowForce() : float{

@@ -26,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\block\utils\Ageable;
 use pocketmine\block\utils\AgeableTrait;
 use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\UltraWarmHelper;
 use function mt_rand;
 
 class FrostedIce extends Ice implements Ageable{
@@ -83,7 +84,7 @@ class FrostedIce extends Ice implements Ageable{
 	private function tryMelt() : bool{
 		$world = $this->position->getWorld();
 		if($this->age >= self::MAX_AGE){
-			BlockEventHelper::melt($this, VanillaBlocks::WATER());
+			BlockEventHelper::melt($this, UltraWarmHelper::getMeltedIceState($this));
 			return true;
 		}
 

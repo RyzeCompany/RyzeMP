@@ -1,46 +1,33 @@
-# Building RyzeMP
+# Building
+## Pre-requisites
+- A bash shell (git bash is sufficient for Windows)
+- [`git`](https://git-scm.com) available in your shell
+- PHP 8.2 or newer available in your shell
+- [`composer`](https://getcomposer.org) available in your shell
 
-## Requirements
+## Custom PHP binaries
+Because PocketMine-MP requires several non-standard PHP extensions and configuration, PMMP provides scripts to build custom binaries for running PocketMine-MP, as well as prebuilt binaries.
 
-- A shell, Git and Composer
-- A compatible 64-bit PHP runtime with the extensions required in [composer.json](composer.json)
-- The public customized `RyzeCompany/BedrockProtocol` and `RyzeCompany/BedrockData` dependencies, pinned to existing commits in `composer.lock`
+- [Prebuilt binaries](https://github.com/pmmp/PHP-Binaries/releases)
+- [Compile scripts](https://github.com/pmmp/php-build-scripts) are provided as a submodule in the path `build/php`
 
-For the current CI build, GitHub Actions uses PHP 8.4 plus PocketMine's required extensions for validation, and PHP 8.3 for the PHAR builder.
+If you use a custom binary, you'll need to replace `composer` usages in this guide with `path/to/your/php path/to/your/composer.phar`.
 
-## Distributions
+## Setting up environment
+1. `git clone https://github.com/pmmp/PocketMine-MP.git`
+2. `composer install`
 
-For installing a **published source project with Composer**, or downloading a **versioned PHAR directly from GitHub Releases**, see [DISTRIBUTION.md](docs/DISTRIBUTION.md). The public Composer source-project installation for beta.3 has been verified against Packagist with a compatible PocketMine PHP runtime.
+## Checking out a different branch to build
+1. `git checkout <branch to checkout>`
+2. Re-run `composer install` to synchronize dependencies.
 
-## Install dependencies
+## Optimizing for release builds
+1. Add the flags `--no-dev --classmap-authoritative` to your `composer install` command. This will reduce build size and improve autoloading speed.
 
-```bash
-git clone https://github.com/RyzeCompany/RyzeMP.git RyzeMP
-cd RyzeMP
-composer install --prefer-dist
-```
+## Building `PocketMine-MP.phar`
+Run `composer make-server` using your preferred PHP binary. It'll drop a `PocketMine-MP.phar` into the current working directory.
 
-For a release-style build:
+You can also use the `--out` option to change the output filename.
 
-```bash
-composer install --no-dev --classmap-authoritative
-php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar
-```
-
-`composer make-server` also produces `RyzeMP.phar` by default. Your PHP runtime must meet the project's extension requirements. Some CI packaging jobs use `--ignore-platform-reqs` only because they build the archive using a packaging runtime; do not assume a local server will run without the required extensions.
-
-## Start
-
-```bash
-./start.sh
-```
-
-Or:
-
-```bash
-php RyzeMP.phar --no-wizard
-```
-
-For source execution, run `src/PocketMine.php` with the appropriate PHP binary.
-
-Do not change the `pocketmine\` PHP namespace, `PMMPDataVersion` tag, Composer lockfile or plugin API version solely to change the software's public branding.
+## Running PocketMine-MP from source code
+Run `src/PocketMine.php` using your preferred PHP binary.

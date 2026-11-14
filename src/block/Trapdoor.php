@@ -34,6 +34,7 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\DoorSound;
+use pocketmine\world\vibration\GameEvent;
 
 class Trapdoor extends Transparent implements HorizontalFacing{
 	use HorizontalFacingTrait;
@@ -84,10 +85,33 @@ class Trapdoor extends Transparent implements HorizontalFacing{
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
-		$this->open = !$this->open;
+		$this->setOpenAndUpdate(!$this->open);
+		$this->position->getWorld()->addGameEvent($this->position, $this->open ? GameEvent::BLOCK_OPEN : GameEvent::BLOCK_CLOSE, $player);
+		return true;
+	}
+
+	protected function setOpenAndUpdate(bool $open) : void{
+		$this->open = $open;
 		$world = $this->position->getWorld();
 		$world->setBlock($this->position, $this);
 		$world->addSound($this->position, new DoorSound());
-		return true;
+	}
+
+	public function onNearbyBlockChange() : void{
+		$redstone = $this->position->getWorld()->getRedstone();
+		if($redstone === null){
+			return;
+		}
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$powered = $redstone->isPowered($x, $y, $z);
+		if($powered !== $redstone->getRememberedPowered($x, $y, $z)){
+			$redstone->setRememberedPowered($x, $y, $z, $powered);
+			if($powered !== $this->open){
+				$this->setOpenAndUpdate($powered);
+				$this->position->getWorld()->addGameEvent($this->position, $powered ? GameEvent::BLOCK_OPEN : GameEvent::BLOCK_CLOSE);
+			}
+		}
 	}
 }

@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\StaticSupportTrait;
+use pocketmine\block\utils\VanillaTreeGrower;
 use pocketmine\event\block\StructureGrowEvent;
 use pocketmine\item\Fertilizer;
 use pocketmine\item\Item;
@@ -43,7 +44,8 @@ class Azalea extends Flowable{
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($item instanceof Fertilizer){
 			$item->pop();
-			if($player === null || !$player->hasFiniteResources() || mt_rand(1, 100) <= 45){
+			//vanilla (AzaleaBlock): 45%, the bone meal is used either way
+			if(($player !== null && !$player->hasFiniteResources()) || mt_rand(1, 100) <= 45){
 				$this->grow($player);
 			}
 			return true;
@@ -53,6 +55,10 @@ class Azalea extends Flowable{
 	}
 
 	private function grow(?Player $player) : void{
+		if(VanillaTreeGrower::growTree($this, $player, VanillaTreeGrower::AZALEA, fn(Block $block) : bool => false) !== null){
+			return;
+		}
+		//PocketMine tree when the vanilla data is not available
 		$random = new Random(mt_rand());
 		$tree = TreeFactory::get($random, TreeType::AZALEA);
 		$transaction = $tree?->getBlockTransaction($this->position->getWorld(), $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ(), $random);
@@ -83,5 +89,19 @@ class Azalea extends Flowable{
 		return $supportBlock->getTypeId() === BlockTypeIds::CLAY ||
 			$supportBlock->hasTypeTag(BlockTypeTags::DIRT) ||
 			$supportBlock->hasTypeTag(BlockTypeTags::MUD);
+	}
+
+	public function getCompostabilityChance() : int{ return $this->getTypeId() === BlockTypeIds::FLOWERING_AZALEA ? 85 : 65; }
+
+	public function getFlameEncouragement() : int{
+		return 15;
+	}
+
+	public function getFlammability() : int{
+		return 100;
+	}
+
+	public function getFuelTime() : int{
+		return 100;
 	}
 }

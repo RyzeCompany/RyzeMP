@@ -58,10 +58,9 @@ class SmallDripleaf extends Transparent implements HorizontalFacing{
 	}
 
 	private function canBeSupportedBy(Block $block) : bool{
-		//TODO: Moss
 		//TODO: Small Dripleaf also can be placed on dirt, coarse dirt, farmland, grass blocks,
 		// podzol, rooted dirt, mycelium, and mud if these blocks are underwater (needs waterlogging)
-		return $block->getTypeId() === BlockTypeIds::CLAY;
+		return $block->getTypeId() === BlockTypeIds::CLAY || $block->getTypeId() === BlockTypeIds::MOSS_BLOCK;
 	}
 
 	public function onNearbyBlockChange() : void{
@@ -159,6 +158,10 @@ class SmallDripleaf extends Transparent implements HorizontalFacing{
 
 	public function getFlammability() : int{
 		return 100;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 
 	public function getSupportType(int $facing) : SupportType{

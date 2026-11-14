@@ -46,7 +46,8 @@ final class ValueFromStringProperty implements StringProperty{
 		private string $name,
 		private StateMap $map,
 		private \Closure $getter,
-		private \Closure $setter
+		private \Closure $setter,
+		private ?string $defaultRawIfMissing = null //raw value assumed when the property is absent (for properties added in newer versions)
 	){}
 
 	public function getName() : string{ return $this->name; }
@@ -61,7 +62,7 @@ final class ValueFromStringProperty implements StringProperty{
 	}
 
 	public function deserialize(object $block, BlockStateReader $in) : void{
-		$this->deserializePlain($block, $in->readString($this->name));
+		$this->deserializePlain($block, $this->defaultRawIfMissing !== null ? $in->readOptionalString($this->name, $this->defaultRawIfMissing) : $in->readString($this->name));
 	}
 
 	public function deserializePlain(object $block, string $raw) : void{

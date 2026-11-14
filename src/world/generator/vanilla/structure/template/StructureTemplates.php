@@ -55,8 +55,7 @@ final class StructureTemplates{
 	){}
 
 	public static function shared(WorldgenData $data, JavaBlocks $blocks) : self{
-		$key = $data->getRoot() . "\0" . (int) $blocks->hasStructureContent;
-		return self::$shared[$key] ??= new self($data, $blocks);
+		return self::$shared[$data->getRoot()] ??= new self($data, $blocks);
 	}
 
 	public function exists(string $id) : bool{

@@ -23,13 +23,25 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\block\utils\RecordType;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
+use pocketmine\network\mcpe\protocol\StopSoundPacket;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 
 class RecordStopSound implements Sound{
 
+	/**
+	 * @param RecordType|null $recordType the record that was playing: 1.26 clients ignore record.null and keep playing,
+	 *                                    so its sound is also stopped by name
+	 */
+	public function __construct(private ?RecordType $recordType = null){}
+
 	public function encode(Vector3 $pos) : array{
-		return [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::RECORD_NULL, $pos, false)];
+		$packets = [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::RECORD_NULL, $pos, false)];
+		if($this->recordType !== null){
+			$packets[] = StopSoundPacket::create(RecordSound::getSoundName($this->recordType), false, false);
+		}
+		return $packets;
 	}
 }

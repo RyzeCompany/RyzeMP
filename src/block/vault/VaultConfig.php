@@ -29,7 +29,6 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\DoubleTag;
 use pocketmine\nbt\tag\FloatTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use function count;
 use function max;
 
@@ -60,7 +59,7 @@ final class VaultConfig{
 		?Item $keyItem = null,
 		private ?string $overrideLootTableToDisplay = null
 	){
-		$this->keyItem = $keyItem !== null ? clone $keyItem : TrialChamberContent::trialKey();
+		$this->keyItem = $keyItem !== null ? clone $keyItem : VanillaItems::TRIAL_KEY();
 		//vanilla refuses configs that would turn the vault off as soon as it turns on
 		$this->deactivationRange = max($this->activationRange, $this->deactivationRange);
 	}
@@ -69,7 +68,7 @@ final class VaultConfig{
 	 * The config of the vaults of the ominous trial chamber rewards: an ominous trial key and the ominous rewards.
 	 */
 	public static function ominous() : self{
-		return new self(self::OMINOUS_LOOT_TABLE, keyItem: TrialChamberContent::trialKey(ominous: true));
+		return new self(self::OMINOUS_LOOT_TABLE, keyItem: VanillaItems::OMINOUS_TRIAL_KEY());
 	}
 
 	/** Loot table of the rewards (Bedrock path or Java id). */
@@ -122,7 +121,7 @@ final class VaultConfig{
 		);
 	}
 
-	public static function readRange(CompoundTag $nbt, string $name, float $default) : float{
+	private static function readRange(CompoundTag $nbt, string $name, float $default) : float{
 		$tag = $nbt->getTag($name);
 		//Bedrock saves floats, Java doubles
 		return $tag instanceof FloatTag || $tag instanceof DoubleTag ? max(0.0, $tag->getValue()) : $default;

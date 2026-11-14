@@ -24,9 +24,11 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\vanilla;
 
 use PHPUnit\Framework\TestCase;
+use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\vanilla\feature\FeatureRandom;
 use pocketmine\world\generator\vanilla\feature\JavaHashSet;
 use pocketmine\world\generator\vanilla\random\XoroshiroRandom;
+use pocketmine\world\SimpleChunkManager;
 use function file_exists;
 use function getenv;
 use function is_dir;
@@ -83,4 +85,45 @@ class FeatureTest extends TestCase{
 		self::assertSame([[0, 0, 0], [0, 0, 1], [1, 0, 0], [0, 1, 0]], JavaHashSet::iterationOrder($set));
 	}
 
+	/**
+	 * Blocks of chunk 0,0 (seed 12345) that match Java Edition 26.3 when only that chunk is decorated. The Java
+	 * reference was taken without carvers, so they are off here too (a cave carves the gold ore at 4 -52 14). Needs the
+	 * worldgen data with feature data (POCKETMINE_VANILLA_WORLDGEN_DATA, data format 2 or later).
+	 */
+	public function testDecorationMatchesJava() : void{
+		$dir = getenv("POCKETMINE_VANILLA_WORLDGEN_DATA");
+		if($dir === false || !is_dir($dir . "/data/minecraft/worldgen/feature") || !file_exists($dir . "/" . VanillaDataFetcher::JAVA_BLOCKS_FILE)){
+			self::markTestSkipped("POCKETMINE_VANILLA_WORLDGEN_DATA is not set or has no feature data");
+		}
+		$generator = new VanillaGenerator(12345, "data=$dir;backend=compiled;carvers=off");
+		$world = new SimpleChunkManager(-64, 320);
+		for($x = -1; $x <= 1; ++$x){
+			for($z = -1; $z <= 1; ++$z){
+				$world->setChunk($x, $z, new Chunk([], false));
+				$generator->generateChunk($world, $x, $z);
+			}
+		}
+		$generator->populateChunk($world, 0, 0);
+		$blocks = $generator->getDecorator()->blocks;
+		$chunk = $world->getChunk(0, 0);
+		self::assertNotNull($chunk);
+		$expected = [
+			[5, -63, 8, "minecraft:deepslate_redstone_ore"],
+			[0, -61, 4, "minecraft:deepslate_iron_ore"],
+			[9, -61, 11, "minecraft:deepslate_diamond_ore"],
+			[4, -52, 14, "minecraft:deepslate_gold_ore"],
+			[14, -47, 9, "minecraft:deepslate_lapis_ore"],
+			[9, -8, 7, "minecraft:deepslate_copper_ore"],
+			[13, 6, 5, "minecraft:coal_ore"],
+			[2, 8, 13, "minecraft:iron_ore"],
+			[0, 19, 8, "minecraft:copper_ore"],
+			[10, -53, 2, "minecraft:tuff"],
+			[8, -61, 7, "minecraft:clay"],
+			[15, 44, 7, "minecraft:tall_seagrass"],
+			[10, 36, 14, "minecraft:seagrass"]
+		];
+		foreach($expected as [$x, $y, $z, $name]){
+			self::assertSame($name, $blocks->blockName($blocks->fromPm($chunk->getBlockStateId($x, $y, $z))), "block at $x $y $z");
+		}
+	}
 }

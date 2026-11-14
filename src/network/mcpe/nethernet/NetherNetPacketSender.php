@@ -1,52 +1,61 @@
 <?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+ */
+
 declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\nethernet;
 
-use pocketmine\network\mcpe\PacketSender;
+use pocketmine\network\mcpe\TransportAwarePacketSender;
 
-/**
- * Bridges already-decoded NetherNet game batches to NetworkSession.
- *
- * The transport adapter owns WebRTC and must supply callbacks for sending
- * plaintext Bedrock batches and closing the *verified* connection.
- * Do not prefix bytes with RakNet's FE marker: that belongs to RakLib only.
- *
- * The send callback receives a receipt ID, if requested. It MUST complete
- * that receipt only on a genuine transport acknowledgment, never merely when
- * the local outgoing queue accepts a message.
- *
- * @internal
- */
-final class NetherNetPacketSender implements PacketSender{
+final class NetherNetPacketSender implements TransportAwarePacketSender{
 	private bool $closed = false;
 
-	/**
-	 * @param \Closure(string, bool, ?int): void $send
-	 * @param \Closure(string): void $close
-	 */
 	public function __construct(
-		private \Closure $send,
-		private \Closure $close,
-		private bool $supportsReceipts = false
+		private int $sessionId,
+		private NetherNetInterface $handler,
+		private ?string $peerPublicKey
 	){}
 
 	public function send(string $payload, bool $immediate, ?int $receiptId) : void{
-		if($this->closed){
-			return;
+		if(!$this->closed){
+			$this->handler->putPacket($this->sessionId, $payload, $receiptId);
 		}
-		if($receiptId !== null && !$this->supportsReceipts){
-			// Pretending that a local WebRTC queue admission is a peer ACK would
-			// corrupt NetworkSession's write-receipt semantics.
-			throw new \LogicException("NetherNet transport has no real packet receipt callback");
-		}
-		($this->send)($payload, $immediate, $receiptId);
 	}
 
 	public function close(string $reason = "unknown reason") : void{
 		if(!$this->closed){
 			$this->closed = true;
-			($this->close)($reason);
+			$this->handler->close($this->sessionId, $reason);
 		}
+	}
+
+	public function getTransportName() : string{
+		return "nethernet";
+	}
+
+	public function isTransportEncrypted() : bool{
+		return true;
+	}
+
+	public function getPeerPublicKey() : ?string{
+		return $this->peerPublicKey;
 	}
 }

@@ -23,27 +23,81 @@ declare(strict_types=1);
 
 namespace pocketmine\entity\projectile;
 
+use pocketmine\entity\Location;
+use pocketmine\entity\monster\Endermite;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\ProjectileHitEvent;
+use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\world\particle\EndermanTeleportParticle;
+use pocketmine\world\Position;
 use pocketmine\world\sound\EndermanTeleportSound;
+use pocketmine\world\vibration\GameEvent;
+use pocketmine\world\World;
+use function mt_getrandmax;
+use function mt_rand;
 
+/**
+ * Bedrock values (entities/ender_pearl.json): teleports its owner where it lands (5 fall damage) and has a 5% chance
+ * to spawn an endermite there (on_hit spawn_chance; not in peaceful, where it would despawn at once, nor with the
+ * domobspawning gamerule off: the no_spawn group). The owner is saved with the pearl, so stasis chambers keep working
+ * after a reload or when the owner reconnects.
+ */
 class EnderPearl extends Throwable{
+	public const ENDERMITE_CHANCE = 0.05;
+
+	private static float $endermiteChance = self::ENDERMITE_CHANCE;
+
 	public static function getNetworkTypeId() : string{ return EntityIds::ENDER_PEARL; }
 
-	protected function onHit(ProjectileHitEvent $event) : void{
-		$owner = $this->getOwningEntity();
-		if($owner !== null){
-			//TODO: check end gateways (when they are added)
-			//TODO: spawn endermites at origin
+	/**
+	 * Overrides the chance that a landing pearl spawns an endermite (tests and test plugins); null restores the
+	 * vanilla 5%.
+	 */
+	public static function setEndermiteChance(?float $chance) : void{
+		self::$endermiteChance = $chance ?? self::ENDERMITE_CHANCE;
+	}
 
-			$this->getWorld()->addParticle($origin = $owner->getPosition(), new EndermanTeleportParticle());
-			$this->getWorld()->addSound($origin, new EndermanTeleportSound());
-			$owner->teleport($target = $event->getRayTraceResult()->getHitVector());
-			$this->getWorld()->addSound($target, new EndermanTeleportSound());
+	public static function getEndermiteChance() : float{
+		return self::$endermiteChance;
+	}
+
+	/** Bedrock ender_pearl.json: inertia 1 (no drag in air nor in water) and a lighter gravity than other throwables. */
+	protected function getInitialDragMultiplier() : float{ return 0.0; }
+
+	protected function getInitialGravity() : float{ return 0.025; }
+
+	protected function getLiquidInertia() : float{ return 1.0; }
+
+	protected function onHit(ProjectileHitEvent $event) : void{
+		$hit = $event->getRayTraceResult()->getHitVector();
+		$owner = $this->getOwningEntity();
+		$world = $this->getWorld();
+		//Bedrock: no teleport for an owner that is dead, offline or in another dimension
+		if($owner !== null && $owner->isAlive() && !$owner->isClosed() && $owner->getWorld() === $world){
+			//pearls that fly into an End gateway take their owner through it instead (EndGatewayTravel)
+			$world->addParticle($origin = $owner->getPosition(), new EndermanTeleportParticle());
+			$world->addSound($origin, new EndermanTeleportSound());
+			$owner->teleport(Position::fromObject($hit, $world));
+			$world->addSound($hit, new EndermanTeleportSound());
+			$world->addGameEvent($hit, GameEvent::TELEPORT, $owner);
 
 			$owner->attack(new EntityDamageEvent($owner, EntityDamageEvent::CAUSE_FALL, 5));
 		}
+		$this->trySpawnEndermite($hit);
+	}
+
+	/**
+	 * Rolls the endermite chance and spawns one at the given position.
+	 */
+	public function trySpawnEndermite(Vector3 $pos) : ?Endermite{
+		$world = $this->getWorld();
+		if(self::$endermiteChance <= 0 || !$world->isMobSpawningEnabled() || mt_rand() / mt_getrandmax() >= self::$endermiteChance || $world->getDifficulty() === World::DIFFICULTY_PEACEFUL){
+			return null;
+		}
+		$endermite = new Endermite(Location::fromObject($pos, $world, mt_rand(0, 359), 0));
+		$endermite->setPersistent(false);
+		$endermite->spawnToAll();
+		return $endermite;
 	}
 }

@@ -23,24 +23,34 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\handler;
 
-use pocketmine\anticheat\AntiCheatManager;
-use pocketmine\anticheat\validation\CombatValidator;
-use pocketmine\anticheat\validation\ImpulseValidator;
-use pocketmine\anticheat\validation\MiningValidator;
-use pocketmine\anticheat\validation\MovementValidator;
-use pocketmine\anticheat\validation\ProtocolGuard;
 use pocketmine\block\BaseSign;
+use pocketmine\block\inventory\FurnaceInventory;
 use pocketmine\block\Lectern;
+use pocketmine\block\Lodestone;
+use pocketmine\block\tile\Crafter as TileCrafter;
+use pocketmine\block\tile\Furnace;
 use pocketmine\block\tile\Sign;
 use pocketmine\block\utils\SignText;
 use pocketmine\entity\Attribute;
+use pocketmine\entity\Entity;
 use pocketmine\entity\InvalidSkinException;
+use pocketmine\entity\Mob;
+use pocketmine\entity\riding\MountInventoryHolder;
+use pocketmine\entity\riding\RiderInput;
+use pocketmine\entity\vehicle\Boat;
+use pocketmine\entity\vehicle\ChestBoat;
+use pocketmine\entity\vehicle\MinecartCommandBlock;
 use pocketmine\event\player\PlayerEditBookEvent;
 use pocketmine\inventory\transaction\action\DropItemAction;
+use pocketmine\inventory\transaction\action\SlotChangeAction;
 use pocketmine\inventory\transaction\InventoryTransaction;
 use pocketmine\inventory\transaction\TransactionBuilder;
 use pocketmine\inventory\transaction\TransactionCancelledException;
 use pocketmine\inventory\transaction\TransactionValidationException;
+use pocketmine\item\Chargeable;
+use pocketmine\item\ConsumableItem;
+use pocketmine\item\DriedKelp;
+use pocketmine\item\HoneyBottle;
 use pocketmine\item\VanillaItems;
 use pocketmine\item\WritableBook;
 use pocketmine\item\WritableBookPage;
@@ -48,6 +58,8 @@ use pocketmine\item\WrittenBook;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\FilterNoisyPacketException;
 use pocketmine\network\mcpe\convert\ItemTranslator;
@@ -59,9 +71,9 @@ use pocketmine\network\mcpe\protocol\AnimatePacket;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\BlockPickRequestPacket;
 use pocketmine\network\mcpe\protocol\BookEditPacket;
+use pocketmine\network\mcpe\protocol\CommandBlockUpdatePacket;
 use pocketmine\network\mcpe\protocol\CommandRequestPacket;
 use pocketmine\network\mcpe\protocol\ContainerClosePacket;
-use pocketmine\network\mcpe\protocol\CraftingEventPacket;
 use pocketmine\network\mcpe\protocol\EmotePacket;
 use pocketmine\network\mcpe\protocol\InteractPacket;
 use pocketmine\network\mcpe\protocol\InventoryTransactionPacket;
@@ -69,6 +81,7 @@ use pocketmine\network\mcpe\protocol\ItemStackRequestPacket;
 use pocketmine\network\mcpe\protocol\ItemStackResponsePacket;
 use pocketmine\network\mcpe\protocol\LecternUpdatePacket;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
+use pocketmine\network\mcpe\protocol\MapInfoRequestPacket;
 use pocketmine\network\mcpe\protocol\MobArmorEquipmentPacket;
 use pocketmine\network\mcpe\protocol\MobEquipmentPacket;
 use pocketmine\network\mcpe\protocol\ModalFormResponsePacket;
@@ -77,16 +90,23 @@ use pocketmine\network\mcpe\protocol\NetworkStackLatencyPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\network\mcpe\protocol\PlayerHotbarPacket;
-use pocketmine\network\mcpe\protocol\PlayerInputPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\PlayerToggleCrafterSlotRequestPacket;
+use pocketmine\network\mcpe\protocol\PositionTrackingDBClientRequestPacket;
+use pocketmine\network\mcpe\protocol\PositionTrackingDBServerBroadcastPacket;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
 use pocketmine\network\mcpe\protocol\serializer\BitSet;
+use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\SetActorMotionPacket;
 use pocketmine\network\mcpe\protocol\SetPlayerGameTypePacket;
+use pocketmine\network\mcpe\protocol\ShowCreditsPacket;
 use pocketmine\network\mcpe\protocol\SpawnExperienceOrbPacket;
+use pocketmine\network\mcpe\protocol\StructureBlockUpdatePacket;
+use pocketmine\network\mcpe\protocol\StructureTemplateDataRequestPacket;
 use pocketmine\network\mcpe\protocol\TextPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
+use pocketmine\network\mcpe\protocol\types\CacheableNbt;
+use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
 use pocketmine\network\mcpe\protocol\types\inventory\ContainerIds;
 use pocketmine\network\mcpe\protocol\types\inventory\MismatchTransactionData;
 use pocketmine\network\mcpe\protocol\types\inventory\NetworkInventoryAction;
@@ -107,7 +127,12 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Limits;
 use pocketmine\utils\TextFormat;
 use pocketmine\utils\Utils;
+use pocketmine\world\dimension\PortalTravel;
 use pocketmine\world\format\Chunk;
+use pocketmine\world\map\MapManager;
+use pocketmine\world\PositionTrackingDB;
+use pocketmine\world\sound\ClickSound;
+use pocketmine\world\sound\CrafterDisableSlotSound;
 use function array_push;
 use function count;
 use function fmod;
@@ -120,6 +145,7 @@ use function json_decode;
 use function max;
 use function mb_strlen;
 use function microtime;
+use function min;
 use function sprintf;
 use function str_starts_with;
 use function strlen;
@@ -129,13 +155,11 @@ use const JSON_THROW_ON_ERROR;
  * This handler handles packets related to general gameplay.
  */
 #[SilentDiscard(ActorEventPacket::class, comment: "Not needed")]
-#[SilentDiscard(CraftingEventPacket::class, comment: "Not needed")]
 #[SilentDiscard(LevelSoundEventPacket::class, comment: "Sounds are always handled server side")]
 #[SilentDiscard(MobArmorEquipmentPacket::class, comment: "Not needed")]
 #[SilentDiscard(MovePlayerPacket::class, comment: "Not needed, noisy debug when landing on ground")]
 #[SilentDiscard(NetworkStackLatencyPacket::class, comment: "Not used, noisy debug")]
 #[SilentDiscard(PlayerHotbarPacket::class, comment: "Not needed")]
-#[SilentDiscard(PlayerInputPacket::class, comment: "Not needed")]
 #[SilentDiscard(SetActorMotionPacket::class, comment: "Not needed, erroneously sent by client when in a vehicle")]
 #[SilentDiscard(SpawnExperienceOrbPacket::class, comment: "XP drops should be server-calculated")]
 class InGamePacketHandler extends PacketHandler{
@@ -148,6 +172,39 @@ class InGamePacketHandler extends PacketHandler{
 	private const PAGE_LENGTH_SOFT_LIMIT_CHARS = 512;
 
 	protected float $lastRightClickTime = 0.0;
+	/** Real time (microtime) the player started using the held item with a right click, null when not using one. */
+	private ?float $usingItemSince = null;
+
+	/** Vanilla eating/drinking time in ticks: 32 for most food and drinks. */
+	private const CONSUME_TICKS_DEFAULT = 32;
+	/**
+	 * Share of the eating time that must have passed before the item is consumed: the start and the end of eating
+	 * reach the server with some network jitter.
+	 */
+	private const CONSUME_TIME_TOLERANCE = 0.7;
+
+	/**
+	 * Vanilla eating/drinking time of the item in ticks (Bedrock use_duration: dried kelp 16, honey bottle 40).
+	 */
+	private static function getConsumeTicks(ConsumableItem $item) : int{
+		return match(true){
+			$item instanceof DriedKelp => 16,
+			$item instanceof HoneyBottle => 40,
+			default => self::CONSUME_TICKS_DEFAULT
+		};
+	}
+
+	/**
+	 * Whether the player has been eating/drinking the item for long enough to consume it. Real time is used, not
+	 * server ticks: a lagging server must not reject players who ate for the full time.
+	 */
+	private function hasEatenLongEnough(ConsumableItem $item) : bool{
+		if($this->usingItemSince === null){
+			//started some other way (e.g. by a plugin): fall back to the server's own count
+			return $this->player->getItemUseDuration() >= (int) (self::getConsumeTicks($item) * self::CONSUME_TIME_TOLERANCE);
+		}
+		return microtime(true) - $this->usingItemSince >= self::getConsumeTicks($item) / 20 * self::CONSUME_TIME_TOLERANCE;
+	}
 	protected ?UseItemTransactionData $lastRightClickData = null;
 
 	protected ?Vector3 $lastPlayerAuthInputPosition = null;
@@ -161,23 +218,11 @@ class InGamePacketHandler extends PacketHandler{
 
 	protected ?string $lastRequestedFullSkinId = null;
 
-	private CombatValidator $combatValidator;
-	private ImpulseValidator $impulseValidator;
-	private MiningValidator $miningValidator;
-	private MovementValidator $movementValidator;
-	private ProtocolGuard $protocolGuard;
-
 	public function __construct(
 		private Player $player,
 		private NetworkSession $session,
 		private InventoryManager $inventoryManager
-	){
-		$this->combatValidator = new CombatValidator();
-		$this->impulseValidator = new ImpulseValidator();
-		$this->miningValidator = new MiningValidator();
-		$this->movementValidator = new MovementValidator();
-		$this->protocolGuard = new ProtocolGuard();
-	}
+	){}
 
 	public function handleText(TextPacket $packet) : bool{
 		if($packet->type === TextPacket::TYPE_CHAT){
@@ -198,14 +243,7 @@ class InGamePacketHandler extends PacketHandler{
 	}
 
 	public function handlePlayerAuthInput(PlayerAuthInputPacket $packet) : bool{
-		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
-		if(!$this->protocolGuard->validatePlayerAuthInput($this->player, $antiCheatSession, $packet, $this->session->getProtocolId())){
-			$this->session->getLogger()->debug("AntiCheat rejected invalid PlayerAuthInput");
-			return false;
-		}
-
-		$this->impulseValidator->observe($this->player, $antiCheatSession, $this->session->getPing());
-
+		$this->session->setLastPlayerInputTick($packet->getTick());
 		$rawPos = $packet->getPosition();
 		$rawYaw = $packet->getYaw();
 		$rawPitch = $packet->getPitch();
@@ -232,21 +270,17 @@ class InGamePacketHandler extends PacketHandler{
 		$hasMoved = $this->lastPlayerAuthInputPosition === null || !$this->lastPlayerAuthInputPosition->equals($rawPos);
 		$newPos = $rawPos->subtract(0, 1.62, 0)->round(4);
 
-		// Movement packets awaiting a server teleport ACK are not trustworthy telemetry.
-		$ignoreMovementTelemetry = $this->forceMoveSync;
 		if($this->forceMoveSync && $hasMoved){
 			$curPos = $this->player->getLocation();
 
 			if($newPos->distanceSquared($curPos) > 1){  //Tolerate up to 1 block to avoid problems with client-sided physics when spawning in blocks
 				$this->session->getLogger()->debug("Got outdated pre-teleport movement, received " . $newPos . ", expected " . $curPos);
-				// Still getting movements from before teleport: clear the samples recorded by the protocol guard.
-				$antiCheatSession->resetMovementState();
+				//Still getting movements from before teleport, ignore them
 				return true;
 			}
 
-			// First accepted position is a teleport ACK, not movement to score.
+			// Once we get a movement within a reasonable distance, treat it as a teleport ACK and remove position lock
 			$this->forceMoveSync = false;
-			$antiCheatSession->resetMovementState();
 		}
 
 		$inputFlags = $packet->getInputFlags();
@@ -261,39 +295,58 @@ class InGamePacketHandler extends PacketHandler{
 			$gliding = $this->resolveOnOffInputFlags($inputFlags, PlayerAuthInputFlags::START_GLIDING, PlayerAuthInputFlags::STOP_GLIDING);
 			$flying = $this->resolveOnOffInputFlags($inputFlags, PlayerAuthInputFlags::START_FLYING, PlayerAuthInputFlags::STOP_FLYING);
 			$crawling = $this->resolveOnOffInputFlags($inputFlags, PlayerAuthInputFlags::START_CRAWLING, PlayerAuthInputFlags::STOP_CRAWLING);
-			$mismatch =
-				(!$this->player->toggleSneak($sneaking ?? $this->player->isSneaking(), $sneakPressed)) |
-				($sprinting !== null && !$this->player->toggleSprint($sprinting)) |
-				($swimming !== null && !$this->player->toggleSwim($swimming)) |
-				($gliding !== null && !$this->player->toggleGlide($gliding)) |
-				($flying !== null && !$this->player->toggleFlight($flying)) |
-				($crawling !== null && !$this->player->toggleCrawl($crawling));
-			if((bool) $mismatch){
-				$this->player->sendData([$this->player]);
+			//the client already shows these states: BDS never echoes them back to it (only to the viewers)
+			$player = $this->player;
+			$flightRejected = false;
+			$player->applyClientPredictedState(static function() use ($player, $sneaking, $sneakPressed, $sprinting, $swimming, $gliding, $flying, $crawling, &$flightRejected) : bool{
+				$mismatch =
+					(!$player->toggleSneak($sneaking ?? $player->isSneaking(), $sneakPressed)) |
+					($sprinting !== null && !$player->toggleSprint($sprinting)) |
+					($swimming !== null && !$player->toggleSwim($swimming)) |
+					($gliding !== null && !$player->toggleGlide($gliding));
+				$flightRejected = $flying !== null && !$player->toggleFlight($flying);
+				$mismatch |= ($crawling !== null && !$player->toggleCrawl($crawling));
+				return !(bool) $mismatch;
+			});
+			if($flightRejected){
+				//flying is an ability, not metadata: a rejected STOP_FLYING (a spectator can't stop flying) or
+				//START_FLYING is corrected with the abilities (BDS 1.26.52 ignores it from a spectator)
+				$this->session->syncAbilities($player);
 			}
 
-			if($inputFlags->get(PlayerAuthInputFlags::START_JUMPING)){
+			if(($sneaking === true || $inputFlags->get(PlayerAuthInputFlags::SNEAK_PRESSED_RAW)) && $this->player->getVehicle() !== null){
+				//sneaking gets off the vehicle (the client may also send InteractPacket LEAVE_VEHICLE); on vehicles with
+				//DOES_SERVER_AUTH_ONLY_DISMOUNT (happy ghast) the client stays on until the server unlinks it
+				$this->player->dismount(false, true);
+			}
+
+			if($inputFlags->get(PlayerAuthInputFlags::START_JUMPING) && $this->player->getVehicle() === null){
 				$this->player->jump();
 			}
+			if($inputFlags->get(PlayerAuthInputFlags::MISSED_SWING)){
+				$this->player->missSwing();
+			}
+			//the spin attack itself starts when a Riptide trident is released (Trident::onReleaseUsing() validates
+			//it); START_SPIN_ATTACK alone is not trusted, but the client ends its spin early when it hits something
+			if($inputFlags->get(PlayerAuthInputFlags::STOP_SPIN_ATTACK)){
+				$this->player->stopSpinAttack(true);
+			}
 		}
 
-		if($inputFlags->get(PlayerAuthInputFlags::MISSED_SWING)){
-			$this->player->missSwing();
-		}
-
-		if(!$this->forceMoveSync && $hasMoved){
+		$vehicle = $this->player->getVehicle();
+		if($vehicle !== null){
+			//a riding player is placed on its seat by the server
+			$this->handleRidingInput($packet, $vehicle, $rawPos);
+		}elseif(!$this->forceMoveSync && $hasMoved){
 			$this->lastPlayerAuthInputPosition = $rawPos;
 			//TODO: this packet has WAYYYYY more useful information that we're not using
 			$this->player->handleMovement($newPos);
 		}
 
-		if(!$ignoreMovementTelemetry){
-			$this->movementValidator->observe($this->player, $antiCheatSession, $packet, $this->session->getPing());
-		}
-
 		$packetHandled = true;
 
 		$useItemTransaction = $packet->getItemInteractionData();
+		$breakPredicted = false;
 		if($useItemTransaction !== null){
 			if(count($useItemTransaction->getTransactionData()->getActions()) > 100){
 				throw new PacketHandlingException("Too many actions in item use transaction");
@@ -301,7 +354,11 @@ class InGamePacketHandler extends PacketHandler{
 
 			$this->inventoryManager->setCurrentItemStackRequestId($useItemTransaction->getRequestId());
 			$this->inventoryManager->addRawPredictedSlotChanges($useItemTransaction->getTransactionData()->getActions());
-			if(!$this->handleUseItemTransaction($useItemTransaction->getTransactionData())){
+			if($useItemTransaction->getTransactionData()->getActionType() === UseItemTransactionData::ACTION_BREAK_BLOCK){
+				//the client adds this to the tick it predicts a block destroyed; the block actions below break it, so
+				//its predictions (tool damage) are checked after them
+				$breakPredicted = true;
+			}elseif(!$this->handleUseItemTransaction($useItemTransaction->getTransactionData())){
 				$packetHandled = false;
 				$this->session->getLogger()->debug("Unhandled transaction in PlayerAuthInputPacket (type " . $useItemTransaction->getTransactionData()->getActionType() . ")");
 			}else{
@@ -333,6 +390,9 @@ class InGamePacketHandler extends PacketHandler{
 					$this->session->getLogger()->debug("Unhandled player block action at offset $k in PlayerAuthInputPacket");
 				}
 			}
+		}
+		if($breakPredicted){
+			$this->inventoryManager->syncMismatchedPredictedSlotChanges();
 		}
 
 		if($itemStackRequest !== null){
@@ -399,6 +459,8 @@ class InGamePacketHandler extends PacketHandler{
 		$this->inventoryManager->addTransactionPredictedSlotChanges($transaction);
 		try{
 			$transaction->execute();
+			//bundle contents changed through their dynamic containers are stored back in the bundle items
+			$this->inventoryManager->flushBundleWritebacks();
 		}catch(TransactionValidationException $e){
 			$this->inventoryManager->requestSyncAll();
 			$logger = $this->session->getLogger();
@@ -413,8 +475,37 @@ class InGamePacketHandler extends PacketHandler{
 			$this->inventoryManager->syncMismatchedPredictedSlotChanges();
 			$this->inventoryManager->setCurrentItemStackRequestId(null);
 		}
+		$this->payOutFurnaceExperience($transaction);
 
 		return true;
+	}
+
+	/**
+	 * A player taking items out of the result slot of a furnace, blast furnace or smoker gets the experience the
+	 * furnace stored by smelting, as orbs at the player (hoppers taking the result leave it stored).
+	 */
+	private function payOutFurnaceExperience(InventoryTransaction $transaction) : void{
+		foreach($transaction->getActions() as $action){
+			if(
+				!$action instanceof SlotChangeAction ||
+				$action->getSlot() !== FurnaceInventory::SLOT_RESULT ||
+				$action->getTargetItem()->getCount() >= $action->getSourceItem()->getCount()
+			){
+				continue;
+			}
+			$inventory = $action->getInventory();
+			if(!$inventory instanceof FurnaceInventory){
+				continue;
+			}
+			$holder = $inventory->getHolder();
+			$furnace = $holder->getWorld()->getTile($holder);
+			if($furnace instanceof Furnace){
+				$xp = $furnace->takeStoredExperience();
+				if($xp > 0){
+					$this->player->getWorld()->dropExperience($this->player->getPosition(), $xp);
+				}
+			}
+		}
 	}
 
 	private function handleNormalTransaction(NormalTransactionData $data, int $itemStackRequestId) : bool{
@@ -523,7 +614,7 @@ class InGamePacketHandler extends PacketHandler{
 				$blockPos = $data->getBlockPosition();
 				$vBlockPos = new Vector3($blockPos->getX(), $blockPos->getY(), $blockPos->getZ());
 				$this->player->interactBlock($vBlockPos, $data->getFace(), $clickPos);
-				if($this->player->getNetworkSession()->getProtocolId() < ProtocolInfo::PROTOCOL_1_21_20 || $data->getClientInteractPrediction() === PredictedResult::SUCCESS){
+				if($data->getClientInteractPrediction() === PredictedResult::SUCCESS){
 					//If the item has an associated blockstate ID, this means it will only place one block.
 					//We can avoid syncing the adjacent blocks of the place position in this case, since that's only
 					//necessary if there might be multiple blocks around the placement location affected.
@@ -541,7 +632,19 @@ class InGamePacketHandler extends PacketHandler{
 				return true;
 			case UseItemTransactionData::ACTION_CLICK_AIR:
 				if($this->player->isUsingItem()){
-					if(!$this->player->consumeHeldItem()){
+					$held = $this->player->getInventory()->getItemInHand();
+					if($held instanceof ConsumableItem && !$held instanceof Chargeable && !$this->hasEatenLongEnough($held)){
+						//a use before the eating/drinking time is up (spam clicks): vanilla keeps eating, nothing is
+						//consumed; the client may have predicted the item and hunger, so both are synced back
+						$hungerAttr = $this->player->getAttributeMap()->get(Attribute::HUNGER) ?? throw new AssumptionFailedError();
+						$hungerAttr->markSynchronized(false);
+						$this->inventoryManager->syncContents($this->player->getInventory());
+						return true;
+					}
+					if($held instanceof Chargeable){
+						//while charging, a use means the client's charge bar is full
+						$this->player->completeChargingHeldItem();
+					}elseif(!$this->player->consumeHeldItem()){
 						$hungerAttr = $this->player->getAttributeMap()->get(Attribute::HUNGER) ?? throw new AssumptionFailedError();
 						$hungerAttr->markSynchronized(false);
 					}
@@ -549,9 +652,11 @@ class InGamePacketHandler extends PacketHandler{
 					//this timed-trigger behaviour is also used for other items apart from food
 					//in the future we'll generalise this logic and add proper hooks for it
 					$this->player->setUsingItem(false);
+					$this->usingItemSince = null;
 					return true;
 				}
 				$this->player->useHeldItem();
+				$this->usingItemSince = $this->player->isUsingItem() ? microtime(true) : null;
 				return true;
 		}
 
@@ -581,10 +686,58 @@ class InGamePacketHandler extends PacketHandler{
 			}else{
 				$blocks[] = $blockPos;
 			}
-			foreach($this->player->getWorld()->createBlockUpdatePackets($this->session->getTypeConverter(), $blocks) as $packet){
+			foreach($this->player->getWorld()->createBlockUpdatePackets($blocks) as $packet){
 				$this->session->sendDataPacket($packet);
 			}
 		}
+	}
+
+	/**
+	 * Input of a riding player. Its own position is ignored (it sits on its seat). If it controls the vehicle, the
+	 * vehicle gets its input; when the client predicts the vehicle (horses, camels... in server-authoritative movement),
+	 * the packet position is the vehicle's and comes with the vehicle's rotation and ID.
+	 */
+	private function handleRidingInput(PlayerAuthInputPacket $packet, Entity $vehicle, Vector3 $rawPos) : void{
+		if($vehicle->getControllingPassenger() !== $this->player){
+			return;
+		}
+		$flags = $packet->getInputFlags();
+		$location = $this->player->getLocation();
+		$moveX = $packet->getMoveVecX();
+		$moveZ = $packet->getMoveVecZ();
+		if(is_nan($moveX) || is_infinite($moveX) || is_nan($moveZ) || is_infinite($moveZ)){
+			$moveX = $moveZ = 0.0;
+		}
+		$input = new RiderInput(
+			max(-1.0, min(1.0, $moveX)),
+			max(-1.0, min(1.0, $moveZ)),
+			$location->yaw,
+			$location->pitch,
+			$flags->get(PlayerAuthInputFlags::JUMPING),
+			$flags->get(PlayerAuthInputFlags::SNEAKING),
+			$flags->get(PlayerAuthInputFlags::SPRINTING),
+			$flags->get(PlayerAuthInputFlags::PADDLING_LEFT),
+			$flags->get(PlayerAuthInputFlags::PADDLING_RIGHT)
+		);
+
+		$vehicleInfo = $packet->getVehicleInfo();
+		if($vehicleInfo !== null && $vehicleInfo->getPredictedVehicleActorUniqueId() === $vehicle->getId()){
+			$yaw = $vehicleInfo->getVehicleRotationZ();
+			$pitch = $vehicleInfo->getVehicleRotationX();
+			if(is_nan($yaw) || is_infinite($yaw) || is_nan($pitch) || is_infinite($pitch)){
+				$yaw = $location->yaw;
+				$pitch = 0.0;
+			}
+			$yaw = fmod($yaw, 360);
+			if($yaw < 0){
+				$yaw += 360;
+			}
+			$vehiclePos = $rawPos->subtractVector($vehicle->getOffsetPosition(Vector3::zero()));
+			if(!$vehicle->handleClientVehicleMovement($this->player, $vehiclePos, $yaw, fmod($pitch, 360)) && ($vehicle instanceof Mob || $vehicle instanceof Boat)){
+				$vehicle->resyncClientVehicle($this->player);
+			}
+		}
+		$vehicle->handleRiderInput($this->player, $input);
 	}
 
 	private function handleUseItemOnEntityTransaction(UseItemOnEntityTransactionData $data) : bool{
@@ -602,18 +755,6 @@ class InGamePacketHandler extends PacketHandler{
 				$this->player->interactEntity($target, $data->getClickPosition());
 				return true;
 			case UseItemOnEntityTransactionData::ACTION_ATTACK:
-				$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
-				if(!$this->combatValidator->validateAttack(
-					$this->player,
-					$target,
-					$data,
-					$antiCheatSession,
-					$this->session->getProtocolId(),
-					$this->session->getPing()
-				)){
-					$this->session->getLogger()->debug("AntiCheat rejected combat attack on entity " . $target->getId());
-					return true;
-				}
 				$this->player->attackEntity($target);
 				return true;
 		}
@@ -695,20 +836,36 @@ class InGamePacketHandler extends PacketHandler{
 
 	public function handleInteract(InteractPacket $packet) : bool{
 		if($packet->action === InteractPacket::ACTION_MOUSEOVER){
-			//TODO HACK: silence useless spam (MCPE 1.8)
-			//due to some messy Mojang hacks, it sends this when changing the held item now, which causes us to think
-			//the inventory was closed when it wasn't.
-			//this is also sent whenever entity metadata updates, which can get really spammy.
-			//TODO: implement handling for this where it matters
+			//sent when the crosshair (or touch) points at an entity, also when the held item or metadata change: touch
+			//controls show the interaction button text of the pointed entity (target 0: none), e.g. "Ride"
+			$target = $packet->targetActorRuntimeId !== 0 ? $this->player->getWorld()->getEntity($packet->targetActorRuntimeId) : null;
+			$this->player->setInteractiveTag($target !== null && $target !== $this->player ? $target->getInteractButtonText($this->player) : "");
+			return true;
+		}
+		if($packet->action === InteractPacket::ACTION_LEAVE_VEHICLE){
+			//sneaking while riding (the client gets off by itself; if the server refuses, it is put back on)
+			$this->player->dismount(false, true);
 			return true;
 		}
 		$target = $this->player->getWorld()->getEntity($packet->targetActorRuntimeId);
 		if($target === null){
 			return false;
 		}
-		if($packet->action === InteractPacket::ACTION_OPEN_INVENTORY && $target === $this->player){
-			$this->inventoryManager->onClientOpenMainInventory();
-			return true;
+		if($packet->action === InteractPacket::ACTION_OPEN_INVENTORY){
+			//the inventory button of a rider opens the screen of a horse, donkey, llama... it rides (Java
+			//OPEN_VEHICLE_INVENTORY, translated the same way by GeyserMC)
+			$vehicle = $this->player->getVehicle();
+			if(($target === $this->player || $target === $vehicle) && $vehicle instanceof MountInventoryHolder && $vehicle->openInventory($this->player)){
+				return true;
+			}
+			//the inventory button of a player in a boat with chest opens the chest
+			if(($target === $this->player || $target === $vehicle) && $vehicle instanceof ChestBoat && $vehicle->openInventory($this->player)){
+				return true;
+			}
+			if($target === $this->player){
+				$this->inventoryManager->onClientOpenMainInventory();
+				return true;
+			}
 		}
 		return false; //TODO
 	}
@@ -721,31 +878,12 @@ class InGamePacketHandler extends PacketHandler{
 		return $this->player->pickEntity($packet->actorUniqueId);
 	}
 
-	public function handleServerboundLoadingScreen(\pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket $packet) : bool{
-		$this->session->onClientLoadingScreen($packet->getLoadingScreenType(), $packet->getLoadingScreenId());
-		return true;
-	}
-
 	public function handlePlayerAction(PlayerActionPacket $packet) : bool{
 		return $this->handlePlayerActionFromData($packet->action, $packet->blockPosition, $packet->face);
 	}
 
 	private function handlePlayerActionFromData(int $action, BlockPosition $blockPosition, int $face) : bool{
-		if($action === PlayerAction::DIMENSION_CHANGE_ACK){
-			$this->session->onClientDimensionChangeAck();
-			return true;
-		}
-
 		$pos = new Vector3($blockPosition->getX(), $blockPosition->getY(), $blockPosition->getZ());
-
-		$antiCheatSession = AntiCheatManager::getInstance()->getSession($this->player);
-		if(!$this->miningValidator->validate($this->player, $antiCheatSession, $action, $pos)){
-			$this->session->getLogger()->debug("AntiCheat rejected player action $action at $pos");
-			$this->lastBlockAttacked = null;
-			$this->player->stopBreakBlock($pos);
-			$this->syncBlocksNearby($pos, null);
-			return true;
-		}
 
 		switch($action){
 			case PlayerAction::START_BREAK:
@@ -798,6 +936,10 @@ class InGamePacketHandler extends PacketHandler{
 			case PlayerAction::STOP_ITEM_USE_ON:
 				//TODO: this has no obvious use and seems only used for analytics in vanilla - ignore it
 				break;
+			case PlayerAction::DIMENSION_CHANGE_ACK:
+				//the client answers the server's ack once it has spawned in the new dimension
+				$this->session->onClientDimensionChangeDone(null);
+				return true;
 			default:
 				$this->session->getLogger()->debug("Unhandled/unknown player action type " . $action);
 				return false;
@@ -805,6 +947,13 @@ class InGamePacketHandler extends PacketHandler{
 
 		$this->player->setUsingItem(false);
 
+		return true;
+	}
+
+	public function handleServerboundLoadingScreen(ServerboundLoadingScreenPacket $packet) : bool{
+		if($packet->getLoadingScreenType() === LoadingScreenType::STOP_LOADING_SCREEN && $packet->getLoadingScreenId() !== null){
+			$this->session->onClientDimensionChangeDone($packet->getLoadingScreenId());
+		}
 		return true;
 	}
 
@@ -845,7 +994,7 @@ class InGamePacketHandler extends PacketHandler{
 
 		try{
 			if(!$block->updateFaceText($this->player, $frontFace, $text)){
-				foreach($this->player->getWorld()->createBlockUpdatePackets($this->session->getTypeConverter(), [$pos]) as $updatePacket){
+				foreach($this->player->getWorld()->createBlockUpdatePackets([$pos]) as $updatePacket){
 					$this->session->sendDataPacket($updatePacket);
 				}
 				return false;
@@ -875,7 +1024,17 @@ class InGamePacketHandler extends PacketHandler{
 			return true;
 		}
 
-		return false;
+		return StructureEditorRequests::handleJigsawData($this->session, $this->player, $pos, $nbt);
+	}
+
+	public function handleStructureBlockUpdate(StructureBlockUpdatePacket $packet) : bool{
+		StructureEditorRequests::handleStructureBlockUpdate($this->session, $this->player, $packet);
+		return true;
+	}
+
+	public function handleStructureTemplateDataRequest(StructureTemplateDataRequestPacket $packet) : bool{
+		StructureEditorRequests::handleStructureTemplateDataRequest($this->session, $this->player, $packet);
+		return true;
 	}
 
 	public function handleSetPlayerGameType(SetPlayerGameTypePacket $packet) : bool{
@@ -890,6 +1049,37 @@ class InGamePacketHandler extends PacketHandler{
 	public function handleRequestChunkRadius(RequestChunkRadiusPacket $packet) : bool{
 		$this->player->setViewDistance($packet->radius);
 
+		return true;
+	}
+
+	/**
+	 * The End Poem and credits shown when leaving the End for the first time were closed (or skipped): the player goes
+	 * on to their spawn point.
+	 */
+	public function handleShowCredits(ShowCreditsPacket $packet) : bool{
+		if($packet->status === ShowCreditsPacket::STATUS_END_CREDITS){
+			PortalTravel::getInstance()->onCreditsClosed($this->player);
+		}
+		return true;
+	}
+
+	/**
+	 * The command block screen of a command block or of a command block minecart was edited.
+	 */
+	public function handleCommandBlockUpdate(CommandBlockUpdatePacket $packet) : bool{
+		if($packet->isBlock){
+			CommandBlockRequests::handleBlockUpdate($this->session, $this->player, $packet);
+			return true;
+		}
+		$minecart = $this->player->getWorld()->getEntity($packet->minecartActorRuntimeId);
+		if(!$minecart instanceof MinecartCommandBlock || !$minecart->canEdit($this->player) || $this->player->getLocation()->distance($minecart->getLocation()) > 16){
+			return true;
+		}
+		$minecart->setCommand($packet->command);
+		$minecart->setTrackOutput($packet->shouldTrackOutput);
+		if($packet->name !== "" && $packet->name !== $minecart->getNameTag()){
+			$minecart->setNameTag($packet->name);
+		}
 		return true;
 	}
 
@@ -912,7 +1102,7 @@ class InGamePacketHandler extends PacketHandler{
 
 		$this->session->getLogger()->debug("Processing skin change request");
 		try{
-			$skin = $this->session->getTypeConverter()->netSkinToCore($packet->skin);
+			$skin = $this->session->getTypeConverter()->getSkinAdapter()->fromSkinData($packet->skin);
 		}catch(InvalidSkinException $e){
 			throw PacketHandlingException::wrap($e, "Invalid skin in PlayerSkinPacket");
 		}
@@ -1082,10 +1272,69 @@ class InGamePacketHandler extends PacketHandler{
 		return false;
 	}
 
+	/**
+	 * Sent when a player clicks an empty slot of an open crafter to disable or enable it.
+	 */
+	public function handlePlayerToggleCrafterSlotRequest(PlayerToggleCrafterSlotRequestPacket $packet) : bool{
+		$pos = $packet->getPosition();
+		$world = $this->player->getWorld();
+		if(!$world->isInWorld($pos->getX(), $pos->getY(), $pos->getZ()) || !$world->isChunkLoaded($pos->getX() >> Chunk::COORD_BIT_SIZE, $pos->getZ() >> Chunk::COORD_BIT_SIZE)){
+			return false;
+		}
+		$tile = $world->getTileAt($pos->getX(), $pos->getY(), $pos->getZ());
+		if(!$tile instanceof TileCrafter || $this->player->getCurrentWindow() !== $tile->getInventory()){
+			return false;
+		}
+		$tilePos = $tile->getPosition();
+		if($tile->setSlotDisabled($packet->getSlot(), $packet->isDisabled())){
+			$world->addSound($tilePos->add(0.5, 0.5, 0.5), $packet->isDisabled() ? new CrafterDisableSlotSound() : new ClickSound());
+		}else{
+			//the slot holds an item: undo the client's prediction
+			$this->syncBlocksNearby($tilePos, null);
+		}
+		return true;
+	}
+
 	public function handleEmote(EmotePacket $packet) : bool{
 		$this->player->emote($packet->getEmoteId());
 		return true;
 	}
+
+	public function handleMapInfoRequest(MapInfoRequestPacket $packet) : bool{
+		//sent for maps in the inventory or in item frames when the client doesn't have their data yet; the pixels the
+		//client may send (client-side generation) are not trusted and ignored
+		MapManager::getInstance()->handleMapInfoRequest($this->player, $packet->mapId);
+		return true;
+	}
+
+	public function handlePositionTrackingDBClientRequest(PositionTrackingDBClientRequestPacket $packet) : bool{
+		//sent by the client while it holds a lodestone compass, to find out where the lodestone is
+		$handle = $packet->getTrackingId();
+		$db = PositionTrackingDB::getInstance();
+		$entry = $db->get($handle);
+		$world = $this->player->getWorld();
+		$nbt = CompoundTag::create();
+		if($entry === null){
+			$action = $db->wasAssigned($handle) ? PositionTrackingDBServerBroadcastPacket::ACTION_DESTROY : PositionTrackingDBServerBroadcastPacket::ACTION_NOT_FOUND;
+		}elseif($entry["world"] !== $world->getFolderName()){
+			//the lodestone is in another world: the compass spins, like in another dimension in vanilla
+			$action = PositionTrackingDBServerBroadcastPacket::ACTION_NOT_FOUND;
+		}elseif(
+			$world->isChunkLoaded($entry["x"] >> Chunk::COORD_BIT_SIZE, $entry["z"] >> Chunk::COORD_BIT_SIZE) &&
+			!$world->getBlockAt($entry["x"], $entry["y"], $entry["z"]) instanceof Lodestone
+		){
+			//the lodestone was removed without being broken (e.g. replaced by a plugin)
+			$db->remove($handle);
+			$action = PositionTrackingDBServerBroadcastPacket::ACTION_DESTROY;
+		}else{
+			$action = PositionTrackingDBServerBroadcastPacket::ACTION_UPDATE;
+			$nbt->setInt("dim", $world->getDimension()->getNetworkId());
+			$nbt->setString("id", sprintf("0x%08X", $handle));
+			$nbt->setByte("version", 1);
+			$nbt->setByte("status", 0);
+			$nbt->setTag("pos", new ListTag([new IntTag($entry["x"]), new IntTag($entry["y"]), new IntTag($entry["z"])]));
+		}
+		$this->session->sendDataPacket(PositionTrackingDBServerBroadcastPacket::create($action, $handle, new CacheableNbt($nbt)));
+		return true;
+	}
 }
-
-

@@ -201,4 +201,11 @@ abstract class OceanMonumentPiece extends OrientedPiece{
 		return $box->intersectsXZ(min($wx0, $wx1), min($wz0, $wz1), max($wx0, $wx1), max($wz0, $wz1));
 	}
 
+	/**
+	 * OceanMonumentPiece.spawnElder(): an elder guardian at the centre of the block (finalizeSpawn uses the entity's
+	 * own random, not the structure's).
+	 */
+	protected function spawnElder(StructurePlaceContext $c, BoundingBox $box, int $x, int $y, int $z) : void{
+		$this->spawnMob($c, $box, "minecraft:elder_guardian", $x, $y, $z);
+	}
 }

@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\world\weather;
 
 use pocketmine\data\bedrock\BedrockDataFiles;
+use pocketmine\data\bedrock\BiomeDefinitionSupplement;
 use pocketmine\data\bedrock\LegacyBiomeIdToStringIdMap;
 use pocketmine\utils\Filesystem;
 use function is_array;
@@ -34,7 +35,6 @@ use function json_decode;
 use const JSON_THROW_ON_ERROR;
 
 /**
- * Adapted for RyzeMP without supplementing invented biome IDs.
  * Rain flag and base temperature of the vanilla biomes (BedrockData biome_definitions.json "rain" and "temperature"),
  * which decide whether it rains, snows or stays dry in a biome.
  */
@@ -97,6 +97,7 @@ final class BiomeClimate{
 		$definitions = json_decode(Filesystem::fileGetContents(BedrockDataFiles::BIOME_DEFINITIONS_JSON), true, flags: JSON_THROW_ON_ERROR);
 		$biomes = [];
 		if(is_array($definitions)){
+			$definitions = BiomeDefinitionSupplement::addDefinitions($definitions);
 			foreach(LegacyBiomeIdToStringIdMap::getInstance()->getLegacyToStringMap() as $id => $name){
 				$definition = $definitions["minecraft:" . $name] ?? null;
 				if(!is_array($definition)){
@@ -121,7 +122,7 @@ final class BiomeClimate{
 	 * Whether it ever rains (or snows) in the biome. False for deserts, savannas, badlands, the Nether and the End.
 	 */
 	public static function hasPrecipitation(int $biomeId) : bool{
-		return self::load()[$biomeId][0] ?? false;
+		return self::load()[$biomeId][0] ?? true;
 	}
 
 	/**

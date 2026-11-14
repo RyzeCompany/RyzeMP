@@ -26,6 +26,7 @@ namespace pocketmine\world\particle;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\entity\Entity;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\AddActorPacket;
 use pocketmine\network\mcpe\protocol\RemoveActorPacket;
 use pocketmine\network\mcpe\protocol\types\entity\ByteMetadataProperty;
@@ -38,7 +39,7 @@ use pocketmine\network\mcpe\protocol\types\entity\LongMetadataProperty;
 use pocketmine\network\mcpe\protocol\types\entity\PropertySyncData;
 use pocketmine\network\mcpe\protocol\types\entity\StringMetadataProperty;
 
-class FloatingTextParticle extends BlockParticle{
+class FloatingTextParticle implements Particle{
 	//TODO: HACK!
 
 	protected ?int $entityId = null;
@@ -47,9 +48,7 @@ class FloatingTextParticle extends BlockParticle{
 	public function __construct(
 		protected string $text,
 		protected string $title = ""
-	){
-		parent::__construct(VanillaBlocks::AIR());
-	}
+	){}
 
 	public function getText() : string{
 		return $this->text;
@@ -96,7 +95,7 @@ class FloatingTextParticle extends BlockParticle{
 				EntityMetadataProperties::BOUNDING_BOX_WIDTH => new FloatMetadataProperty(0.0),
 				EntityMetadataProperties::BOUNDING_BOX_HEIGHT => new FloatMetadataProperty(0.0),
 				EntityMetadataProperties::NAMETAG => new StringMetadataProperty($name),
-				EntityMetadataProperties::VARIANT => new IntMetadataProperty($this->toRuntimeId()),
+				EntityMetadataProperties::VARIANT => new IntMetadataProperty(TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId())),
 				EntityMetadataProperties::ALWAYS_SHOW_NAMETAG => new ByteMetadataProperty(1),
 			];
 			$p[] = AddActorPacket::create(

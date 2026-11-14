@@ -23,9 +23,17 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\DirtPathHelper;
 use pocketmine\item\Item;
+use pocketmine\item\Shovel;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
 
 class Podzol extends Opaque{
+
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		return $item instanceof Shovel && DirtPathHelper::flatten($this, $item, $face);
+	}
 
 	public function isAffectedBySilkTouch() : bool{
 		return true;

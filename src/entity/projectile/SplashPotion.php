@@ -27,12 +27,20 @@ use pocketmine\block\BlockTypeTags;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\color\Color;
 use pocketmine\data\bedrock\PotionTypeIdMap;
+use pocketmine\entity\animal\Axolotl;
+use pocketmine\entity\animal\Strider;
 use pocketmine\entity\effect\EffectInstance;
 use pocketmine\entity\effect\InstantEffect;
 use pocketmine\entity\Entity;
+use pocketmine\entity\golem\SnowGolem;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
+use pocketmine\entity\monster\Blaze;
+use pocketmine\entity\monster\Enderman;
 use pocketmine\entity\object\AreaEffectCloud;
+use pocketmine\event\entity\EntityDamageByChildEntityEvent;
+use pocketmine\event\entity\EntityDamageEvent;
+use pocketmine\event\entity\EntityExtinguishEvent;
 use pocketmine\event\entity\ProjectileHitBlockEvent;
 use pocketmine\event\entity\ProjectileHitEntityEvent;
 use pocketmine\event\entity\ProjectileHitEvent;
@@ -137,6 +145,9 @@ class SplashPotion extends Throwable{
 			}
 			$entity->spawnToAll();
 		}
+		if($this->potionType === PotionType::WATER){
+			$this->splashWaterOnEntities();
+		}
 		if(!$hasEffects && $event instanceof ProjectileHitBlockEvent && $this->getPotionType() === PotionType::WATER){
 			$blockIn = $event->getBlockHit()->getSide($event->getRayTraceResult()->getHitFace());
 
@@ -149,6 +160,42 @@ class SplashPotion extends Throwable{
 				}
 			}
 		}
+	}
+
+	/**
+	 * Water bottles (splash and lingering) in the 4x2x4 box around the hit (Java AbstractThrownPotion): 1 magic damage
+	 * to water-sensitive mobs and burning mobs put out within 4 blocks, and every axolotl in the box made fully moist.
+	 */
+	private function splashWaterOnEntities() : void{
+		$owner = $this->getOwningEntity();
+		foreach($this->getWorld()->getCollidingEntities($this->boundingBox->expandedCopy(4, 2, 4), $this) as $entity){
+			if(!$entity instanceof Living){
+				continue;
+			}
+			if($entity instanceof Axolotl){
+				$entity->rehydrate();
+			}
+			$waterSensitive = self::isSensitiveToWater($entity);
+			if((!$waterSensitive && !$entity->isOnFire()) || $entity->getPosition()->distanceSquared($this->location) >= 16){
+				continue;
+			}
+			if($waterSensitive){
+				$entity->attack($owner !== null && !$owner->isClosed() ?
+					new EntityDamageByChildEntityEvent($owner, $this, $entity, EntityDamageEvent::CAUSE_MAGIC, 1) :
+					new EntityDamageEvent($entity, EntityDamageEvent::CAUSE_MAGIC, 1)
+				);
+			}
+			if($entity->isOnFire() && $entity->isAlive()){
+				$entity->extinguish(EntityExtinguishEvent::CAUSE_WATER);
+			}
+		}
+	}
+
+	/**
+	 * Mobs that water hurts (vanilla hurt_on_condition in_contact_with_water; Java isSensitiveToWater).
+	 */
+	private static function isSensitiveToWater(Living $entity) : bool{
+		return $entity instanceof Enderman || $entity instanceof Blaze || $entity instanceof Strider || $entity instanceof SnowGolem;
 	}
 
 	/**

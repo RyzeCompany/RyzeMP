@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\BoneMealSpread;
 use pocketmine\block\utils\DirtType;
 use pocketmine\item\Fertilizer;
 use pocketmine\item\Hoe;
@@ -33,7 +34,6 @@ use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\Random;
-use pocketmine\world\generator\object\TallGrass as TallGrassObject;
 use pocketmine\world\sound\ItemUseOnBlockSound;
 use function mt_rand;
 
@@ -87,8 +87,11 @@ class Grass extends Opaque{
 		}
 		$world = $this->position->getWorld();
 		if($item instanceof Fertilizer){
+			if(!$world->isInWorld($this->position->getFloorX(), $this->position->getFloorY() + 1, $this->position->getFloorZ())){
+				return false;
+			}
 			$item->pop();
-			TallGrassObject::growGrass($world, $this->position, new Random(mt_rand()), 8, 2);
+			BoneMealSpread::growGrass($world, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ(), new Random(mt_rand()));
 
 			return true;
 		}
@@ -111,5 +114,9 @@ class Grass extends Opaque{
 		}
 
 		return false;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 }

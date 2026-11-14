@@ -37,6 +37,6 @@ class SpiderEye extends Food{
 	}
 
 	public function getAdditionalEffects() : array{
-		return [new EffectInstance(VanillaEffects::POISON(), 80)];
+		return [new EffectInstance(VanillaEffects::POISON(), 100)];
 	}
 }

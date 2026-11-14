@@ -29,7 +29,8 @@ use pocketmine\data\SavedDataLoadingException;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\FloatTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
+use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
+use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use function floor;
 
 /**
@@ -41,11 +42,18 @@ class MobHead extends Spawnable{
 	private const TAG_SKULL_TYPE = "SkullType"; //TAG_Byte
 	private const TAG_ROTATION = "Rotation"; //TAG_Float (1.10+, represents yaw in degrees)
 	private const TAG_ROT = "Rot"; //TAG_Byte (legacy, pre-1.10, 0-15)
-	private const TAG_MOUTH_MOVING = "MouthMoving"; //TAG_Byte
+	private const TAG_MOUTH_MOVING = "MouthMoving"; //TAG_Byte (legacy name)
+	private const TAG_DOING_ANIMATION = "DoingAnimation"; //TAG_Byte (BDS 1.26.52)
 	private const TAG_MOUTH_TICK_COUNT = "MouthTickCount"; //TAG_Int
 
 	private MobHeadType $mobHeadType = MobHeadType::SKELETON;
 	private int $rotation = 0;
+	/** Whether a powered dragon or piglin head moves its mouth (the client animates it) */
+	private bool $doingAnimation = false;
+	/** Ticks the mouth moved before the current animation, like BDS counts them */
+	private int $mouthTickCount = 0;
+	/** Server tick the current animation started at */
+	private int $animationStartTick = 0;
 
 	public function readSaveData(CompoundTag $nbt) : void{
 		if(($skullTypeTag = $nbt->getTag(self::TAG_SKULL_TYPE)) instanceof ByteTag){
@@ -65,11 +73,20 @@ class MobHead extends Spawnable{
 				$this->rotation = $rotation;
 			}
 		}
+		$this->doingAnimation = $nbt->getByte(self::TAG_DOING_ANIMATION, $nbt->getByte(self::TAG_MOUTH_MOVING, 0)) !== 0;
+		$this->mouthTickCount = $nbt->getInt(self::TAG_MOUTH_TICK_COUNT, 0);
+		$this->animationStartTick = $this->position->isValid() ? $this->position->getWorld()->getServer()->getTick() : 0;
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
 		$nbt->setByte(self::TAG_SKULL_TYPE, MobHeadTypeIdMap::getInstance()->toId($this->mobHeadType));
 		$nbt->setFloat(self::TAG_ROTATION, $this->rotation * 360.0 / 16.0);
+		$this->writeAnimation($nbt);
+	}
+
+	private function writeAnimation(CompoundTag $nbt) : void{
+		$nbt->setByte(self::TAG_DOING_ANIMATION, $this->doingAnimation ? 1 : 0);
+		$nbt->setInt(self::TAG_MOUTH_TICK_COUNT, $this->getMouthTickCount());
 	}
 
 	public function setMobHeadType(MobHeadType $type) : void{
@@ -88,8 +105,49 @@ class MobHead extends Spawnable{
 		$this->rotation = $rotation;
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	/**
+	 * Returns whether the head moves its mouth (dragon and piglin heads while powered).
+	 */
+	public function isDoingAnimation() : bool{
+		return $this->doingAnimation;
+	}
+
+	/**
+	 * Starts or stops the mouth animation. The tick count isn't ticked: it is worked out from the server tick when sent.
+	 */
+	public function setDoingAnimation(bool $doingAnimation, int $currentTick) : void{
+		if($doingAnimation === $this->doingAnimation){
+			return;
+		}
+		if($doingAnimation){
+			$this->animationStartTick = $currentTick;
+		}else{
+			$this->mouthTickCount += $currentTick - $this->animationStartTick;
+		}
+		$this->doingAnimation = $doingAnimation;
+		$this->clearSpawnCompoundCache();
+	}
+
+	private function getMouthTickCount() : int{
+		if(!$this->doingAnimation || !$this->position->isValid()){
+			return $this->mouthTickCount;
+		}
+		return $this->mouthTickCount + $this->position->getWorld()->getServer()->getTick() - $this->animationStartTick;
+	}
+
+	/**
+	 * Sends the block entity data to the players viewing the head, like BDS does when the animation starts or stops.
+	 */
+	public function broadcastState() : void{
+		$this->position->getWorld()->broadcastPacketToViewers($this->position, BlockActorDataPacket::create(
+			BlockPosition::fromVector3($this->position),
+			$this->getSerializedSpawnCompound()
+		));
+	}
+
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		$nbt->setByte(self::TAG_SKULL_TYPE, MobHeadTypeIdMap::getInstance()->toId($this->mobHeadType));
 		$nbt->setFloat(self::TAG_ROTATION, $this->rotation * 360.0 / 16.0);
+		$this->writeAnimation($nbt);
 	}
 }

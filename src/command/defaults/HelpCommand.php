@@ -25,6 +25,8 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\lang\Translatable;
 use pocketmine\permission\DefaultPermissionNames;
@@ -43,7 +45,7 @@ use const PHP_INT_MAX;
 use const SORT_FLAG_CASE;
 use const SORT_NATURAL;
 
-class HelpCommand extends NativeCommand{
+class HelpCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -55,7 +57,14 @@ class HelpCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_HELP);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::int("page", true)],
+			[CommandParameter::commandName("command")],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			$commandName = "";
 			$pageNumber = 1;

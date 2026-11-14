@@ -25,14 +25,34 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\Player;
 use pocketmine\world\World;
+use function array_keys;
 use function count;
+use function intdiv;
+use function is_numeric;
+use function max;
+use function strtolower;
 
-class TimeCommand extends NativeCommand{
+/**
+ * Bedrock syntax: /time add <amount>, /time set <amount|day|night|noon|midnight|sunrise|sunset>,
+ * /time query <daytime|gametime|day>. PocketMine also has /time start and /time stop, and /time query without a
+ * value (the world time).
+ */
+class TimeCommand extends VanillaCommand implements ExhaustiveOverloads{
+	private const TIME_SPECS = [
+		"day" => World::TIME_DAY,
+		"night" => World::TIME_NIGHT,
+		"noon" => World::TIME_NOON,
+		"midnight" => World::TIME_MIDNIGHT,
+		"sunrise" => World::TIME_SUNRISE,
+		"sunset" => World::TIME_SUNSET,
+	];
 
 	public function __construct(){
 		parent::__construct(
@@ -49,12 +69,23 @@ class TimeCommand extends NativeCommand{
 		]);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) < 1){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::enum("mode", "TimeModeAdd", ["add"]), CommandParameter::int("amount")],
+			[CommandParameter::enum("mode", "TimeModeSet", ["set"]), CommandParameter::int("amount")],
+			[CommandParameter::enum("mode", "TimeModeSet", ["set"]), CommandParameter::enum("time", "TimeSpec", array_keys(self::TIME_SPECS))],
+			[CommandParameter::enum("mode", "TimeModeQuery", ["query"]), CommandParameter::enum("time", "TimeQuery", ["daytime", "gametime", "day"], true)],
+			[CommandParameter::enum("mode", "TimeModeControl", ["start", "stop"])],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		if(count($args) < 1 || count($args) > 2){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		if($args[0] === "start"){
+		$mode = strtolower($args[0]);
+		if($mode === "start"){
 			if(!$this->testPermission($sender, DefaultPermissionNames::COMMAND_TIME_START)){
 				return true;
 			}
@@ -63,7 +94,7 @@ class TimeCommand extends NativeCommand{
 			}
 			Command::broadcastCommandMessage($sender, "Restarted the time");
 			return true;
-		}elseif($args[0] === "stop"){
+		}elseif($mode === "stop"){
 			if(!$this->testPermission($sender, DefaultPermissionNames::COMMAND_TIME_STOP)){
 				return true;
 			}
@@ -72,7 +103,7 @@ class TimeCommand extends NativeCommand{
 			}
 			Command::broadcastCommandMessage($sender, "Stopped the time");
 			return true;
-		}elseif($args[0] === "query"){
+		}elseif($mode === "query"){
 			if(!$this->testPermission($sender, DefaultPermissionNames::COMMAND_TIME_QUERY)){
 				return true;
 			}
@@ -80,8 +111,17 @@ class TimeCommand extends NativeCommand{
 				$world = $sender->getWorld();
 			}else{
 				$world = $sender->getServer()->getWorldManager()->getDefaultWorld();
+				if($world === null){
+					return true;
+				}
 			}
-			$sender->sendMessage($sender->getLanguage()->translate(KnownTranslationFactory::commands_time_query((string) $world->getTime())));
+			$value = match(isset($args[1]) ? strtolower($args[1]) : null){
+				"daytime" => $world->getTimeOfDay(),
+				"day" => intdiv($world->getTime(), World::TIME_FULL),
+				"gametime", null => $world->getTime(),
+				default => throw new InvalidCommandSyntaxException()
+			};
+			$sender->sendMessage($sender->getLanguage()->translate(KnownTranslationFactory::commands_time_query((string) $value)));
 			return true;
 		}
 
@@ -89,45 +129,20 @@ class TimeCommand extends NativeCommand{
 			throw new InvalidCommandSyntaxException();
 		}
 
-		if($args[0] === "set"){
+		if($mode === "set"){
 			if(!$this->testPermission($sender, DefaultPermissionNames::COMMAND_TIME_SET)){
 				return true;
 			}
-
-			switch($args[1]){
-				case "day":
-					$value = World::TIME_DAY;
-					break;
-				case "noon":
-					$value = World::TIME_NOON;
-					break;
-				case "sunset":
-					$value = World::TIME_SUNSET;
-					break;
-				case "night":
-					$value = World::TIME_NIGHT;
-					break;
-				case "midnight":
-					$value = World::TIME_MIDNIGHT;
-					break;
-				case "sunrise":
-					$value = World::TIME_SUNRISE;
-					break;
-				default:
-					$value = $this->getInteger($sender, $args[1], 0);
-					break;
-			}
-
+			$value = self::TIME_SPECS[strtolower($args[1])] ?? $this->getTimeArgument($args[1]);
 			foreach($sender->getServer()->getWorldManager()->getWorlds() as $world){
 				$world->setTime($value);
 			}
 			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_time_set((string) $value));
-		}elseif($args[0] === "add"){
+		}elseif($mode === "add"){
 			if(!$this->testPermission($sender, DefaultPermissionNames::COMMAND_TIME_ADD)){
 				return true;
 			}
-
-			$value = $this->getInteger($sender, $args[1], 0);
+			$value = $this->getTimeArgument($args[1]);
 			foreach($sender->getServer()->getWorldManager()->getWorlds() as $world){
 				$world->setTime($world->getTime() + $value);
 			}
@@ -137,5 +152,15 @@ class TimeCommand extends NativeCommand{
 		}
 
 		return true;
+	}
+
+	/**
+	 * @throws InvalidCommandSyntaxException
+	 */
+	private function getTimeArgument(string $arg) : int{
+		if(!is_numeric($arg)){
+			throw new InvalidCommandSyntaxException();
+		}
+		return max(0, (int) $arg);
 	}
 }

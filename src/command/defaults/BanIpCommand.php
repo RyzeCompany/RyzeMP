@@ -25,16 +25,19 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\CommandTargets;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
-use pocketmine\player\Player;
 use function array_shift;
 use function count;
 use function implode;
 use function inet_pton;
 
-class BanIpCommand extends NativeCommand{
+class BanIpCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,7 +48,14 @@ class BanIpCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_BAN_IP);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::target("player"), CommandParameter::message("reason", true)],
+			[CommandParameter::string("address"), CommandParameter::message("reason", true)],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
@@ -58,11 +68,19 @@ class BanIpCommand extends NativeCommand{
 
 			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_banip_success($value));
 		}else{
-			if(($player = $sender->getServer()->getPlayerByPrefix($value)) instanceof Player){
-				$ip = $player->getNetworkSession()->getIp();
-				$this->processIPBan($ip, $sender, $reason);
+			if(TargetSelector::isSelectorArgument($value)){
+				$players = CommandTargets::players($sender, $value);
+			}else{
+				$player = $sender->getServer()->getPlayerByPrefix($value);
+				$players = $player !== null ? [$player] : [];
+			}
+			if(count($players) > 0){
+				foreach($players as $player){
+					$ip = $player->getNetworkSession()->getIp();
+					$this->processIPBan($ip, $sender, $reason);
 
-				Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_banip_success_players($ip, $player->getName()));
+					Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_banip_success_players($ip, $player->getName()));
+				}
 			}else{
 				$sender->sendMessage(KnownTranslationFactory::commands_banip_invalid());
 

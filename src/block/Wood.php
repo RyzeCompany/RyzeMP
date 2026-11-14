@@ -26,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\block\utils\PillarRotation;
 use pocketmine\block\utils\PillarRotationTrait;
 use pocketmine\block\utils\WoodMaterial;
+use pocketmine\block\utils\WoodType;
 use pocketmine\block\utils\WoodTypeTrait;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Axe;
@@ -40,6 +41,8 @@ class Wood extends Opaque implements PillarRotation, WoodMaterial{
 
 	private bool $stripped = false;
 
+	private static ?BlockBreakInfo $mangroveLogBreakInfo = null;
+
 	public function describeBlockItemState(RuntimeDataDescriber $w) : void{
 		$w->bool($this->stripped);
 	}
@@ -52,6 +55,15 @@ class Wood extends Opaque implements PillarRotation, WoodMaterial{
 		return $this;
 	}
 
+	public function getBreakInfo() : BlockBreakInfo{
+		$info = parent::getBreakInfo();
+		if(!$this->stripped && $this->getTypeId() === BlockTypeIds::MANGROVE_LOG){
+			//Bedrock: only the unstripped mangrove log has blast resistance 0.4 instead of 2 (2 in PM units)
+			return self::$mangroveLogBreakInfo ??= new BlockBreakInfo($info->getHardness(), $info->getToolType(), $info->getToolHarvestLevel(), 2.0);
+		}
+		return $info;
+	}
+
 	public function getFuelTime() : int{
 		return $this->woodType->isFlammable() ? 300 : 0;
 	}
@@ -61,7 +73,8 @@ class Wood extends Opaque implements PillarRotation, WoodMaterial{
 	}
 
 	public function getFlammability() : int{
-		return $this->woodType->isFlammable() ? 5 : 0;
+		//bamboo blocks burn up like planks
+		return $this->woodType->isFlammable() ? ($this->woodType === WoodType::BAMBOO ? 20 : 5) : 0;
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{

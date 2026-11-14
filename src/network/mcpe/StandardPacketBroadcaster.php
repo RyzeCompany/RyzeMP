@@ -25,19 +25,18 @@ namespace pocketmine\network\mcpe;
 
 use pmmp\encoding\ByteBufferWriter;
 use pocketmine\event\server\DataPacketSendEvent;
-use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
+use pocketmine\network\mcpe\compression\Compressor;
+use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
-use pocketmine\utils\Utils;
 use function count;
-use function log;
+use function implode;
 use function spl_object_id;
 use function strlen;
 
 final class StandardPacketBroadcaster implements PacketBroadcaster{
 	public function __construct(
-		private Server $server,
-		private int $protocolId
+		private Server $server
 	){}
 
 	public function broadcastPackets(array $recipients, array $packets) : void{
@@ -52,49 +51,73 @@ final class StandardPacketBroadcaster implements PacketBroadcaster{
 			$packets = $ev->getPackets();
 		}
 
-		$compressors = [];
-		$targetsByContext = [];
-		$gameVersionsByContext = [];
-		foreach($recipients as $recipient){
-			//TODO: different compressors might be compatible, it might not be necessary to split them up by object
-			$compressor = $recipient->getCompressor();
-			$compressorId = spl_object_id($compressor);
-			$context = $compressorId . ":" . ($recipient->getGameVersion() ?? "");
-			$compressors[$context] = $compressor;
-			$gameVersionsByContext[$context] = $recipient->getGameVersion();
-			$targetsByContext[$context][] = $recipient;
+		//each packet is encoded and length-prefixed once, whatever the number of recipients (this runs for every
+		//movement of every entity, to every viewer)
+		$totalLength = 0;
+		$packetBuffers = [];
+		$writer = new ByteBufferWriter();
+		foreach($packets as $packet){
+			$writer->clear(); //memory reuse let's gooooo
+			$buffer = NetworkSession::prefixPacketBuffer(NetworkSession::encodePacketTimed($writer, $packet));
+			$totalLength += strlen($buffer);
+			$packetBuffers[] = $buffer;
 		}
 
-		$writer = new ByteBufferWriter();
-		foreach(Utils::stringifyKeys($targetsByContext) as $context => $compressorTargets){
-			$compressor = $compressors[$context];
-			$gameVersion = $gameVersionsByContext[$context];
-			$totalLength = 0;
-			$packetBuffers = [];
-			foreach($packets as $packet){
-				$writer->clear(); //memory reuse let's gooooo
-				$buffer = NetworkSession::encodePacketTimed($writer, $this->protocolId, $packet, $gameVersion);
-				//varint length prefix + packet buffer
-				$totalLength += (((int) log(strlen($buffer), 128)) + 1) + strlen($buffer);
-				$packetBuffers[] = $buffer;
+		//a server normally has a single compressor: no grouping unless the recipients really differ
+		//TODO: different compressors might be compatible, it might not be necessary to split them up by object
+		if(NetworkSession::hasOnlyStandardSessions()){
+			$this->broadcastToCompressorGroup($recipients, ZlibCompressor::getInstance(), $packetBuffers, $totalLength);
+			return;
+		}
+		$compressor = null;
+		foreach($recipients as $recipient){
+			$recipientCompressor = $recipient->getCompressor();
+			if($compressor === null){
+				$compressor = $recipientCompressor;
+			}elseif($recipientCompressor !== $compressor){
+				$compressor = null;
+				break;
 			}
+		}
+		if($compressor !== null){
+			$this->broadcastToCompressorGroup($recipients, $compressor, $packetBuffers, $totalLength);
+			return;
+		}
 
-			$threshold = $compressor->getCompressionThreshold();
-			if(count($compressorTargets) > 1 && $threshold !== null && $totalLength >= $threshold){
-				//do not prepare shared batch unless we're sure it will be compressed
-				$stream = new ByteBufferWriter();
-				PacketBatch::encodeRaw($stream, $packetBuffers);
-				$batchBuffer = $stream->getData();
+		$compressors = [];
+		$targetsByCompressor = [];
+		foreach($recipients as $recipient){
+			$compressor = $recipient->getCompressor();
+			$compressors[spl_object_id($compressor)] = $compressor;
+			$targetsByCompressor[spl_object_id($compressor)][] = $recipient;
+		}
+		foreach($targetsByCompressor as $compressorId => $compressorTargets){
+			$this->broadcastToCompressorGroup($compressorTargets, $compressors[$compressorId], $packetBuffers, $totalLength);
+		}
+	}
 
-				$batch = $this->server->prepareBatch($batchBuffer, $this->protocolId, $compressor, timings: Timings::$playerNetworkSendCompressBroadcast);
-				foreach($compressorTargets as $target){
-					$target->queueCompressed($batch);
-				}
-			}else{
-				foreach($compressorTargets as $target){
-					foreach($packetBuffers as $packetBuffer){
-						$target->addToSendBuffer($packetBuffer);
-					}
+	/**
+	 * @param NetworkSession[] $targets
+	 * @param string[]         $packetBuffers length-prefixed packet buffers
+	 * @phpstan-param list<string> $packetBuffers
+	 */
+	private function broadcastToCompressorGroup(array $targets, Compressor $compressor, array $packetBuffers, int $totalLength) : void{
+		$threshold = $compressor->getCompressionThreshold();
+		if(count($targets) > 1 && $threshold !== null && $totalLength >= $threshold){
+			//do not prepare shared batch unless we're sure it will be compressed
+			$batch = $this->server->prepareBatch(implode("", $packetBuffers), $compressor, timings: Timings::$playerNetworkSendCompressBroadcast);
+			foreach($targets as $target){
+				$target->queueCompressed($batch);
+			}
+		}elseif(count($packetBuffers) === 1){
+			$packetBuffer = $packetBuffers[0];
+			foreach($targets as $target){
+				$target->addPrefixedToSendBuffer($packetBuffer);
+			}
+		}else{
+			foreach($targets as $target){
+				foreach($packetBuffers as $packetBuffer){
+					$target->addPrefixedToSendBuffer($packetBuffer);
 				}
 			}
 		}

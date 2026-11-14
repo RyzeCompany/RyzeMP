@@ -25,7 +25,18 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\FacesOppositePlacingPlayerTrait;
 use pocketmine\block\utils\HorizontalFacing;
+use pocketmine\entity\golem\GolemConstruction;
 
 class CarvedPumpkin extends Opaque implements HorizontalFacing{
 	use FacesOppositePlacingPlayerTrait;
+
+	public function getCompostabilityChance() : int{ return 65; }
+
+	/**
+	 * Placing the head on a snow golem, iron golem or copper golem body builds the golem (see
+	 * {@link GolemConstruction}).
+	 */
+	public function onPostPlace() : void{
+		GolemConstruction::trySpawnGolem($this->position->getWorld(), $this->position);
+	}
 }

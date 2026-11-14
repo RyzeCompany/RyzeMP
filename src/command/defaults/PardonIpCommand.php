@@ -25,13 +25,15 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
 use function inet_pton;
 
-class PardonIpCommand extends NativeCommand{
+class PardonIpCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,7 +45,11 @@ class PardonIpCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_UNBAN_IP);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::string("address")]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

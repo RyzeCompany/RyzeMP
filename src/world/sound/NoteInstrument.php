@@ -65,4 +65,14 @@ enum NoteInstrument{
 	case BIT;
 	case BANJO;
 	case PLING;
+	case TRUMPET;
+	case TRUMPET_EXPOSED;
+	case TRUMPET_WEATHERED;
+	case TRUMPET_OXIDIZED;
+	case ZOMBIE;
+	case SKELETON;
+	case CREEPER;
+	case ENDER_DRAGON;
+	case WITHER_SKELETON;
+	case PIGLIN;
 }

@@ -51,6 +51,14 @@ class Water extends Liquid{
 		return 2;
 	}
 
+	public function onScheduledUpdate() : void{
+		parent::onScheduledUpdate();
+		if($this->isSource()){
+			//a source over soul sand or a magma block becomes a bubble column (vanilla checks this on every update)
+			BubbleColumn::onWaterSourceUpdate($this);
+		}
+	}
+
 	public function onEntityInside(Entity $entity) : bool{
 		$entity->resetFallDistance();
 		if($entity->isOnFire()){

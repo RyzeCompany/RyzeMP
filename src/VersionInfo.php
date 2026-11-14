@@ -30,15 +30,12 @@ use function is_int;
 use function str_repeat;
 
 final class VersionInfo{
-	public const NAME = "RyzeMP";
-	public const BASE_VERSION = "1.0.0-beta.5";
-	/** PocketMine-MP 5 plugin API compatibility version; independent of the RyzeMP release. */
-	public const PLUGIN_API_VERSION = "5.44.2";
-	/** Immutable Composer artifact revision; plugin compatibility uses PLUGIN_API_VERSION. */
-	public const COMPOSER_API_VERSION = "5.44.2-p1";
-	public const IS_DEVELOPMENT_BUILD = false;
-	public const BUILD_CHANNEL = "beta";
-	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";
+	public const NAME = "PocketMine-MP";
+	public const BASE_VERSION = "5.48.5";
+	public const IS_DEVELOPMENT_BUILD = true;
+	public const BUILD_CHANNEL = "stable";
+	/** The project page (VanillaMine on GitLab; the name is kept for plugins that use it). */
+	public const GITHUB_URL = "https://gitlab.com/VanillaPocketMine/VanillaMine";
 
 	/**
 	 * PocketMine-MP-specific version ID for world data. Used to determine what fixes need to be applied to old world
@@ -109,4 +106,3 @@ final class VersionInfo{
 		return self::$fullVersion;
 	}
 }
-

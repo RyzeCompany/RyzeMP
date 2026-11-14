@@ -70,6 +70,13 @@ class Furnace extends Opaque implements Lightable, HorizontalFacing{
 		return true;
 	}
 
+	public function getXpDropForTool(Item $item) : int{
+		//the experience stored by smelting drops whatever the tool (also with Silk Touch)
+		$furnace = $this->position->getWorld()->getTile($this->position);
+		$stored = $furnace instanceof TileFurnace ? $furnace->rollStoredExperience() : 0;
+		return parent::getXpDropForTool($item) + $stored;
+	}
+
 	public function onScheduledUpdate() : void{
 		$world = $this->position->getWorld();
 		$furnace = $world->getTile($this->position);

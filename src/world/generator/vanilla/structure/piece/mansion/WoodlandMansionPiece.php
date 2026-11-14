@@ -23,13 +23,17 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\structure\piece\mansion;
 
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\generator\vanilla\feature\block\Direction;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
+use pocketmine\world\generator\vanilla\math\Int64;
+use pocketmine\world\generator\vanilla\random\LegacyRandom;
 use pocketmine\world\generator\vanilla\structure\BoundingBox;
 use pocketmine\world\generator\vanilla\structure\piece\OrientedPiece;
 use pocketmine\world\generator\vanilla\structure\piece\TemplatePiece;
 use pocketmine\world\generator\vanilla\structure\processor\Processors;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
+use pocketmine\world\generator\vanilla\structure\template\EntityConversion;
 use pocketmine\world\generator\vanilla\structure\template\PlaceSettings;
 use pocketmine\world\generator\vanilla\structure\template\Rotations;
 use pocketmine\world\generator\vanilla\structure\template\StructureTemplates;
@@ -65,6 +69,7 @@ final class WoodlandMansionPiece extends TemplatePiece{
 	 */
 	protected function makeSettings(?JavaBlocks $blocks) : PlaceSettings{
 		$settings = (new PlaceSettings())->setRotation($this->rotation)->setMirror($this->mirror);
+		$settings->ignoreEntities = true;
 		if($blocks !== null){
 			$settings->addProcessor(Processors::ignoreStructureBlocks($blocks));
 		}
@@ -85,7 +90,33 @@ final class WoodlandMansionPiece extends TemplatePiece{
 			OrientedPiece::createChestAt($c, $box, $c->random, $x, $y, $z, self::LOOT_TABLE, $state);
 			return;
 		}
-		if(in_array($metadata, ["Mage", "Warrior", "Group of Allays"], true)){
+		$mobs = [];
+		switch($metadata){
+			case "Mage":
+				$mobs[] = "minecraft:evoker";
+				break;
+			case "Warrior":
+				$mobs[] = "minecraft:vindicator";
+				break;
+			case "Group of Allays":
+				//level.getRandom() = WorldGenRegion.getRandom() (the worldgen_region_random of the chunk), not the
+				//decoration random; without it, a random of the marker position
+				$random = $c->level->regionRandom ?? new LegacyRandom(Int64::positionSeed($x, $y, $z));
+				$numberOfAllays = $random->nextBoundedInt(3) + 1;
+				for($i = 0; $i < $numberOfAllays; ++$i){
+					$mobs[] = "minecraft:allay";
+				}
+				break;
+			default:
+				return;
+		}
+		foreach($mobs as $mob){
+			//setPersistenceRequired(), snapTo(pos bottom centre, 0, 0), addFreshEntityWithPassengers(); PocketMine mobs
+			//are persistent by default (finalizeSpawn's equipment is left to the entity implementation)
+			$nbt = EntityConversion::pendingEntity(CompoundTag::create()->setString("id", $mob), $x + 0.5, $y, $z + 0.5, 0.0, 0.0);
+			if($nbt !== null){
+				$c->level->addEntity($x, $z, $nbt);
+			}
 			$c->level->setState($x, $y, $z, $c->blocks->air);
 		}
 	}

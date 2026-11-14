@@ -25,12 +25,16 @@ namespace pocketmine\loot;
 
 use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\data\bedrock\ArmorTrimMaterialTypeIdMap;
+use pocketmine\data\bedrock\ArmorTrimPatternTypeIdMap;
 use pocketmine\data\bedrock\block\BlockStateDeserializeException;
 use pocketmine\data\bedrock\EnchantmentIdMap;
 use pocketmine\data\bedrock\item\ItemTypeDeserializeException;
 use pocketmine\data\bedrock\item\ItemTypeSerializeException;
 use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\data\bedrock\item\UnsupportedItemTypeException;
+use pocketmine\item\Armor;
+use pocketmine\item\ArmorTrim;
 use pocketmine\item\Durable;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\enchantment\EnchantmentInstance;
@@ -38,12 +42,14 @@ use pocketmine\item\enchantment\StringToEnchantmentParser;
 use pocketmine\item\GoatHorn;
 use pocketmine\item\GoatHornType;
 use pocketmine\item\Item;
+use pocketmine\item\OminousBottle;
 use pocketmine\item\Potion;
 use pocketmine\item\PotionType;
 use pocketmine\item\SplashPotion;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\SuspiciousStew;
 use pocketmine\item\SuspiciousStewType;
+use pocketmine\item\TippedArrow;
 use pocketmine\item\VanillaItems;
 use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
@@ -121,12 +127,14 @@ final class LootItemConverter{
 	 * Bedrock item id and meta of a Java item.
 	 * @phpstan-return array{string, int}
 	 */
-	public static function bedrockItem(string $javaId, string $root) : array{
+	public static function bedrockItem(string $javaId) : array{
+		$data = LootTables::getData();
+		$root = $data?->getRoot();
 		if(self::$mappings === null || self::$mappingsRoot !== $root){
 			self::$mappingsRoot = $root;
 			self::$mappings = [];
-			$path = $root . "/" . LootData::GEYSER_ITEMS_FILE;
-			if(is_file($path)){
+			$path = $root !== null ? $root . "/" . LootData::GEYSER_ITEMS_FILE : null;
+			if($path !== null && is_file($path)){
 				$json = json_decode(Filesystem::fileGetContents($path), true, 8, JSON_THROW_ON_ERROR);
 				if(is_array($json)){
 					foreach(Utils::promoteKeys($json) as $java => $entry){
@@ -164,15 +172,56 @@ final class LootItemConverter{
 	}
 
 	/**
+	 * A PocketMine item as a loot stack (Java id and enchantments), e.g. the tool of a loot context.
+	 */
+	public static function fromItem(Item $item) : LootStack{
+		$javaId = "minecraft:air";
+		try{
+			$data = GlobalItemDataHandlers::getSerializer()->serializeType($item);
+			$bedrock = $data->getName();
+			$meta = $data->getMeta();
+			self::bedrockItem("minecraft:air"); //loads the mappings
+			foreach(Utils::stringifyKeys(self::$mappings ?? []) as $java => [$id, $mappedMeta]){
+				if($id === $bedrock && ($mappedMeta === $meta || $mappedMeta === 0)){
+					$javaId = $java;
+					if($mappedMeta === $meta){
+						break;
+					}
+				}
+			}
+		}catch(ItemTypeSerializeException){
+			//not serializable: no Java equivalent
+		}
+		$stack = new LootStack($javaId, $item->getCount());
+		if($item instanceof Durable){
+			$stack->damage = $item->getDamage();
+		}
+		$enchantments = $item->getEnchantments();
+		if(count($enchantments) > 0){
+			foreach((LootTables::getData()?->enchantmentIds() ?? []) as $java){
+				$enchantment = self::enchantment($java);
+				foreach($enchantments as $instance){
+					if($enchantment === $instance->getType()){
+						$stack->enchantments[$java] = $instance->getLevel();
+					}
+				}
+			}
+		}
+		return $stack;
+	}
+
+	/**
 	 * Converts a loot stack to a PocketMine item, or returns null if PocketMine has no such item (or the stack is
 	 * empty).
 	 */
-	public static function toItem(LootStack $stack, string $dataRoot) : ?Item{
+	public static function toItem(LootStack $stack) : ?Item{
 		if($stack->isEmpty()){
 			return null;
 		}
-		[$bedrockId, $meta] = self::bedrockItem($stack->id, $dataRoot);
-		$item = self::bedrockToItem($bedrockId, $meta) ?? StringToItemParser::getInstance()->parse(LootData::stripNamespace($stack->id));
+		[$bedrockId, $meta] = self::bedrockItem($stack->id);
+		$item = $stack->id === "minecraft:tipped_arrow" ?
+			VanillaItems::TIPPED_ARROW() : //GeyserMC maps it to a plain arrow (Bedrock keeps the potion in the meta)
+			self::bedrockToItem($bedrockId, $meta) ?? StringToItemParser::getInstance()->parse(LootData::stripNamespace($stack->id));
 		if($item === null || $item->isNull()){
 			if(!isset(self::$missing[$stack->id])){
 				self::$missing[$stack->id] = true;
@@ -193,7 +242,7 @@ final class LootItemConverter{
 		if($stack->customName !== null){
 			$item->setCustomName($stack->customName);
 		}
-		if($stack->potion !== null && ($item instanceof Potion || $item instanceof SplashPotion)){
+		if($stack->potion !== null && ($item instanceof Potion || $item instanceof SplashPotion || $item instanceof TippedArrow)){
 			$type = self::potionType($stack->potion);
 			if($type !== null){
 				$item->setType($type);
@@ -206,6 +255,16 @@ final class LootItemConverter{
 				$item->setType($type);
 			}
 		}
+		if($item instanceof OminousBottle && $stack->ominousAmplifier !== null){
+			$item->setAmplifier($stack->ominousAmplifier);
+		}
+		if($item instanceof Armor && $stack->trim !== null){
+			$material = ArmorTrimMaterialTypeIdMap::getInstance()->fromId(LootData::stripNamespace($stack->trim[0]));
+			$pattern = ArmorTrimPatternTypeIdMap::getInstance()->fromId(LootData::stripNamespace($stack->trim[1]));
+			if($material !== null && $pattern !== null){
+				$item->setTrim(new ArmorTrim($material, $pattern));
+			}
+		}
 		if($item instanceof GoatHorn && $stack->instrument !== null){
 			$name = strtoupper(LootData::stripNamespace($stack->instrument));
 			if(str_ends_with($name, "_GOAT_HORN")){
@@ -215,11 +274,6 @@ final class LootItemConverter{
 			if($type instanceof GoatHornType){
 				$item->setHornType($type);
 			}
-		}
-		if($stack->ominousAmplifier !== null && $stack->id === "minecraft:ominous_bottle"){
-			$tag = clone $item->getNamedTag();
-			$tag->setInt("ominous_bottle_amplifier", $stack->ominousAmplifier);
-			$item->setNamedTag($tag);
 		}
 		return $item;
 	}

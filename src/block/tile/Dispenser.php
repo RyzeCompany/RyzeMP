@@ -28,25 +28,41 @@ use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\World;
 
-class Dispenser extends Spawnable implements Container, Nameable{
+/**
+ * Block entity of dispensers ("Dispenser") and, through {@link Dropper}, droppers.
+ */
+class Dispenser extends Spawnable implements ComparatorReadableContainer, Nameable{
 	use NameableTrait;
-	use ContainerTrait;
+	use ComparatorReadableContainerTrait;
+	use ContainerTrait {
+		onBlockDestroyedHook as containerTraitBlockDestroyedHook;
+	}
+	use LootTableContainerTrait;
 
 	protected DispenserInventory $inventory;
+	/** Server tick at which a dispense requested by a redstone rising edge is due, or -1 (not saved). */
+	private int $pendingDispenseTick = -1;
 
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
-		$this->inventory = new DispenserInventory($this->position);
+		$this->inventory = $this->createInventory();
+		$this->addComparatorInventoryListener();
+	}
+
+	protected function createInventory() : DispenserInventory{
+		return new DispenserInventory($this->position);
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
 		$this->loadName($nbt);
 		$this->loadItems($nbt);
+		$this->loadLootTable($nbt);
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
 		$this->saveName($nbt);
 		$this->saveItems($nbt);
+		$this->saveLootTable($nbt);
 	}
 
 	public function close() : void{
@@ -56,13 +72,34 @@ class Dispenser extends Spawnable implements Container, Nameable{
 		}
 	}
 
+	/**
+	 * Returns the inventory, filling it from its loot table first if it has one (see {@link LootTableContainerTrait}).
+	 */
 	public function getInventory() : DispenserInventory{
-		$this->unpackWorldgenLoot();
+		$this->unpackLootTable();
 		return $this->inventory;
+	}
+
+	protected function onBlockDestroyedHook() : void{
+		$this->unpackLootTable();
+		$this->containerTraitBlockDestroyedHook();
 	}
 
 	public function getRealInventory() : DispenserInventory{
 		return $this->inventory;
+	}
+
+	/**
+	 * Server tick at which the block should dispense (set when it gets powered), or -1 if no dispense is pending.
+	 * Block updates are also scheduled for other reasons (e.g. when the tile is added to the world as its chunk loads),
+	 * so the block only dispenses when one was requested.
+	 */
+	public function getPendingDispenseTick() : int{
+		return $this->pendingDispenseTick;
+	}
+
+	public function setPendingDispenseTick(int $tick) : void{
+		$this->pendingDispenseTick = $tick;
 	}
 
 	public function getDefaultName() : string{

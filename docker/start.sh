@@ -33,7 +33,4 @@ fi
 # Run the server
 cd /opt/pocketmine
 read -ra pm_args <<<"$POCKETMINE_ARGS"
-if [ -f RyzeMP.phar ]; then
-  exec php RyzeMP.phar --no-wizard --enable-ansi --data=/data --plugins=/plugins "${pm_args[@]}"
-fi
 exec php PocketMine-MP.phar --no-wizard --enable-ansi --data=/data --plugins=/plugins "${pm_args[@]}"

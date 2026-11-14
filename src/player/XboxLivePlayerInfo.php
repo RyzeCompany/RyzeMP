@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\player;
 
 use pocketmine\entity\Skin;
+use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use Ramsey\Uuid\UuidInterface;
 
 /**
@@ -32,8 +33,8 @@ use Ramsey\Uuid\UuidInterface;
 final class XboxLivePlayerInfo extends PlayerInfo{
 	private string $xuid;
 
-	public function __construct(string $xuid, string $username, UuidInterface $uuid, Skin $skin, string $locale, array $extraData = []){
-		parent::__construct($username, $uuid, $skin, $locale, $extraData);
+	public function __construct(string $xuid, string $username, UuidInterface $uuid, Skin $skin, string $locale, array $extraData = [], ?SkinData $networkSkinData = null){
+		parent::__construct($username, $uuid, $skin, $locale, $extraData, $networkSkinData);
 		$this->xuid = $xuid;
 	}
 
@@ -51,7 +52,8 @@ final class XboxLivePlayerInfo extends PlayerInfo{
 			$this->getUuid(),
 			$this->getSkin(),
 			$this->getLocale(),
-			$this->getExtraData()
+			$this->getExtraData(),
+			$this->getNetworkSkinData()
 		);
 	}
 }

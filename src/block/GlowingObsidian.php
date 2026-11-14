@@ -26,6 +26,6 @@ namespace pocketmine\block;
 class GlowingObsidian extends Opaque{
 
 	public function getLightLevel() : int{
-		return 12;
+		return 13;
 	}
 }

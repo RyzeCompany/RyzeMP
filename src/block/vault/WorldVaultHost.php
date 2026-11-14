@@ -28,15 +28,17 @@ use pocketmine\block\utils\VaultState;
 use pocketmine\block\Vault;
 use pocketmine\item\Item;
 use pocketmine\loot\LootContext;
-use pocketmine\loot\LootStack;
+use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootTables;
 use pocketmine\math\Vector3;
-use pocketmine\network\mcpe\convert\TypeConverter;
-use pocketmine\network\mcpe\protocol\LevelEventPacket;
-use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
-use pocketmine\network\mcpe\protocol\types\LevelEvent;
-use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
-use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\particle\VaultActivateParticle;
+use pocketmine\world\particle\VaultDeactivateParticle;
+use pocketmine\world\particle\VaultEjectItemParticle;
+use pocketmine\world\sound\VaultCloseShutterSound;
+use pocketmine\world\sound\VaultEjectItemSound;
+use pocketmine\world\sound\VaultInsertItemSound;
+use pocketmine\world\sound\VaultOpenShutterSound;
+use pocketmine\world\sound\VaultRejectRewardedPlayerSound;
 use pocketmine\world\World;
 use function count;
 use function floor;
@@ -52,8 +54,6 @@ final class WorldVaultHost implements VaultHost{
 	private const EJECT_DEVIATION = 0.034455;
 
 	private ?Vault $block = null;
-	private ?LootTables $displayLoot = null;
-	private ?string $lastLootError = null;
 
 	public function __construct(
 		private TileVault $tile
@@ -110,33 +110,21 @@ final class WorldVaultHost implements VaultHost{
 	}
 
 	public function rollDisplayItem(string $lootTable) : ?Item{
-		$items = $this->rollLoot($lootTable, $this->createLootContext(), display: true);
+		$items = LootTables::get($lootTable)?->generate($this->createLootContext()) ?? [];
 		$count = count($items);
 		return $count > 0 ? $items[mt_rand(0, $count - 1)] : null;
 	}
 
 	public function rollRewards(string $lootTable, int $playerEntityId, Item $key) : array{
-		$context = $this->createLootContext();
-		$context->thisEntity = $this->getWorld()->getEntity($playerEntityId);
-		$context->tool = new LootStack(GlobalItemDataHandlers::getSerializer()->serializeType($key)->getName(), $key->getCount());
-		return $this->rollLoot($lootTable, $context);
-	}
-
-	/** @return list<Item> */
-	private function rollLoot(string $name, LootContext $context, bool $display = false) : array{
-		try{
-			$loot = $display ?
-				($this->displayLoot ??= LootTables::forWorld($this->getWorld())) :
-				LootTables::forWorld($this->getWorld());
-			return $loot?->get($name)?->generate($context) ?? [];
-		}catch(\RuntimeException|\JsonException $e){
-			$message = $e->getMessage();
-			if($message !== $this->lastLootError){
-				$this->lastLootError = $message;
-				$this->getWorld()->getLogger()->warning("Unable to roll vault loot at " . $this->tile->getPosition() . ": $message");
-			}
+		$table = LootTables::get($lootTable);
+		if($table === null){
+			\GlobalLogger::get()->debug("Loot table $lootTable of the vault at " . $this->tile->getPosition() . " is not available");
 			return [];
 		}
+		$context = $this->createLootContext();
+		$context->thisEntity = $this->getWorld()->getEntity($playerEntityId);
+		$context->tool = LootItemConverter::fromItem($key);
+		return $table->generate($context);
 	}
 
 	public function isOminous() : bool{
@@ -153,36 +141,24 @@ final class WorldVaultHost implements VaultHost{
 		//vanilla DefaultDispenseItemBehavior.spawnItem upwards from 1.2 blocks above the bottom of the vault
 		$motion = new Vector3(self::triangle(0.0, self::EJECT_DEVIATION), self::triangle(0.2, self::EJECT_DEVIATION), self::triangle(0.0, self::EJECT_DEVIATION));
 		$world->dropItem(new Vector3($pos->getFloorX() + 0.5, $pos->getFloorY() + 1.2 - 0.125, $pos->getFloorZ() + 0.5), $item, $motion);
-		$this->broadcastAnimation(LevelEvent::ANIMATION_VAULT_EJECT_ITEM);
-		$this->broadcastSound(LevelSoundEvent::VAULT_EJECT_ITEM);
+		$world->addParticle($pos->floor(), new VaultEjectItemParticle());
+		$world->addSound($this->getCenter(), new VaultEjectItemSound());
 	}
 
 	public function onActivated(bool $active, bool $ominous) : void{
-		$this->broadcastAnimation($active ? LevelEvent::ANIMATION_VAULT_ACTIVATE : LevelEvent::ANIMATION_VAULT_DEACTIVATE, $ominous ? 1 : 0);
+		$this->getWorld()->addParticle($this->tile->getPosition()->floor(), $active ? new VaultActivateParticle($ominous) : new VaultDeactivateParticle($ominous));
 	}
 
 	public function onKeyInserted() : void{
-		$this->broadcastSound(LevelSoundEvent::VAULT_INSERT_ITEM);
+		$this->getWorld()->addSound($this->getCenter(), new VaultInsertItemSound());
 	}
 
 	public function onShutter(bool $open) : void{
-		$this->broadcastSound($open ? LevelSoundEvent::VAULT_OPEN_SHUTTER : LevelSoundEvent::VAULT_CLOSE_SHUTTER);
+		$this->getWorld()->addSound($this->getCenter(), $open ? new VaultOpenShutterSound() : new VaultCloseShutterSound());
 	}
 
 	public function onInsertFailed(bool $rewardedPlayer) : void{
-		$this->broadcastSound($rewardedPlayer ? LevelSoundEvent::VAULT_REJECT_REWARDED_PLAYER : LevelSoundEvent::VAULT_INSERT_ITEM_FAIL);
-	}
-
-	private function broadcastAnimation(int $animation, int $data = 0) : void{
-		$pos = $this->tile->getPosition();
-		$this->getWorld()->broadcastPacketToViewersByTypeConverter($pos, fn(TypeConverter $converter) : array =>
-			$this->tile->canSpawnTo($converter) ? [LevelEventPacket::create($animation, $data, $pos->floor())] : []);
-	}
-
-	private function broadcastSound(string $sound) : void{
-		$pos = $this->getCenter();
-		$this->getWorld()->broadcastPacketToViewersByTypeConverter($pos, fn(TypeConverter $converter) : array =>
-			$this->tile->canSpawnTo($converter) ? [LevelSoundEventPacket::nonActorSound($sound, $pos, false)] : []);
+		$this->getWorld()->addSound($this->getCenter(), $rewardedPlayer ? new VaultRejectRewardedPlayerSound() : new VaultInsertItemSound(false));
 	}
 
 	private static function randomFloat() : float{

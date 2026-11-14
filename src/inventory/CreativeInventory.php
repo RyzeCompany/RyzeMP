@@ -48,7 +48,17 @@ final class CreativeInventory{
 	/** @phpstan-var ObjectSet<\Closure() : void> */
 	private ObjectSet $contentChangedCallbacks;
 
-	private function __construct(){
+	/**
+	 * Creates the vanilla creative inventory. Education Edition content (see {@link EducationCreativeFilter}) is only
+	 * included if $educationItems is true, like a vanilla world with the "Education Edition" option.
+	 *
+	 * Use with {@link CreativeInventory::setInstance()} before players join.
+	 */
+	public static function createVanilla(bool $educationItems) : self{
+		return new self($educationItems);
+	}
+
+	private function __construct(bool $educationItems = false){
 		$this->contentChangedCallbacks = new ObjectSet();
 
 		foreach([
@@ -63,6 +73,9 @@ final class CreativeInventory{
 			);
 
 			foreach($groups as $groupData){
+				if(!$educationItems && EducationCreativeFilter::isEducationGroup($groupData->group_name)){
+					continue;
+				}
 				$icon = $groupData->group_icon === null ? null : CraftingManagerFromDataHelper::deserializeItemStack($groupData->group_icon);
 
 				$group = $icon === null ? null : new CreativeGroup(
@@ -70,7 +83,8 @@ final class CreativeInventory{
 					$icon
 				);
 
-				$items = array_filter(array_map(static fn($itemStack) => CraftingManagerFromDataHelper::deserializeItemStack($itemStack), $groupData->items));
+				$itemStacks = $educationItems ? $groupData->items : array_filter($groupData->items, static fn($itemStack) => !EducationCreativeFilter::isEducationItem($itemStack->name));
+				$items = array_filter(array_map(static fn($itemStack) => CraftingManagerFromDataHelper::deserializeItemStack($itemStack), $itemStacks));
 
 				foreach($items as $item){
 					$this->add($item, $categoryEnum, $group);

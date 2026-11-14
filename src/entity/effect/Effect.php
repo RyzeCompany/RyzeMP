@@ -64,7 +64,6 @@ class Effect{
 
 	/**
 	 * Returns whether this effect is harmful.
-	 * TODO: implement inverse effect results for undead mobs
 	 */
 	public function isBad() : bool{
 		return $this->bad;
@@ -120,6 +119,13 @@ class Effect{
 	 * Removes the effect from the entity, resetting any changed values back to their original defaults.
 	 */
 	public function remove(Living $entity, EffectInstance $instance) : void{
+
+	}
+
+	/**
+	 * Called when an entity dies while it has this effect (e.g. Wind Charged and Weaving act on death).
+	 */
+	public function onEntityDeath(Living $entity, EffectInstance $instance) : void{
 
 	}
 }

@@ -216,11 +216,25 @@ class PluginManager{
 			}
 		}
 
-		/**
-		 * @var Plugin $plugin
-		 * @see Plugin::__construct()
-		 */
-		$plugin = new $mainClass($loader, $this->server, $description, $dataFolder, $prefixed, new DiskResourceProvider($prefixed . "/resources/"));
+		try{
+			/**
+			 * @var Plugin $plugin
+			 * @see Plugin::__construct()
+			 */
+			$plugin = new $mainClass($loader, $this->server, $description, $dataFolder, $prefixed, new DiskResourceProvider($prefixed . "/resources/"));
+		}catch(\Throwable $e){
+			//onLoad() (or the plugin's constructor) failed: the plugin is not loaded, like any other load error
+			$faultHandler = PluginFaultHandler::getInstance();
+			if($faultHandler === null || $faultHandler->isCrashOnUnhandledException() || PluginFaultHandler::isControlFlowException($e)){
+				throw $e;
+			}
+			$this->server->getLogger()->critical($language->translate(KnownTranslationFactory::pocketmine_plugin_loadError(
+				$description->getName(),
+				"Unhandled exception in onLoad(): " . $e->getMessage()
+			)));
+			$this->server->getLogger()->error("[" . $description->getFullName() . "] Unhandled exception in onLoad()\n" . implode("\n", Utils::printableExceptionInfo($e)));
+			return null;
+		}
 		$this->plugins[$plugin->getDescription()->getName()] = $plugin;
 
 		return $plugin;
@@ -461,6 +475,10 @@ class PluginManager{
 				$plugin->onEnableStateChange(true);
 			}catch(DisablePluginException){
 				$this->disablePlugin($plugin);
+			}catch(\Throwable $e){
+				//rethrown only if the server is configured to crash on plugin errors
+				PluginFaultHandler::isolate($e, $plugin, "onEnable()");
+				$this->disablePlugin($plugin); //a plugin that failed to enable is in an unknown state
 			}
 
 			if($plugin->isEnabled()){ //the plugin may have disabled itself during onEnable()
@@ -526,7 +544,13 @@ class PluginManager{
 				}
 			}
 
-			$plugin->onEnableStateChange(false);
+			try{
+				$plugin->onEnableStateChange(false);
+			}catch(\Throwable $e){
+				//the plugin is marked as disabled before onDisable() is called, so this is only logged; the cleanup
+				//below must still happen
+				PluginFaultHandler::isolate($e, $plugin, "onDisable()");
+			}
 			$plugin->getScheduler()->shutdown();
 			HandlerListManager::global()->unregisterAll($plugin);
 		}

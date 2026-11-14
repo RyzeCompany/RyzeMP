@@ -24,16 +24,24 @@ declare(strict_types=1);
 namespace pocketmine\item;
 
 use pocketmine\block\Block;
+use pocketmine\block\Conduit;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Location;
 use pocketmine\entity\projectile\Trident as TridentEntity;
 use pocketmine\event\entity\ProjectileLaunchEvent;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\player\Player;
+use pocketmine\world\sound\TridentRiptideSound;
 use pocketmine\world\sound\TridentThrowSound;
-use function min;
 
 class Trident extends Tool implements Releasable{
 	private const DAMAGE_ON_THROW = 1;
+	/** minimum use time before a release throws (Java TridentItem.THROW_THRESHOLD_TIME) */
+	private const MIN_USE_TICKS = 10;
+	/** launch speed in blocks/tick, independent of the use time (Bedrock thrown_trident.json projectile power) */
+	private const THROW_SPEED = 4.0;
+	/** duration of the Riptide spin attack (Java startAutoSpinAttack(20, 8.0)) */
+	private const SPIN_ATTACK_TICKS = 20;
 
 	public function getMaxDurability() : int{
 		return 251;
@@ -43,8 +51,13 @@ class Trident extends Tool implements Releasable{
 		$location = $player->getLocation();
 
 		$diff = $player->getItemUseDuration();
-		if($diff < 14){
+		if($diff < self::MIN_USE_TICKS){
 			return ItemUseResult::FAIL;
+		}
+
+		$riptide = $this->getEnchantmentLevel(VanillaEnchantments::RIPTIDE());
+		if($riptide > 0){
+			return $this->releaseRiptide($player, $riptide);
 		}
 
 		$item = $this->pop();
@@ -62,9 +75,7 @@ class Trident extends Tool implements Releasable{
 			($location->yaw > 180 ? 360 : 0) - $location->yaw,
 			-$location->pitch
 		), $item, $player);
-		$p = $diff / 20;
-		$baseForce = min((($p ** 2) + $p * 2) / 3, 1) * 2.4;
-		$entity->setMotion($player->getDirectionVector()->multiply($baseForce));
+		$entity->setMotion($player->getDirectionVector()->multiply(self::THROW_SPEED));
 
 		$ev = new ProjectileLaunchEvent($entity);
 		$ev->call();
@@ -78,12 +89,34 @@ class Trident extends Tool implements Releasable{
 		return ItemUseResult::SUCCESS;
 	}
 
+	/**
+	 * Riptide: the trident is never thrown. In water or rain the client launches the player itself; the server keeps
+	 * the trident in hand, takes 1 durability, plays the riptide sound and starts the spin attack that hurts the first
+	 * mob touched. Elsewhere (or riding) nothing happens.
+	 */
+	private function releaseRiptide(Player $player, int $level) : ItemUseResult{
+		if($player->getVehicle() !== null || !Conduit::isInWaterOrRain($player)){
+			return ItemUseResult::FAIL;
+		}
+		if($player->hasFiniteResources()){
+			$this->applyDamage(1);
+		}
+		$player->startSpinAttack(clone $this, self::SPIN_ATTACK_TICKS);
+		$player->getWorld()->addSound($player->getPosition(), new TridentRiptideSound($level));
+
+		return ItemUseResult::SUCCESS;
+	}
+
 	public function getAttackPoints() : int{
 		return 9;
 	}
 
 	public function canStartUsingItem(Player $player) : bool{
-		return $this->damage < $this->getMaxDurability() - self::DAMAGE_ON_THROW;
+		if($this->damage >= $this->getMaxDurability() - self::DAMAGE_ON_THROW){
+			return false;
+		}
+		//a Riptide trident can only be used in water or rain
+		return !$this->hasEnchantment(VanillaEnchantments::RIPTIDE()) || Conduit::isInWaterOrRain($player);
 	}
 
 	public function onAttackEntity(Entity $victim, array &$returnedItems) : bool{

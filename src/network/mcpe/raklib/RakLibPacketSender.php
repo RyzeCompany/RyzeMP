@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\raklib;
 
-use pocketmine\network\mcpe\PacketSender;
+use pocketmine\network\mcpe\TransportAwarePacketSender;
 
-class RakLibPacketSender implements PacketSender{
+class RakLibPacketSender implements TransportAwarePacketSender{
 	private bool $closed = false;
 
 	public function __construct(
@@ -44,5 +44,17 @@ class RakLibPacketSender implements PacketSender{
 			$this->closed = true;
 			$this->handler->close($this->sessionId);
 		}
+	}
+
+	public function getTransportName() : string{
+		return "raknet";
+	}
+
+	public function isTransportEncrypted() : bool{
+		return false;
+	}
+
+	public function getPeerPublicKey() : ?string{
+		return null;
 	}
 }

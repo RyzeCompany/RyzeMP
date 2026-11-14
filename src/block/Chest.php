@@ -27,12 +27,14 @@ use pocketmine\block\tile\Chest as TileChest;
 use pocketmine\block\utils\FacesOppositePlacingPlayerTrait;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\SupportType;
+use pocketmine\entity\animal\Cat;
 use pocketmine\event\block\ChestPairEvent;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\world\Position;
 
 class Chest extends Transparent implements HorizontalFacing{
 	use FacesOppositePlacingPlayerTrait;
@@ -75,19 +77,31 @@ class Chest extends Transparent implements HorizontalFacing{
 
 			$chest = $this->position->getWorld()->getTile($this->position);
 			if($chest instanceof TileChest){
+				$pair = $chest->getPair();
 				if(
 					!$this->getSide(Facing::UP)->isTransparent() ||
-					(($pair = $chest->getPair()) !== null && !$pair->getBlock()->getSide(Facing::UP)->isTransparent()) ||
-					!$chest->canOpenWith($item->getCustomName())
+					($pair !== null && !$pair->getBlock()->getSide(Facing::UP)->isTransparent()) ||
+					!$chest->canOpenWith($item->getCustomName()) ||
+					self::hasCatOnTop($this->position) ||
+					($pair !== null && self::hasCatOnTop($pair->getPosition()))
 				){
 					return true;
 				}
 
+				$chest->unpackLootTable($player);
+				$pair?->unpackLootTable($player);
 				$player->setCurrentWindow($chest->getInventory());
 			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Chests with a cat sitting on them don't open (vanilla).
+	 */
+	private static function hasCatOnTop(Position $pos) : bool{
+		return $pos->isValid() && Cat::isCatSittingOn($pos->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
 	}
 
 	public function getFuelTime() : int{

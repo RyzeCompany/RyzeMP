@@ -23,6 +23,24 @@ declare(strict_types=1);
 
 namespace pocketmine\item;
 
+use pocketmine\block\Block;
+use pocketmine\block\utils\SupportType;
+use pocketmine\block\utils\UnderwaterBoneMeal;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\particle\BoneMealUseParticle;
+
 class Fertilizer extends Item{
 
+	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
+		//the clicked block didn't use the bone meal: like vanilla, grow water plants in front of a sturdy face
+		if($blockClicked->getSupportType($face) === SupportType::FULL){
+			$pos = $blockReplace->getPosition();
+			if(UnderwaterBoneMeal::grow($pos->getWorld(), $pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(), $face, $this, $player)){
+				$pos->getWorld()->addParticle($pos, new BoneMealUseParticle());
+				return ItemUseResult::SUCCESS;
+			}
+		}
+		return ItemUseResult::NONE;
+	}
 }

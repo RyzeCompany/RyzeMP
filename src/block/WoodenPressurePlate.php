@@ -42,6 +42,6 @@ class WoodenPressurePlate extends SimplePressurePlate implements WoodMaterial{
 	}
 
 	public function getFuelTime() : int{
-		return 300;
+		return $this->woodType->isFlammable() ? 300 : 0;
 	}
 }

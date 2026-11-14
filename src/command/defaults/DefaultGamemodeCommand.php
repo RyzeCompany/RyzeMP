@@ -24,14 +24,16 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandEnums;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
-use pocketmine\player\GameMode;
 use pocketmine\ServerProperties;
 use function count;
 
-class DefaultGamemodeCommand extends NativeCommand{
+class DefaultGamemodeCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,12 +44,19 @@ class DefaultGamemodeCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_DEFAULTGAMEMODE);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) === 0){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::enum("gameMode", "DefaultGameMode", CommandEnums::gameModes(withDefault: false))],
+			[CommandParameter::int("gameMode")],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$gameMode = GameMode::fromString($args[0]);
+		$gameMode = GamemodeCommand::parseGameMode($args[0], null);
 		if($gameMode === null){
 			$sender->sendMessage(KnownTranslationFactory::pocketmine_command_gamemode_unknown($args[0]));
 			return true;

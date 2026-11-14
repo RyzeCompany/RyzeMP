@@ -59,9 +59,16 @@ final class EffectIdMap{
 		$this->register(EffectIds::LEVITATION, VanillaEffects::LEVITATION());
 		$this->register(EffectIds::FATAL_POISON, VanillaEffects::FATAL_POISON());
 		$this->register(EffectIds::CONDUIT_POWER, VanillaEffects::CONDUIT_POWER());
-		//TODO: SLOW_FALLING
-		//TODO: BAD_OMEN
-		//TODO: VILLAGE_HERO
+		$this->register(EffectIds::SLOW_FALLING, VanillaEffects::SLOW_FALLING());
+		$this->register(EffectIds::BAD_OMEN, VanillaEffects::BAD_OMEN());
+		$this->register(EffectIds::TRIAL_OMEN, VanillaEffects::TRIAL_OMEN());
+		$this->register(EffectIds::WIND_CHARGED, VanillaEffects::WIND_CHARGED());
+		$this->register(EffectIds::WEAVING, VanillaEffects::WEAVING());
+		$this->register(EffectIds::OOZING, VanillaEffects::OOZING());
+		$this->register(EffectIds::INFESTED, VanillaEffects::INFESTED());
+		$this->register(EffectIds::VILLAGE_HERO, VanillaEffects::VILLAGE_HERO());
+		$this->register(EffectIds::RAID_OMEN, VanillaEffects::RAID_OMEN());
+		$this->register(EffectIds::BREATH_OF_THE_NAUTILUS, VanillaEffects::BREATH_OF_THE_NAUTILUS());
 		$this->register(EffectIds::DARKNESS, VanillaEffects::DARKNESS());
 	}
 }

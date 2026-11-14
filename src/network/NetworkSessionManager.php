@@ -26,9 +26,27 @@ namespace pocketmine\network;
 use pocketmine\lang\Translatable;
 use pocketmine\network\mcpe\NetworkSession;
 use function count;
+use function hrtime;
+use function inet_ntop;
 use function spl_object_id;
+use function strlen;
 
 class NetworkSessionManager{
+	/** Minimum time between two log lines about refused sessions (nanoseconds) */
+	private const REFUSAL_LOG_INTERVAL_NS = 5_000_000_000;
+
+	/**
+	 * Sessions that have not sent a login request yet, per address (see {@link AddressSet::limitKey()})
+	 * @var int[]
+	 * @phpstan-var array<string, int>
+	 */
+	private array $pendingPerAddress = [];
+	/** Maximum sessions per address that have not sent a login request yet, 0 = no limit */
+	private int $maxPendingPerAddress = 0;
+	private ?AddressSet $limitExempt = null;
+	private ?\Logger $limitLogger = null;
+	private int $nextRefusalLog = 0;
+	private int $refusalsNotLogged = 0;
 
 	/**
 	 * @var NetworkSession[]
@@ -48,7 +66,11 @@ class NetworkSessionManager{
 	public function add(NetworkSession $session) : void{
 		$idx = spl_object_id($session);
 		$this->sessions[$idx] = $session;
-		$this->pendingLoginSessions[$idx] = $session;
+		if(!isset($this->pendingLoginSessions[$idx])){
+			$this->pendingLoginSessions[$idx] = $session;
+			$key = AddressSet::limitKey($session->getIp());
+			$this->pendingPerAddress[$key] = ($this->pendingPerAddress[$key] ?? 0) + 1;
+		}
 	}
 
 	/**
@@ -56,8 +78,7 @@ class NetworkSessionManager{
 	 * count.
 	 */
 	public function markLoginReceived(NetworkSession $session) : void{
-		$idx = spl_object_id($session);
-		unset($this->pendingLoginSessions[$idx]);
+		$this->removePending(spl_object_id($session));
 	}
 
 	/**
@@ -67,7 +88,80 @@ class NetworkSessionManager{
 	public function remove(NetworkSession $session) : void{
 		$idx = spl_object_id($session);
 		unset($this->sessions[$idx]);
+		$this->removePending($idx);
+	}
+
+	private function removePending(int $idx) : void{
+		if(!isset($this->pendingLoginSessions[$idx])){
+			return;
+		}
+		$key = AddressSet::limitKey($this->pendingLoginSessions[$idx]->getIp());
 		unset($this->pendingLoginSessions[$idx]);
+		if(($this->pendingPerAddress[$key] ?? 0) > 1){
+			$this->pendingPerAddress[$key]--;
+		}else{
+			unset($this->pendingPerAddress[$key]);
+		}
+	}
+
+	/**
+	 * Limits the sessions of one IP address (IPv6: one /64) that have not sent a login request yet. Sessions above the
+	 * limit are refused by {@link NetworkSessionManager::acceptsNewSession()}; players who sent their login never count,
+	 * so many players behind one address (mobile carriers, schools, LAN parties) are only limited in how many connect
+	 * at the very same moment.
+	 *
+	 * @param int        $maxPerAddress 0 = no limit
+	 * @param AddressSet $exempt        addresses exempt from the limit (trusted proxies)
+	 * @param \Logger    $logger        receives the debug lines about refused sessions (at most one per 5 seconds)
+	 */
+	public function setPendingLoginLimit(int $maxPerAddress, AddressSet $exempt, \Logger $logger) : void{
+		$this->maxPendingPerAddress = $maxPerAddress > 0 ? $maxPerAddress : 0;
+		$this->limitExempt = $exempt;
+		$this->limitLogger = $logger;
+	}
+
+	/**
+	 * Returns the number of sessions of the IP address (IPv6: of its /64) that have not sent a login request yet.
+	 */
+	public function getPendingLoginSessionCount(string $ip) : int{
+		return $this->pendingPerAddress[AddressSet::limitKey($ip)] ?? 0;
+	}
+
+	/**
+	 * Returns whether a network interface may open a new session for a client at the IP address, according to the
+	 * limit set with {@link NetworkSessionManager::setPendingLoginLimit()}. A refused client should be disconnected
+	 * before a session is created. Refusals are logged at debug level, rate-limited.
+	 */
+	public function acceptsNewSession(string $ip) : bool{
+		if($this->maxPendingPerAddress === 0){
+			return true;
+		}
+		$pending = $this->pendingPerAddress[AddressSet::limitKey($ip)] ?? 0;
+		if($pending < $this->maxPendingPerAddress || ($this->limitExempt !== null && $this->limitExempt->contains($ip))){
+			return true;
+		}
+		$this->logRefusal($ip, $pending);
+		return false;
+	}
+
+	private function logRefusal(string $ip, int $pending) : void{
+		if($this->limitLogger === null){
+			return;
+		}
+		$now = hrtime(true);
+		if($now < $this->nextRefusalLog){
+			$this->refusalsNotLogged++;
+			return;
+		}
+		$this->nextRefusalLog = $now + self::REFUSAL_LOG_INTERVAL_NS;
+		$key = AddressSet::limitKey($ip);
+		$address = $ip;
+		if(strlen($key) === 8 && ($prefix = inet_ntop($key . "\x00\x00\x00\x00\x00\x00\x00\x00")) !== false){
+			$address = "$prefix/64";
+		}
+		$this->limitLogger->debug("Refused a connection from $address: $pending connections from this address have not logged in yet (limit network.connection-limits.pending-logins-per-ip: " . $this->maxPendingPerAddress . "; raise it or add the address to exempt-addresses if many players share it)" .
+			($this->refusalsNotLogged > 0 ? " ($this->refusalsNotLogged more refused since the last message)" : ""));
+		$this->refusalsNotLogged = 0;
 	}
 
 	/**
@@ -96,6 +190,9 @@ class NetworkSessionManager{
 			$session->tick();
 			if(!$session->isConnected()){
 				unset($this->sessions[$k]);
+				//a session that disconnected before sending its login must not stay pending (and count towards its
+				//address's limit) forever
+				$this->removePending($k);
 			}
 		}
 	}
@@ -111,5 +208,7 @@ class NetworkSessionManager{
 			$session->disconnect($reason, $disconnectScreenMessage);
 		}
 		$this->sessions = [];
+		$this->pendingLoginSessions = [];
+		$this->pendingPerAddress = [];
 	}
 }

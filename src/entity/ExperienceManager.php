@@ -33,6 +33,7 @@ use pocketmine\world\sound\XpLevelUpSound;
 use function array_rand;
 use function ceil;
 use function count;
+use function floor;
 use function max;
 use function min;
 
@@ -118,7 +119,8 @@ class ExperienceManager{
 	 * Returns the number of XP points the player has progressed into their current level.
 	 */
 	public function getRemainderXp() : int{
-		return (int) (ExperienceUtils::getXpToCompleteLevel($this->getXpLevel()) * $this->getXpProgress());
+		//the progress is points / points of the level, e.g. 3/7, which can read back as 2.9999 (and is saved as a 32-bit float)
+		return (int) floor(ExperienceUtils::getXpToCompleteLevel($this->getXpLevel()) * $this->getXpProgress() + 0.0001);
 	}
 
 	/**

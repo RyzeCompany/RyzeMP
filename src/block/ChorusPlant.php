@@ -24,21 +24,49 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\StaticSupportTrait;
+use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\math\Axis;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\BlockTransaction;
 use function mt_rand;
 
 final class ChorusPlant extends Flowable{
-	use StaticSupportTrait;
+	use StaticSupportTrait {
+		onNearbyBlockChange as onNearbyBlockChangeSupport;
+	}
 
 	/**
-	 * @var true[]
-	 * @phpstan-var array<int, true>
+	 * facing => facing. Since Bedrock 1.26.60 these are block states (minecraft:connection_*), so they are stored
+	 * with the block and recomputed when a neighbour changes.
+	 *
+	 * @var int[]
+	 * @phpstan-var array<int, int>
 	 */
 	protected array $connections = [];
+
+	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
+		$w->facingFlags($this->connections);
+	}
+
+	public function hasConnection(int $facing) : bool{
+		return isset($this->connections[$facing]);
+	}
+
+	/** @return $this */
+	public function setConnection(int $facing, bool $connected) : self{
+		if($connected){
+			$this->connections[$facing] = $facing;
+		}else{
+			unset($this->connections[$facing]);
+		}
+		$this->collisionBoxes = null;
+		return $this;
+	}
 
 	protected function recalculateCollisionBoxes() : array{
 		$bb = AxisAlignedBB::one();
@@ -51,24 +79,35 @@ final class ChorusPlant extends Flowable{
 		return [$bb];
 	}
 
-	public function readStateFromWorld() : Block{
-		parent::readStateFromWorld();
-
-		$this->collisionBoxes = null;
-
+	/**
+	 * Recomputes the connections from the neighbouring blocks. Returns true if anything changed.
+	 */
+	private function recalculateConnections() : bool{
+		$changed = false;
 		foreach(Facing::ALL as $facing){
 			$block = $this->getSide($facing);
-			if(match($block->getTypeId()){
+			$connect = match($block->getTypeId()){
 				BlockTypeIds::END_STONE, BlockTypeIds::CHORUS_FLOWER, $this->getTypeId() => true,
 				default => false
-			}){
-				$this->connections[$facing] = true;
-			}else{
-				unset($this->connections[$facing]);
+			};
+			if($connect !== isset($this->connections[$facing])){
+				$this->setConnection($facing, $connect);
+				$changed = true;
 			}
 		}
+		return $changed;
+	}
 
-		return $this;
+	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
+		$this->recalculateConnections();
+		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
+	}
+
+	public function onNearbyBlockChange() : void{
+		if($this->recalculateConnections()){
+			$this->position->getWorld()->setBlock($this->position, $this);
+		}
+		$this->onNearbyBlockChangeSupport();
 	}
 
 	private function canBeSupportedBy(Block $block) : bool{

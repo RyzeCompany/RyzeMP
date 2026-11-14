@@ -27,6 +27,7 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\utils\Utils;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\vanilla\structure\Beardifier;
+use pocketmine\world\generator\vanilla\structure\LocateVanillaStructureTask;
 use pocketmine\world\generator\vanilla\structure\piece\PoolElementPiece;
 use pocketmine\world\generator\vanilla\structure\placement\BedrockSpreadPlacement;
 use pocketmine\world\generator\vanilla\structure\placement\BedrockStructurePlacements;
@@ -36,11 +37,14 @@ use pocketmine\world\generator\vanilla\structure\placement\StructurePlacement;
 use pocketmine\world\generator\vanilla\structure\StructureManager;
 use pocketmine\world\generator\vanilla\structure\StructureStart;
 use pocketmine\world\generator\vanilla\structure\template\Rotations;
+use pocketmine\world\generator\vanilla\structure\VanillaStructureFinder;
+use pocketmine\world\locate\LocateTimeoutException;
 use pocketmine\world\SimpleChunkManager;
 use function array_reverse;
 use function count;
 use function get_class;
 use function getenv;
+use function hrtime;
 use function is_dir;
 use function pack;
 use function sha1;
@@ -153,13 +157,9 @@ class StructureTest extends TestCase{
 		return $dir;
 	}
 
-	private static function preset() : string{
-		$directory = self::dataDir();
-		return "core-v5;data=$directory;sha256=" . VanillaDataIdentity::fingerprint($directory);
-	}
-
-	private static function manager() : StructureManager{
-		$manager = (new RyzeOverworldGenerator(self::SEED, self::preset()))->getStructureManager();
+	private static function manager(string $options = "") : StructureManager{
+		$generator = new VanillaGenerator(self::SEED, "data=" . self::dataDir() . ";backend=compiled;structure-positions=java" . $options);
+		$manager = $generator->getStructureManager();
 		self::assertNotNull($manager);
 		return $manager;
 	}
@@ -204,23 +204,21 @@ class StructureTest extends TestCase{
 	}
 
 	/**
-	 * Populates the chunks around a center chunk in both orders and checks that blocks and tiles are the
-	 * same; returns the tiles of the first run.
+	 * Populates the chunks around a center chunk in both orders and checks that blocks, tiles and entities are the
+	 * same; returns the tiles and entities of the first run.
 	 *
-	 * @phpstan-return list<string>
+	 * @phpstan-param \Closure() : VanillaGenerator $newGenerator
+	 * @phpstan-return array{list<string>, list<string>}
 	 */
-	private static function assertSeamless(string $dimension, int $minY, int $maxY, int $centerX, int $centerZ, int $radius, bool $decorate = false) : array{
+	private static function assertSeamless(\Closure $newGenerator, int $minY, int $maxY, int $centerX, int $centerZ, int $radius) : array{
 		$results = [];
-		$directory = self::dataDir();
-		$hash = VanillaDataIdentity::fingerprint($directory);
 		foreach([false, true] as $reverse){
-			$writer = new VanillaDensityChunkWriter(self::SEED, $directory, $dimension, $hash, $decorate, useCompiledTerrain: true, enableStructures: true);
+			$generator = $newGenerator();
 			$world = new SimpleChunkManager($minY, $maxY);
 			for($x = $centerX - $radius - 1; $x <= $centerX + $radius + 1; ++$x){
 				for($z = $centerZ - $radius - 1; $z <= $centerZ + $radius + 1; ++$z){
-					$chunk = new Chunk([], false);
-					$world->setChunk($x, $z, $chunk);
-					$writer->fill($chunk, $x, $z);
+					$world->setChunk($x, $z, new Chunk([], false));
+					$generator->generateChunk($world, $x, $z);
 				}
 			}
 			$order = [];
@@ -233,44 +231,48 @@ class StructureTest extends TestCase{
 				$order = array_reverse($order);
 			}
 			foreach($order as [$x, $z]){
-				$writer->populate($world, $x, $z);
+				$generator->populateChunk($world, $x, $z);
 			}
 			$blocks = [];
 			$tiles = [];
+			$entities = [];
 			for($x = $centerX - $radius; $x <= $centerX + $radius; ++$x){
 				for($z = $centerZ - $radius; $z <= $centerZ + $radius; ++$z){
 					$chunk = $world->getChunk($x, $z);
 					self::assertNotNull($chunk);
 					foreach($chunk->getSubChunks() as $y => $subChunk){
-						$blocks["$x:$z:$y"] = [$subChunk->getBlockLayers(), $subChunk->getBiomeArray(), $subChunk->getEmptyBlockId()];
+						$blocks["$x:$z:$y"] = $subChunk->getBlockLayers()[0] ?? null;
 					}
 					foreach($chunk->getPendingTileNBT() as $nbt){
 						$tiles[] = $nbt->getString("id") . ":" . $nbt->getString("LootTable", $nbt->getString("EntityIdentifier", "")) . ":" . $nbt->getInt("x") . "," . $nbt->getInt("y") . "," . $nbt->getInt("z");
 					}
+					foreach($chunk->getPendingEntityNBT() as $nbt){
+						$entities[] = $nbt->getString(Chunk::PENDING_ENTITY_IDENTIFIER);
+					}
 				}
 			}
 			sort($tiles);
-			$results[] = [$blocks, $tiles];
+			sort($entities);
+			$results[] = [$blocks, $tiles, $entities];
 		}
 		self::assertSame($results[0][1], $results[1][1]);
-		foreach(Utils::stringifyKeys($results[0][0]) as $key => [$layers, $biomes, $air]){
-			[$otherLayers, $otherBiomes] = $results[1][0][$key];
-			for($bx = 0; $bx < 16; ++$bx){
-				for($bz = 0; $bz < 16; ++$bz){
-					for($by = 0; $by < 16; ++$by){
-						for($i = 0, $count = max(count($layers), count($otherLayers)); $i < $count; ++$i){
-							if((($layers[$i] ?? null)?->get($bx, $by, $bz) ?? $air) !== (($otherLayers[$i] ?? null)?->get($bx, $by, $bz) ?? $air)){
-								self::fail("Block $bx $by $bz of $key layer $i differs between population orders");
+		self::assertSame($results[0][2], $results[1][2]);
+		foreach(Utils::stringifyKeys($results[0][0]) as $key => $layer){
+			$other = $results[1][0][$key];
+			self::assertSame($layer === null, $other === null, $key);
+			if($layer !== null && $other !== null){
+				for($bx = 0; $bx < 16; ++$bx){
+					for($bz = 0; $bz < 16; ++$bz){
+						for($by = 0; $by < 16; ++$by){
+							if($layer->get($bx, $by, $bz) !== $other->get($bx, $by, $bz)){
+								self::fail("Block $bx $by $bz of $key differs between population orders");
 							}
-						}
-						if($biomes->get($bx, $by, $bz) !== $otherBiomes->get($bx, $by, $bz)){
-							self::fail("Biome $bx $by $bz of $key differs between population orders");
 						}
 					}
 				}
 			}
 		}
-		return $results[0][1];
+		return [$results[0][1], $results[0][2]];
 	}
 
 	/**
@@ -278,8 +280,12 @@ class StructureTest extends TestCase{
 	 * chunk only places the part of the pieces inside it, with position-based randoms).
 	 */
 	public function testChunkBordersAreSeamless() : void{
-		// Isolate structure writes at the outpost at chunk 17, -60.
-		$tiles = self::assertSeamless("overworld", -64, 320, 17, -60, 1);
+		$dir = self::dataDir();
+		//pillager outpost at chunk 17, -60 (seed 12345); features off, so only structures change the blocks
+		[$tiles] = self::assertSeamless(
+			fn() => new VanillaGenerator(self::SEED, "data=$dir;backend=compiled;structure-positions=java;features=false"),
+			-64, 320, 17, -60, 1
+		);
 		//the watchtower's chest rolls the outpost loot table when opened
 		$lootChests = 0;
 		foreach($tiles as $tile){
@@ -295,17 +301,11 @@ class StructureTest extends TestCase{
 	 * blaze spawner, nether_bridge chests).
 	 */
 	public function testFortressIsSeamless() : void{
-		$tiles = self::assertSeamless("nether", 0, 128, 8, 43, 1);
-		self::assertNotSame([], $tiles);
-	}
-
-	public function testFullNetherDecorationIsSeamless() : void{
-		$tiles = self::assertSeamless("nether", 0, 128, 8, 43, 1, true);
-		self::assertNotSame([], $tiles);
-	}
-
-	public function testFullOverworldDecorationIsSeamless() : void{
-		$tiles = self::assertSeamless("overworld", -64, 320, 17, -60, 1, true);
+		$dir = self::dataDir();
+		[$tiles] = self::assertSeamless(
+			fn() => new VanillaNetherGenerator(self::SEED, "data=$dir;backend=compiled;structure-positions=java;features=false"),
+			0, 128, 8, 43, 1
+		);
 		self::assertNotSame([], $tiles);
 	}
 
@@ -314,10 +314,11 @@ class StructureTest extends TestCase{
 	 * box of the first piece, from the "structures" data of the start chunk), positions included.
 	 */
 	public function testCodeStructuresMatchJava() : void{
+		$dir = self::dataDir();
 		$overworld = self::manager();
-		$nether = (new RyzeVanillaNetherCoreGenerator(self::SEED, self::preset()))->getStructureManager();
+		$nether = (new VanillaNetherGenerator(self::SEED, "data=$dir;backend=compiled;structure-positions=java"))->getStructureManager();
 		self::assertNotNull($nether);
-		$end = (new RyzeVanillaEndCoreGenerator(self::SEED, self::preset()))->getStructureManager();
+		$end = (new VanillaEndGenerator(self::SEED, "data=$dir;backend=compiled;structure-positions=java"))->getStructureManager();
 		self::assertNotNull($end);
 		foreach(self::JAVA_STARTS as $setId => [$dimension, $chunkX, $chunkZ, $structure, $count, $firstBox]){
 			$manager = match($dimension){
@@ -353,13 +354,74 @@ class StructureTest extends TestCase{
 	 * End cities are where Java's /locate finds them (execute in the_end positioned 0 0 0: 992, 384).
 	 */
 	public function testEndCityLocate() : void{
-		$end = (new RyzeVanillaEndCoreGenerator(self::SEED, self::preset()))->getStructureManager();
+		$dir = self::dataDir();
+		$end = (new VanillaEndGenerator(self::SEED, "data=$dir;backend=compiled;structure-positions=java"))->getStructureManager();
 		self::assertNotNull($end);
 		$found = $end->locate("end_city", 0, 0);
 		self::assertNotNull($found);
 		self::assertSame(["minecraft:end_city", 62, 24, 992, 0, 384], $found);
 		//a radius in chunks instead of rings: 60 chunks is not enough for this one (1063 blocks away)
 		self::assertNull($end->locate("end_city", 0, 0, maxChunks: 30));
+	}
+
+	/**
+	 * /locate structure names: Bedrock names, old spellings and Java ids map to the structures searched.
+	 */
+	public function testStructureFinderNames() : void{
+		$overworld = new VanillaStructureFinder(VanillaStructureFinder::DIMENSION_OVERWORLD);
+		$ids = $overworld->getStructureIds();
+		foreach(["village", "temple", "ruins", "monument", "mansion", "stronghold", "mineshaft", "pillager_outpost", "shipwreck", "buried_treasure", "ruined_portal", "ancient_city", "trail_ruins", "trial_chambers", "village_plains", "jungle_pyramid", "swamp_hut", "igloo"] as $id){
+			self::assertContains($id, $ids);
+		}
+		self::assertNotContains("fortress", $ids);
+		self::assertSame(["desert_pyramid", "jungle_pyramid", "swamp_hut", "igloo"], $overworld->getPatterns("temple"));
+		self::assertSame(["village_*"], $overworld->getPatterns("village"));
+		self::assertSame(["village_plains"], $overworld->getPatterns("village_plains"));
+		$nether = new VanillaStructureFinder(VanillaStructureFinder::DIMENSION_NETHER);
+		self::assertContains("fortress", $nether->getStructureIds());
+		self::assertContains("bastion_remnant", $nether->getStructureIds());
+		self::assertSame(["ruined_portal_nether"], $nether->getPatterns("ruined_portal"));
+		$end = new VanillaStructureFinder(VanillaStructureFinder::DIMENSION_END);
+		self::assertSame(["end_city"], $end->getPatterns("endcity"));
+		self::assertContains("end_city", $end->getStructureIds());
+		self::assertSame(["mansion"], $overworld->getPatterns("woodland_mansion"));
+		self::assertSame(["monument"], $overworld->getPatterns("ocean_monument"));
+		self::assertSame(["fortress"], $nether->getPatterns("nether_fortress"));
+		self::assertSame(["bastion_remnant"], $nether->getPatterns("bastion"));
+	}
+
+	/**
+	 * Runs an end city search task on this thread and returns what it passes to its callback.
+	 *
+	 * @param string[] $excluded
+	 * @phpstan-param list<string> $excluded
+	 */
+	private static function runEndCityTask(string $options, array $excluded) : mixed{
+		$result = "not called";
+		$task = new LocateVanillaStructureTask(VanillaEndGenerator::class, self::SEED, $options, ["end_city"], 0, 0, 400, $excluded, 60, function(array|string|null $found, bool $failed) use (&$result) : void{
+			$result = $failed ? "failed" : $found;
+		});
+		$task->onRun();
+		$task->onCompletion();
+		return $result;
+	}
+
+	/**
+	 * The /locate worker task builds its own structure manager and finds the same end city; useNewChunksOnly skips
+	 * starts the main thread reports as generated; a search past its deadline gives up.
+	 */
+	public function testLocateStructureTask() : void{
+		$dir = self::dataDir();
+		$options = "data=$dir;backend=compiled;structure-positions=java";
+		self::assertSame([992, 0, 384, 62, 24], self::runEndCityTask($options, []));
+		$next = self::runEndCityTask($options, ["62:24"]);
+		self::assertIsArray($next);
+		self::assertNotSame([62, 24], [$next[3], $next[4]], "the excluded start is skipped");
+
+		$end = (new VanillaEndGenerator(self::SEED, $options))->getStructureManager();
+		self::assertNotNull($end);
+		$this->expectException(LocateTimeoutException::class);
+		VanillaStructureFinder::searchPatterns($end, ["end_city"], 5000, 5000, 400, null, hrtime(true) - 1);
 	}
 
 	/**

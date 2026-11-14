@@ -26,8 +26,10 @@ namespace pocketmine\block;
 use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\CoralMaterial;
 use pocketmine\block\utils\CoralTypeTrait;
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\block\utils\SupportType;
 use pocketmine\item\Item;
+use pocketmine\math\Facing;
 use function mt_rand;
 
 abstract class BaseCoral extends Transparent implements CoralMaterial{
@@ -55,19 +57,25 @@ abstract class BaseCoral extends Transparent implements CoralMaterial{
 
 	public function isSolid() : bool{ return false; }
 
+	/**
+	 * Returns whether the coral has water around it: its own water (the liquid layer, or the water it is being placed
+	 * into) or water in any neighbouring block, waterlogged blocks included.
+	 */
 	protected function isCoveredWithWater() : bool{
 		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
 
-		$hasWater = false;
-		foreach($this->position->sides() as $vector3){
-			if($world->getBlock($vector3) instanceof Water){
-				$hasWater = true;
-				break;
+		if(LiquidLayer::hasWaterAt($world, $x, $y, $z)){
+			return true;
+		}
+		foreach(Facing::OFFSET as [$dx, $dy, $dz]){
+			if(LiquidLayer::hasWaterAt($world, $x + $dx, $y + $dy, $z + $dz)){
+				return true;
 			}
 		}
-
-		//TODO: check water inside the block itself (not supported on the API yet)
-		return $hasWater;
+		return false;
 	}
 
 	protected function recalculateCollisionBoxes() : array{ return []; }

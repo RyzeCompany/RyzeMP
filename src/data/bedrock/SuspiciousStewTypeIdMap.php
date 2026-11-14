@@ -44,6 +44,9 @@ final class SuspiciousStewTypeIdMap{
 				SuspiciousStewType::ALLIUM => SuspiciousStewTypeIds::ALLIUM,
 				SuspiciousStewType::OXEYE_DAISY => SuspiciousStewTypeIds::OXEYE_DAISY,
 				SuspiciousStewType::WITHER_ROSE => SuspiciousStewTypeIds::WITHER_ROSE,
+				SuspiciousStewType::TORCHFLOWER => SuspiciousStewTypeIds::TORCHFLOWER,
+				SuspiciousStewType::OPEN_EYEBLOSSOM => SuspiciousStewTypeIds::OPEN_EYEBLOSSOM,
+				SuspiciousStewType::CLOSED_EYEBLOSSOM => SuspiciousStewTypeIds::CLOSED_EYEBLOSSOM,
 			}, $case);
 		}
 

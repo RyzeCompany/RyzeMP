@@ -1,0 +1,284 @@
+# GitLab CI for PocketMine-MP (VanillaPocketMine fork).
+# Ports what pmmp ran on GitHub Actions: main.yml + main-php-matrix.yml (checks on every push and merge request)
+# and draft-release.yml (PHAR build and release when a tag is pushed).
+#
+# Release flow: bump src/VersionInfo.php (IS_DEVELOPMENT_BUILD = false), commit, push a tag named exactly like
+# BASE_VERSION (e.g. 5.44.4). The pipeline builds the PHAR, uploads it to the project's generic package registry
+# and creates the GitLab release. Publishing to updates.vanillamine.com is still done with publish-release.ps1.
+#
+# Dependency branches (our forks in the VanillaPocketMine group) can be overridden with CI/CD variables:
+# BEDROCK_PROTOCOL_BRANCH, BEDROCK_DATA_BRANCH, BLOCK_UPGRADE_SCHEMA_BRANCH, ITEM_UPGRADE_SCHEMA_BRANCH,
+# RAKLIB_BRANCH (defaults in build/ci/install-deps.sh).
+
+stages:
+  - check
+  - build
+  - release
+
+variables:
+  PM_VERSION_MAJOR: "5"
+  RELEASE_PHP_VERSION: "8.2"
+  #build numbers must keep growing for the auto-updater: pmmp's last release was build 2615
+  BUILD_NUMBER_BASE: "3000"
+  GIT_SUBMODULE_STRATEGY: none
+  GIT_DEPTH: "50"
+  COMPOSER_CACHE_DIR: "$CI_PROJECT_DIR/.composer-cache"
+  GO_IMAGE: "golang:1.26"
+  #pm-nethernet release bundled in the phar (gitlab.com/VanillaPocketMine/nethernet, package pm-nethernet/<version>);
+  #build/ci/build-native.sh downloads it. Override with a CI/CD variable to test another release.
+  NETHERNET_VERSION: "0.1.2"
+  #public address of the update service (auto-updater.host), redirected to GitLab by Cloudflare
+  UPDATES_PUBLIC_URL: "https://updates.vanillamine.com"
+  #PHP-Binaries release recommended for this version (linked from the release and the auto-updater)
+  RECOMMENDED_PHP_BINARIES: "php-8.4-20261026"
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+.php:
+  image: ubuntu:22.04
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends curl ca-certificates git unzip >/dev/null
+    - source build/ci/setup-php.sh "$PHP_VERSION"
+  cache:
+    key: "composer-$PHP_VERSION-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .composer-cache/
+    when: always
+
+# phpstan, phpunit, codegen and codestyle run locally before every push (scripts/local-checks.ps1 in the workspace) to
+# save shared runner minutes: here they are manual jobs (play button), or automatic with the CI/CD variable RUN_CHECKS=1.
+# Branch pushes check only PHP 8.4; tags also offer the older supported versions (*-matrix jobs).
+.checks-rules:
+  rules:
+    - if: $RUN_CHECKS == "1"
+    - when: manual
+      allow_failure: true
+
+.php-latest:
+  extends: [.php, .checks-rules]
+  stage: check
+  variables:
+    PHP_VERSION: "8.4"
+
+.php-matrix:
+  extends: .php
+  stage: check
+  parallel:
+    matrix:
+      - PHP_VERSION: ["8.2", "8.3"]
+  rules:
+    - if: $CI_COMMIT_TAG && $RUN_CHECKS == "1"
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: true
+
+.phpstan:
+  script:
+    - bash build/ci/install-deps.sh
+    - ./vendor/bin/phpstan analyze --no-progress --memory-limit=2G
+
+phpstan:
+  extends: [.php-latest, .phpstan]
+
+phpstan-matrix:
+  extends: [.php-matrix, .phpstan]
+
+.phpunit:
+  script:
+    - bash build/ci/install-deps.sh
+    - ./vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning --log-junit phpunit-report.xml tests/phpunit
+  artifacts:
+    when: always
+    reports:
+      junit: phpunit-report.xml
+
+phpunit:
+  extends: [.php-latest, .phpunit]
+
+phpunit-matrix:
+  extends: [.php-matrix, .phpunit]
+
+.codegen:
+  script:
+    - bash build/ci/install-deps.sh --no-dev
+    - rm -rf generated
+    # vanilla data tables made by tools/generate-*.php and build/codegen/trial-spawner-configs.php from the Mojang samples
+    # and the Java server jar, which CI doesn't have: kept as committed
+    - git checkout HEAD -- $(cat build/codegen/external-generated.txt)
+    - composer update-codegen
+    - git diff
+    - git diff --quiet
+    - php build/codegen/check-file-collisions.php
+
+codegen:
+  extends: [.php-latest, .codegen]
+
+codegen-matrix:
+  extends: [.php-matrix, .codegen]
+
+codestyle:
+  extends: .checks-rules
+  stage: check
+  image: php:8.3-cli
+  script:
+    - curl -fsSL -o php-cs-fixer.phar https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/releases/download/v3.75.0/php-cs-fixer.phar
+    - php php-cs-fixer.phar fix --dry-run --diff --ansi
+
+translations:
+  stage: check
+  image: php:8.3-cli
+  script:
+    - php .github/workflows/verify-translations.php "$CI_PROJECT_DIR/resources/translations"
+
+shellcheck:
+  stage: check
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - find . -name '*.sh' -not -path './vendor/*' -not -path './build/php/*' -not -path './.ci-deps/*' -print0 | xargs -0 shellcheck
+
+go:
+  stage: check
+  image: $GO_IMAGE
+  script:
+    - (cd native/vanillagen && go vet ./... && go test ./...)
+  rules:
+    - changes:
+        - native/**/*
+    - if: $CI_COMMIT_TAG
+
+native:
+  stage: build
+  image: $GO_IMAGE
+  needs: []
+  script:
+    - bash build/ci/build-native.sh "build$((BUILD_NUMBER_BASE + CI_PIPELINE_IID))-git-$CI_COMMIT_SHORT_SHA"
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - native/nethernet/bin/
+      - native/vanillagen/bin/
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+phar:
+  extends: .php
+  stage: build
+  needs: [native]
+  variables:
+    PHP_VERSION: $RELEASE_PHP_VERSION
+  script:
+    - bash build/ci/install-deps.sh --no-dev
+    - composer dump-autoload --no-dev --classmap-authoritative
+    - php vendor/pocketmine/bedrock-data/.minify_json.php
+    - BUILD_NUMBER=$((BUILD_NUMBER_BASE + CI_PIPELINE_IID))
+    - echo "Build number $BUILD_NUMBER"
+    - php -dphar.readonly=0 build/server-phar.php --git "$CI_COMMIT_SHA" --build "$BUILD_NUMBER"
+    - PM_VERSION=$(php build/dump-version-info.php base_version)
+    - TAG_NAME="${CI_COMMIT_TAG:-$PM_VERSION}"
+    - PACKAGE_URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/PocketMine-MP/$TAG_NAME"
+    - PHP_BINARY_URL="https://gitlab.com/VanillaPocketMine/PHP-Binaries/-/releases/$RECOMMENDED_PHP_BINARIES"
+    #the auto-updater prints details_url and download_url: our domain, which Cloudflare redirects to GitLab
+    #(updates.vanillamine.com/download/<version>/<file> and /releases/<version>)
+    - RELEASES_PUBLIC_URL="$UPDATES_PUBLIC_URL/releases" php build/ci/generate-build-info-json.php "$CI_COMMIT_SHA" "$TAG_NAME" "$BUILD_NUMBER" "$UPDATES_PUBLIC_URL/download/$TAG_NAME/PocketMine-MP.phar" "$PHP_BINARY_URL" > build_info.json
+    - php tools/generate-permission-doc.php rst
+    - |
+      {
+        echo "PM_VERSION=$PM_VERSION"
+        echo "TAG_NAME=$TAG_NAME"
+        echo "BUILD_NUMBER=$BUILD_NUMBER"
+        echo "PACKAGE_URL=$PACKAGE_URL"
+        echo "PHP_BINARY_URL=$PHP_BINARY_URL"
+        echo "MCPE_VERSION=$(php build/dump-version-info.php mcpe_version)"
+        echo "PRERELEASE=$(php build/dump-version-info.php prerelease)"
+        echo "CHANGELOG_FILE_NAME=$(php build/dump-version-info.php changelog_file_name)"
+      } > release.env
+    - sha256sum PocketMine-MP.phar | tee PocketMine-MP.phar.sha256
+    - cat build_info.json
+  artifacts:
+    expire_in: 1 month
+    paths:
+      - PocketMine-MP.phar
+      - PocketMine-MP.phar.sha256
+      - build_info.json
+      - core-permissions.rst
+      - start.sh
+      - start.cmd
+      - start.ps1
+    reports:
+      dotenv: release.env
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+upload:
+  stage: release
+  image: curlimages/curl:latest
+  needs: [phar]
+  script:
+    - |
+      for f in PocketMine-MP.phar PocketMine-MP.phar.sha256 build_info.json core-permissions.rst start.sh start.cmd start.ps1; do
+        echo "Uploading $f"
+        curl -fsS --retry 3 --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$f" "$PACKAGE_URL/$f"
+        echo
+        #"latest" is the fixed URL of the Pterodactyl egg (build/pterodactyl); the newest upload of a file wins
+        if [ "$PRERELEASE" != "true" ]; then
+          curl -fsS --retry 3 --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$f" "${PACKAGE_URL%/*}/latest/$f"
+          echo
+        fi
+      done
+  rules:
+    - if: $CI_COMMIT_TAG
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs: [phar, upload]
+  script:
+    - echo "Creating release $TAG_NAME"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "PocketMine-MP $PM_VERSION"
+    description: |
+      **For Minecraft: Bedrock Edition $MCPE_VERSION** (build $BUILD_NUMBER)
+
+      Please see the [changelog]($CI_PROJECT_URL/-/blob/$CI_COMMIT_TAG/changelogs/$CHANGELOG_FILE_NAME) for details.
+
+      :information_source: Download the recommended PHP binary [here]($PHP_BINARY_URL).
+
+      :warning: Found a bug? Report it on our [issue tracker]($CI_PROJECT_URL/-/issues).
+    assets:
+      links:
+        - name: PocketMine-MP.phar
+          url: "$PACKAGE_URL/PocketMine-MP.phar"
+          link_type: package
+          filepath: /PocketMine-MP.phar
+        - name: PocketMine-MP.phar.sha256
+          url: "$PACKAGE_URL/PocketMine-MP.phar.sha256"
+          link_type: other
+        - name: build_info.json
+          url: "$PACKAGE_URL/build_info.json"
+          link_type: other
+        - name: start.sh
+          url: "$PACKAGE_URL/start.sh"
+          link_type: other
+        - name: start.cmd
+          url: "$PACKAGE_URL/start.cmd"
+          link_type: other
+        - name: start.ps1
+          url: "$PACKAGE_URL/start.ps1"
+          link_type: other
+        - name: core-permissions.rst
+          url: "$PACKAGE_URL/core-permissions.rst"
+          link_type: other
+  rules:
+    - if: $CI_COMMIT_TAG

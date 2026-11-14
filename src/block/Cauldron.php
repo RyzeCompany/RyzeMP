@@ -24,7 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Cauldron as TileCauldron;
-use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\SupportType;
 use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
@@ -37,10 +37,15 @@ use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\Utils;
+use pocketmine\world\vibration\GameEvent;
 use pocketmine\world\weather\Precipitation;
 use function assert;
 
-final class Cauldron extends Transparent{
+final class Cauldron extends Transparent implements ComparatorReadable{
+
+	public function getComparatorOutput() : int{
+		return 0; //empty
+	}
 
 	public function writeStateToWorld() : void{
 		parent::writeStateToWorld();
@@ -73,6 +78,7 @@ final class Cauldron extends Transparent{
 	private function fill(int $amount, FillableCauldron $result, Item $usedItem, Item $returnedItem, array &$returnedItems) : void{
 		$this->position->getWorld()->setBlock($this->position, $result->setFillLevel($amount));
 		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), $result->getFillSound());
+		$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
 
 		$usedItem->pop();
 		$returnedItems[] = $returnedItem;
@@ -96,15 +102,18 @@ final class Cauldron extends Transparent{
 		return true;
 	}
 
-	/** Vanilla empty-cauldron precipitation: rain 5%, snow 10% per weather sample. */
+	/**
+	 * Rain (5% chance) and snow (10%) falling into an empty cauldron start filling it with water or powder snow.
+	 */
 	public function onPrecipitation(Precipitation $precipitation) : void{
 		$result = match($precipitation){
-			Precipitation::RAIN => Utils::getRandomFloat() < 0.05 ? VanillaBlocks::WATER_CAULDRON() : null,
-			Precipitation::SNOW => Utils::getRandomFloat() < PowderSnowCauldron::SNOW_FILL_CHANCE ? VanillaBlocks::POWDER_SNOW_CAULDRON() : null,
+			Precipitation::RAIN => Utils::getRandomFloat() < FillableCauldron::RAIN_FILL_CHANCE ? VanillaBlocks::WATER_CAULDRON() : null,
+			Precipitation::SNOW => Utils::getRandomFloat() < FillableCauldron::SNOW_FILL_CHANCE ? VanillaBlocks::POWDER_SNOW_CAULDRON() : null,
 			Precipitation::NONE => null
 		};
 		if($result !== null){
-			BlockEventHelper::form($this, $result->setFillLevel(1), $this);
+			$this->position->getWorld()->setBlock($this->position, $result->setFillLevel(FillableCauldron::PRECIPITATION_FILL_AMOUNT));
+			$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE);
 		}
 	}
 

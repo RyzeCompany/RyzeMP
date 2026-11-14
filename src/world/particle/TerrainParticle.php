@@ -29,11 +29,10 @@ use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class TerrainParticle extends ProtocolParticle{ // BlockParticle
-	public function __construct(protected Block $b){}
+class TerrainParticle implements Particle{
+	public function __construct(private Block $b){}
 
 	public function encode(Vector3 $pos) : array{
-		$runtimeId = TypeConverter::getInstance($this->protocolId)->getBlockTranslator()->internalIdToNetworkId($this->b->getStateId());
-		return [LevelEventPacket::standardParticle(ParticleIds::TERRAIN, $runtimeId, $pos, $this->protocolId)];
+		return [LevelEventPacket::standardParticle(ParticleIds::TERRAIN, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->b->getStateId()), $pos)];
 	}
 }

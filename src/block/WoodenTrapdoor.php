@@ -30,6 +30,6 @@ class WoodenTrapdoor extends Trapdoor implements WoodMaterial{
 	use WoodTypeTrait;
 
 	public function getFuelTime() : int{
-		return 300;
+		return $this->woodType->isFlammable() ? 300 : 0;
 	}
 }

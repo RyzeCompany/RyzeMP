@@ -54,25 +54,28 @@ final class TileFactory{
 		$this->register(Banner::class, ["Banner", "minecraft:banner"]);
 		$this->register(Beacon::class, ["Beacon", "minecraft:beacon"]);
 		$this->register(Bed::class, ["Bed", "minecraft:bed"]);
+		$this->register(Beehive::class, ["Beehive", "minecraft:beehive"]);
 		$this->register(Bell::class, ["Bell", "minecraft:bell"]);
 		$this->register(BlastFurnace::class, ["BlastFurnace", "minecraft:blast_furnace"]);
 		$this->register(BrewingStand::class, ["BrewingStand", "minecraft:brewing_stand"]);
+		$this->register(BrushableBlock::class, ["BrushableBlock", "minecraft:brushable_block"]);
 		$this->register(Campfire::class, ["Campfire", "minecraft:campfire"]);
 		$this->register(Cauldron::class, ["Cauldron", "minecraft:cauldron"]);
 		$this->register(Chest::class, ["Chest", "minecraft:chest"]);
 		$this->register(ChiseledBookshelf::class, ["ChiseledBookshelf", "minecraft:chiseled_bookshelf"]);
+		$this->register(Shelf::class, ["Shelf", "minecraft:shelf"]);
 		$this->register(Comparator::class, ["Comparator", "minecraft:comparator"]);
 		$this->register(DaylightSensor::class, ["DaylightDetector", "minecraft:daylight_detector"]);
-		$this->register(Dispenser::class, ["Dispenser", "minecraft:dispenser"]);
+		$this->register(DecoratedPot::class, ["DecoratedPot", "minecraft:decorated_pot"]);
 		$this->register(EnchantTable::class, ["EnchantTable", "minecraft:enchanting_table"]);
 		$this->register(EnderChest::class, ["EnderChest", "minecraft:ender_chest"]);
-		$this->register(EndGateway::class, ["EndGateway", "minecraft:end_gateway"]);
 		$this->register(FlowerPot::class, ["FlowerPot", "minecraft:flower_pot"]);
 		$this->register(NormalFurnace::class, ["Furnace", "minecraft:furnace"]);
 		$this->register(Hopper::class, ["Hopper", "minecraft:hopper"]);
 		$this->register(ItemFrame::class, ["ItemFrame"]); //this is an entity in PC
 		$this->register(Jukebox::class, ["Jukebox", "RecordPlayer", "minecraft:jukebox"]);
 		$this->register(Lectern::class, ["Lectern", "minecraft:lectern"]);
+		$this->register(Lodestone::class, ["Lodestone", "minecraft:lodestone"]);
 		$this->register(MonsterSpawner::class, ["MobSpawner", "minecraft:mob_spawner"]);
 		$this->register(Note::class, ["Music", "minecraft:noteblock"]);
 		$this->register(ShulkerBox::class, ["ShulkerBox", "minecraft:shulker_box"]);
@@ -82,22 +85,24 @@ final class TileFactory{
 		$this->register(MobHead::class, ["Skull", "minecraft:skull"]);
 		$this->register(GlowingItemFrame::class, ["GlowItemFrame"]);
 		$this->register(HangingSign::class, ["HangingSign", "minecraft:hanging_sign"]);
+		$this->register(Dispenser::class, ["Dispenser", "minecraft:dispenser"]);
+		$this->register(Dropper::class, ["Dropper", "minecraft:dropper"]);
+		$this->register(Crafter::class, ["Crafter", "minecraft:crafter"]);
+		$this->register(PistonArm::class, ["PistonArm", "minecraft:piston_arm"]);
+		$this->register(MovingBlock::class, ["MovingBlock", "minecraft:moving_block"]);
+		$this->register(Conduit::class, ["Conduit", "minecraft:conduit"]);
+		$this->register(CreakingHeart::class, ["CreakingHeart", "minecraft:creaking_heart"]);
+		$this->register(EndGateway::class, ["EndGateway", "minecraft:end_gateway"]);
 		$this->register(TrialSpawner::class, ["TrialSpawner", "minecraft:trial_spawner"]);
 		$this->register(Vault::class, ["Vault", "minecraft:vault"]);
-		$this->register(BrushableBlock::class, ["BrushableBlock", "minecraft:brushable_block"]);
-		$this->register(DecoratedPot::class, ["DecoratedPot", "minecraft:decorated_pot"]);
+		$this->register(StructureBlock::class, ["StructureBlock", "minecraft:structure_block"]);
+		$this->register(Jigsaw::class, ["JigsawBlock", "minecraft:jigsaw"]);
+		$this->register(CommandBlock::class, ["CommandBlock", "minecraft:command_block"]);
 
 		//TODO: ChalkboardBlock
 		//TODO: ChemistryTable
-		//TODO: CommandBlock
-		//TODO: Conduit
-		//TODO: Dropper
 		//TODO: EndPortal
-		//TODO: JigsawBlock
-		//TODO: MovingBlock
 		//TODO: NetherReactor
-		//TODO: PistonArm
-		//TODO: StructureBlock
 	}
 
 	/**
@@ -128,22 +133,15 @@ final class TileFactory{
 
 	/**
 	 * @internal
-	 * @phpstan-return class-string<Tile>|null
-	 */
-	public function getClassFromSaveId(string $saveId) : ?string{
-		return $this->knownTiles[$saveId] ?? null;
-	}
-
-	/**
-	 * @internal
 	 * @throws SavedDataLoadingException
 	 */
 	public function createFromData(World $world, CompoundTag $nbt) : ?Tile{
 		try{
-			$class = $this->getClassFromSaveId($nbt->getString(Tile::TAG_ID, ""));
-			if($class === null){
+			$type = $nbt->getString(Tile::TAG_ID, "");
+			if(!isset($this->knownTiles[$type])){
 				return null;
 			}
+			$class = $this->knownTiles[$type];
 			assert(is_a($class, Tile::class, true));
 			/**
 			 * @var Tile $tile

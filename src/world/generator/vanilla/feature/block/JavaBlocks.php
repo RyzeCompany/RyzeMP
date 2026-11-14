@@ -24,12 +24,14 @@ declare(strict_types=1);
 namespace pocketmine\world\generator\vanilla\feature\block;
 
 use pocketmine\block\Block;
-use pocketmine\block\BrushableBlock;
+use pocketmine\block\ChorusPlant;
+use pocketmine\block\Fire;
+use pocketmine\block\RedstoneWire;
 use pocketmine\block\RuntimeBlockStateRegistry;
-use pocketmine\block\TrialSpawner;
+use pocketmine\block\utils\RedstoneWireConnection;
 use pocketmine\block\VanillaBlocks;
-use pocketmine\block\Vault;
 use pocketmine\data\bedrock\block\BlockStateData;
+use pocketmine\math\Facing;
 use pocketmine\nbt\BigEndianNbtSerializer;
 use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
@@ -41,7 +43,6 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
-use pocketmine\world\dimension\portal\block\EndGateway;
 use pocketmine\world\generator\vanilla\VanillaDataFetcher;
 use pocketmine\world\generator\vanilla\WorldgenData;
 use function array_reverse;
@@ -50,7 +51,6 @@ use function array_values;
 use function count;
 use function explode;
 use function implode;
-use function in_array;
 use function intdiv;
 use function is_array;
 use function is_dir;
@@ -200,11 +200,11 @@ final class JavaBlocks{
 	private int $pmAir;
 	private int $pmWaterState;
 
-	public static function get(string $dataDir, bool $hasStructureContent = false) : self{
-		return self::$instances[$dataDir . "\0" . (int) $hasStructureContent] ??= new self($dataDir, $hasStructureContent);
+	public static function get(string $dataDir) : self{
+		return self::$instances[$dataDir] ??= new self($dataDir);
 	}
 
-	private function __construct(private string $dataDir, public readonly bool $hasStructureContent){
+	private function __construct(private string $dataDir){
 		$json = json_decode(Filesystem::fileGetContents($dataDir . "/" . VanillaDataFetcher::JAVA_BLOCKS_FILE), true, 16, JSON_THROW_ON_ERROR);
 		if(!is_array($json) || !is_array($json["blocks"] ?? null)){
 			throw new \RuntimeException("Invalid " . VanillaDataFetcher::JAVA_BLOCKS_FILE);
@@ -879,22 +879,52 @@ final class JavaBlocks{
 				$pm = $this->pmAir;
 			}
 		}
-		if(!$this->hasStructureContent && in_array($name, ["minecraft:end_gateway", "minecraft:trial_spawner", "minecraft:vault", "minecraft:suspicious_sand", "minecraft:suspicious_gravel"], true)){
-			$block = RuntimeBlockStateRegistry::getInstance()->fromStateId($pm);
-			if($block instanceof EndGateway || $block instanceof TrialSpawner || $block instanceof Vault || $block instanceof BrushableBlock){
-				$pm = $this->pmAir;
-			}
-		}
+		$pm = $this->withJavaShape($state, $pm);
 		$this->pmWater[$state] = ($this->fluid($state) & 15) === self::FLUID_WATER && $this->blockOf[$state] !== $this->waterBlock;
 		return $this->toPm[$state] = $pm;
 	}
 
 	/**
-	 * IMPORTANT: RyzeMP's current ChorusPlant, Fire and RedstoneWire runtime
-	 * states do not expose VanillaMine's directional connection setters.
-	 * Their shape properties are lossy on this fork. Shape-aware client mapping
-	 * must be restored in the protocol translation layer before production.
+	 * Since Bedrock 1.26.60 the shapes of chorus plants, fire and redstone dust are block states that the client no
+	 * longer works out. The Geyser mappings drop them, so they are copied from the Java state (same meaning).
 	 */
+	private function withJavaShape(int $state, int $pm) : int{
+		$block = RuntimeBlockStateRegistry::getInstance()->fromStateId($pm);
+		if($block instanceof ChorusPlant){
+			foreach(self::SHAPE_FACES as $property => $facing){
+				$block->setConnection($facing, $this->getBool($state, $property));
+			}
+		}elseif($block instanceof Fire){
+			foreach(self::SHAPE_FACES as $property => $facing){
+				if($facing !== Facing::DOWN){
+					$block->setConnection($facing, $this->getBool($state, $property));
+				}
+			}
+		}elseif($block instanceof RedstoneWire){
+			foreach(Facing::HORIZONTAL as $facing){
+				$block->setConnection($facing, match($this->getProperty($state, Facing::toString($facing))){
+					"side" => RedstoneWireConnection::SIDE,
+					"up" => RedstoneWireConnection::UP,
+					default => RedstoneWireConnection::NONE,
+				});
+			}
+		}else{
+			return $pm;
+		}
+		return $block->getStateId();
+	}
+
+	/**
+	 * Java shape property => face, see {@link withJavaShape()}.
+	 */
+	private const SHAPE_FACES = [
+		"down" => Facing::DOWN,
+		"up" => Facing::UP,
+		"north" => Facing::NORTH,
+		"east" => Facing::EAST,
+		"south" => Facing::SOUTH,
+		"west" => Facing::WEST,
+	];
 
 	/**
 	 * Whether the Bedrock block of this Java state keeps water in the liquid layer (waterlogged blocks, seagrass,

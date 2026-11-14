@@ -32,7 +32,8 @@ use function mt_rand;
 class ExperienceBottle extends Throwable{
 	public static function getNetworkTypeId() : string{ return EntityIds::XP_BOTTLE; }
 
-	protected function getInitialGravity() : float{ return 0.07; }
+	/** Bedrock xp_bottle.json (Java uses 0.07). */
+	protected function getInitialGravity() : float{ return 0.05; }
 
 	public function getResultDamage() : int{
 		return -1;

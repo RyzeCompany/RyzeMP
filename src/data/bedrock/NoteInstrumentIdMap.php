@@ -50,6 +50,17 @@ final class NoteInstrumentIdMap{
 				NoteInstrument::BIT => 13,
 				NoteInstrument::BANJO => 14,
 				NoteInstrument::PLING => 15,
+				//ids 16-25 checked against the NOTE sounds BDS 1.26.52 sends for note blocks over copper / under mob heads
+				NoteInstrument::TRUMPET => 16,
+				NoteInstrument::TRUMPET_EXPOSED => 17,
+				NoteInstrument::TRUMPET_WEATHERED => 18,
+				NoteInstrument::TRUMPET_OXIDIZED => 19,
+				NoteInstrument::ZOMBIE => 20,
+				NoteInstrument::SKELETON => 21,
+				NoteInstrument::CREEPER => 22,
+				NoteInstrument::ENDER_DRAGON => 23,
+				NoteInstrument::WITHER_SKELETON => 24,
+				NoteInstrument::PIGLIN => 25,
 			}, $case);
 		}
 	}

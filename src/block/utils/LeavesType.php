@@ -33,6 +33,9 @@ use pocketmine\utils\LegacyEnumShimTrait;
  * @method static LeavesType AZALEA()
  * @method static LeavesType BIRCH()
  * @method static LeavesType CHERRY()
+ * @method static LeavesType ORANGE_POPLAR()
+ * @method static LeavesType RED_POPLAR()
+ * @method static LeavesType YELLOW_POPLAR()
  * @method static LeavesType DARK_OAK()
  * @method static LeavesType FLOWERING_AZALEA()
  * @method static LeavesType JUNGLE()
@@ -54,6 +57,9 @@ enum LeavesType{
 	case FLOWERING_AZALEA;
 	case CHERRY;
 	case PALE_OAK;
+	case ORANGE_POPLAR;
+	case RED_POPLAR;
+	case YELLOW_POPLAR;
 
 	public function getDisplayName() : string{
 		return match($this){
@@ -68,6 +74,9 @@ enum LeavesType{
 			self::FLOWERING_AZALEA => "Flowering Azalea",
 			self::CHERRY => "Cherry",
 			self::PALE_OAK => "Pale Oak",
+			self::ORANGE_POPLAR => "Orange Poplar",
+			self::RED_POPLAR => "Red Poplar",
+			self::YELLOW_POPLAR => "Yellow Poplar",
 		};
 	}
 }

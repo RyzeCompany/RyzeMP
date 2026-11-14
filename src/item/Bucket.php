@@ -25,11 +25,15 @@ namespace pocketmine\item;
 
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
+use pocketmine\block\BubbleColumn;
 use pocketmine\block\Liquid;
+use pocketmine\block\PowderSnow;
+use pocketmine\block\utils\WaterloggedHelper;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\event\player\PlayerBucketFillEvent;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\world\vibration\GameEvent;
 
 class Bucket extends Item{
 
@@ -57,12 +61,59 @@ class Bucket extends Item{
 			if(!$ev->isCancelled()){
 				$player->getWorld()->setBlock($blockClicked->getPosition(), VanillaBlocks::AIR());
 				$player->getWorld()->addSound($blockClicked->getPosition()->add(0.5, 0.5, 0.5), $blockClicked->getBucketFillSound());
+				$player->getWorld()->addGameEvent($blockClicked->getPosition(), GameEvent::FLUID_PICKUP, $player);
 
 				$this->pop();
 				$returnedItems[] = $ev->getItem();
 				return ItemUseResult::SUCCESS;
 			}
 
+			return ItemUseResult::FAIL;
+		}
+
+		if($blockClicked instanceof BubbleColumn){
+			//vanilla: the column's water is picked up like a source, leaving air (the column above then collapses)
+			$ev = new PlayerBucketFillEvent($player, $blockReplace, $face, $this, VanillaItems::WATER_BUCKET());
+			$ev->call();
+			if(!$ev->isCancelled()){
+				$player->getWorld()->setBlock($blockClicked->getPosition(), VanillaBlocks::AIR());
+				$player->getWorld()->addSound($blockClicked->getPosition()->add(0.5, 0.5, 0.5), VanillaBlocks::WATER()->getBucketFillSound());
+				$player->getWorld()->addGameEvent($blockClicked->getPosition(), GameEvent::FLUID_PICKUP, $player);
+
+				$this->pop();
+				$returnedItems[] = $ev->getItem();
+				return ItemUseResult::SUCCESS;
+			}
+			return ItemUseResult::FAIL;
+		}
+
+		if(WaterloggedHelper::canDrain($blockClicked)){
+			//vanilla: the water of a waterlogged block is picked up like a source, and the block stays (dry)
+			$ev = new PlayerBucketFillEvent($player, $blockClicked, $face, $this, VanillaItems::WATER_BUCKET());
+			$ev->call();
+			if(!$ev->isCancelled()){
+				WaterloggedHelper::drain($blockClicked);
+				$player->getWorld()->addSound($blockClicked->getPosition()->add(0.5, 0.5, 0.5), VanillaBlocks::WATER()->getBucketFillSound());
+				$player->getWorld()->addGameEvent($blockClicked->getPosition(), GameEvent::FLUID_PICKUP, $player);
+
+				$this->pop();
+				$returnedItems[] = $ev->getItem();
+				return ItemUseResult::SUCCESS;
+			}
+			return ItemUseResult::FAIL;
+		}
+
+		if($blockClicked instanceof PowderSnow){
+			$ev = new PlayerBucketFillEvent($player, $blockReplace, $face, $this, VanillaItems::POWDER_SNOW_BUCKET());
+			$ev->call();
+			if(!$ev->isCancelled()){
+				$player->getWorld()->setBlock($blockClicked->getPosition(), VanillaBlocks::AIR());
+				$player->getWorld()->addSound($blockClicked->getPosition()->add(0.5, 0.5, 0.5), $blockClicked->getBucketFillSound());
+
+				$this->pop();
+				$returnedItems[] = $ev->getItem();
+				return ItemUseResult::SUCCESS;
+			}
 			return ItemUseResult::FAIL;
 		}
 

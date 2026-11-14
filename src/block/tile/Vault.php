@@ -26,13 +26,11 @@ namespace pocketmine\block\tile;
 use pocketmine\block\vault\VaultConfig;
 use pocketmine\block\vault\VaultData;
 use pocketmine\block\vault\WorldVaultHost;
-use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\player\Player;
@@ -84,11 +82,7 @@ class Vault extends Spawnable{
 		$nbt->setTag(self::TAG_DATA, $data);
 	}
 
-	protected function getRequiredNetworkBlockName() : string{
-		return BlockTypeNames::VAULT;
-	}
-
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		$players = [];
 		foreach($this->data->getConnectedPlayers() as $entityId){
 			$players[] = new LongTag($entityId);
@@ -96,8 +90,7 @@ class Vault extends Spawnable{
 		$nbt->setFloat(self::TAG_CONNECTED_PARTICLE_RANGE, $this->config->getDeactivationRange());
 		$nbt->setTag(self::TAG_CONNECTED_PLAYERS, new ListTag($players, NBT::TAG_Long));
 		$display = $this->data->getDisplayItem();
-		$nbt->setTag(self::TAG_DISPLAY_ITEM, $display !== null && $typeConverter->getItemTranslator()->toNetworkIdQuiet($display) !== null ?
-			$typeConverter->getItemTranslator()->toNetworkNbt($display) : CompoundTag::create()
+		$nbt->setTag(self::TAG_DISPLAY_ITEM, $display !== null ? $display->nbtSerialize() : CompoundTag::create()
 			->setByte("Count", 0)
 			->setShort("Damage", 0)
 			->setString("Name", "")
@@ -153,10 +146,9 @@ class Vault extends Spawnable{
 	 */
 	public function broadcastSharedData() : void{
 		$this->clearSpawnCompoundCache();
-		$this->position->getWorld()->broadcastPacketToViewersByTypeConverter(
-			$this->position,
-			fn(TypeConverter $converter) : array => $this->canSpawnTo($converter) ?
-				[BlockActorDataPacket::create(BlockPosition::fromVector3($this->position), $this->getSerializedSpawnCompound($converter))] : []
-		);
+		$this->position->getWorld()->broadcastPacketToViewers($this->position, BlockActorDataPacket::create(
+			BlockPosition::fromVector3($this->position),
+			$this->getSerializedSpawnCompound()
+		));
 	}
 }

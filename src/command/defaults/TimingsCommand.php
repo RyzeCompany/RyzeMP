@@ -25,6 +25,8 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
@@ -51,7 +53,7 @@ use const CURLOPT_HTTPHEADER;
 use const CURLOPT_POST;
 use const CURLOPT_POSTFIELDS;
 
-class TimingsCommand extends NativeCommand{
+class TimingsCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -62,7 +64,11 @@ class TimingsCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_TIMINGS);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::enum("mode", "TimingsMode", ["on", "off", "paste", "reset", "report", "merged"])]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

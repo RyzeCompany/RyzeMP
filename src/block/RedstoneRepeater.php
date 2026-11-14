@@ -36,6 +36,7 @@ use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\redstone\RedstoneEngine;
 
 class RedstoneRepeater extends Flowable implements PoweredByRedstone, HorizontalFacing{
 	use HorizontalFacingTrait;
@@ -88,5 +89,104 @@ class RedstoneRepeater extends Flowable implements PoweredByRedstone, Horizontal
 		return $block->getAdjacentSupportType(Facing::DOWN) !== SupportType::NONE;
 	}
 
-	//TODO: redstone functionality
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	/**
+	 * The repeater takes its input from the block on its facing side and outputs on the opposite side.
+	 */
+	public function getOutputFace() : int{
+		return Facing::opposite($this->facing);
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->powered && $face === $this->getOutputFace() ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->getWeakPower($face);
+	}
+
+	public function connectsToRedstoneWire(int $face) : bool{
+		return Facing::axis($face) === Facing::axis($this->facing);
+	}
+
+	/**
+	 * Returns the number of game ticks between an input change and the output change.
+	 */
+	public function getDelayTicks() : int{
+		return $this->delay * RedstoneEngine::REDSTONE_TICK;
+	}
+
+	private function isInputPowered(RedstoneEngine $redstone) : bool{
+		$pos = $this->position;
+		return $redstone->getPowerFrom($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ(), $this->facing) > 0;
+	}
+
+	/**
+	 * A repeater is locked when a powered repeater or comparator points into one of its sides.
+	 */
+	public function isLocked() : bool{
+		foreach([Facing::rotateY($this->facing, true), Facing::rotateY($this->facing, false)] as $side){
+			$block = $this->getSide($side);
+			if(($block instanceof RedstoneRepeater || $block instanceof RedstoneComparator) && $block->getWeakPower(Facing::opposite($side)) > 0){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function onNearbyBlockChange() : void{
+		$world = $this->position->getWorld();
+		if(!$this->canBeSupportedAt($this)){
+			$world->useBreakOn($this->position);
+			return;
+		}
+		$redstone = $world->getRedstone();
+		if($redstone === null || $this->isLocked()){
+			return;
+		}
+		$pos = $this->position;
+		if($this->isInputPowered($redstone) !== $this->powered && !$world->isBlockUpdateScheduled($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())){
+			$world->scheduleDelayedBlockUpdate($pos, $this->getDelayTicks());
+		}
+	}
+
+	public function onScheduledUpdate() : void{
+		$world = $this->position->getWorld();
+		$redstone = $world->getRedstone();
+		if($redstone === null || $this->isLocked()){
+			return;
+		}
+		$shouldPower = $this->isInputPowered($redstone);
+		if($this->powered && !$shouldPower){
+			$this->setPoweredAndUpdate(false);
+		}elseif(!$this->powered){
+			$this->setPoweredAndUpdate(true);
+			if(!$shouldPower){
+				//pulses shorter than the delay are extended to the delay
+				$world->scheduleDelayedBlockUpdate($this->position, $this->getDelayTicks());
+			}
+		}
+	}
+
+	private function setPoweredAndUpdate(bool $powered) : void{
+		$this->powered = $powered;
+		$world = $this->position->getWorld();
+		$world->setBlock($this->position, $this);
+		$world->getRedstone()?->updateAroundSide($this->position, $this->getOutputFace());
+	}
+
+	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
+		$result = parent::onBreak($item, $player, $returnedItems);
+		if($this->powered){
+			$this->position->getWorld()->getRedstone()?->updateAroundSide($this->position, $this->getOutputFace());
+		}
+		return $result;
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
+	}
 }

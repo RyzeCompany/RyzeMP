@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\promise;
 
+use pocketmine\plugin\PluginFaultHandler;
+use pocketmine\utils\Utils;
+
 /**
  * @phpstan-template TValue
  */
@@ -47,7 +50,12 @@ final class PromiseResolver{
 		$this->shared->state = true;
 		$this->shared->result = $value;
 		foreach($this->shared->onSuccess as $c){
-			$c($value);
+			try{
+				$c($value);
+			}catch(\Throwable $e){
+				//a failing callback must not prevent the others from being called; rethrown if no plugin is to blame
+				PluginFaultHandler::isolate($e, null, "promise success callback " . Utils::getNiceClosureName($c), $c);
+			}
 		}
 		$this->shared->onSuccess = [];
 		$this->shared->onFailure = [];
@@ -59,7 +67,11 @@ final class PromiseResolver{
 		}
 		$this->shared->state = false;
 		foreach($this->shared->onFailure as $c){
-			$c();
+			try{
+				$c();
+			}catch(\Throwable $e){
+				PluginFaultHandler::isolate($e, null, "promise failure callback " . Utils::getNiceClosureName($c), $c);
+			}
 		}
 		$this->shared->onSuccess = [];
 		$this->shared->onFailure = [];

@@ -37,6 +37,7 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use function min;
+use function mt_getrandmax;
 use function mt_rand;
 
 /**
@@ -87,12 +88,26 @@ class NetherVines extends Flowable implements Ageable{
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($item instanceof Fertilizer){
-			if($this->grow($player, mt_rand(1, 5))){
+			if($this->grow($player, self::getBlocksToGrowWhenBonemealed())){
 				$item->pop();
 			}
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Vanilla NetherVines.getBlocksToGrowWhenBonemealed(): always 1, and each further block with a chance that shrinks
+	 * by a factor 0.826 every time (0.826, 0.826², ...). Space in front of the tip limits the actual growth.
+	 */
+	private static function getBlocksToGrowWhenBonemealed() : int{
+		$probability = 1.0;
+		$count = 0;
+		while(mt_rand() / (mt_getrandmax() + 1) < $probability){
+			$probability *= 0.826;
+			++$count;
+		}
+		return $count;
 	}
 
 	public function ticksRandomly() : bool{
@@ -161,5 +176,9 @@ class NetherVines extends Flowable implements Ageable{
 
 	public function getSupportType(int $facing) : SupportType{
 		return SupportType::NONE;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 50;
 	}
 }

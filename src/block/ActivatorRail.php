@@ -26,8 +26,11 @@ namespace pocketmine\block;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\RailPoweredByRedstoneTrait;
 
+/**
+ * Acts on the minecarts passing over it (see {@link \pocketmine\entity\vehicle\AbstractMinecart}): when powered, it
+ * ejects the riders of minecarts, primes TNT minecarts, disables hopper minecarts and runs the command of command
+ * block minecarts; unpowered, it enables hopper minecarts again.
+ */
 class ActivatorRail extends StraightOnlyRail implements PoweredByRedstone{
 	use RailPoweredByRedstoneTrait;
-
-	//TODO
 }

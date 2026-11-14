@@ -82,6 +82,7 @@ final class OceanMonumentWingRoom extends OceanMonumentPiece{
 			$this->placeBlock($c, $light, 13, 7, 20, $box);
 			$this->fillBox($c, $box, 6, 0, 21, 7, 4, 21, $light);
 			$this->fillBox($c, $box, 15, 0, 21, 16, 4, 21, $light);
+			$this->spawnElder($c, $box, 11, 2, 16);
 		}elseif($this->mainDesign === 1){
 			$this->fillBox($c, $box, 9, 3, 18, 13, 3, 20, $light);
 			$this->fillBox($c, $box, 9, 0, 18, 9, 2, 18, $light);
@@ -112,6 +113,7 @@ final class OceanMonumentWingRoom extends OceanMonumentPiece{
 			}
 			$this->fillBox($c, $box, 8, 3, 8, 8, 3, 13, $black);
 			$this->fillBox($c, $box, 14, 3, 8, 14, 3, 13, $black);
+			$this->spawnElder($c, $box, 11, 5, 13);
 		}
 	}
 }

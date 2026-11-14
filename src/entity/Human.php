@@ -25,9 +25,6 @@ namespace pocketmine\entity;
 
 use pocketmine\data\bedrock\item\SavedItemStackData;
 use pocketmine\data\SavedDataLoadingException;
-use pocketmine\entity\animation\TotemUseAnimation;
-use pocketmine\entity\effect\EffectInstance;
-use pocketmine\entity\effect\VanillaEffects;
 use pocketmine\entity\projectile\ProjectileSource;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\player\PlayerExhaustEvent;
@@ -53,7 +50,6 @@ use pocketmine\network\mcpe\NetworkBroadcastUtils;
 use pocketmine\network\mcpe\protocol\AddPlayerPacket;
 use pocketmine\network\mcpe\protocol\PlayerListPacket;
 use pocketmine\network\mcpe\protocol\PlayerSkinPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\AbilitiesData;
 use pocketmine\network\mcpe\protocol\types\AbilitiesLayer;
 use pocketmine\network\mcpe\protocol\types\command\CommandPermissions;
@@ -67,8 +63,8 @@ use pocketmine\network\mcpe\protocol\types\inventory\ItemStackWrapper;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
 use pocketmine\network\mcpe\protocol\UpdateAbilitiesPacket;
+use pocketmine\network\mcpe\SpectatorAbilities;
 use pocketmine\player\Player;
-use pocketmine\world\sound\TotemUseSound;
 use pocketmine\world\World;
 use Ramsey\Uuid\Uuid;
 use Ramsey\Uuid\UuidInterface;
@@ -77,6 +73,7 @@ use function array_filter;
 use function array_key_exists;
 use function array_merge;
 use function array_values;
+use function max;
 use function min;
 
 class Human extends Living implements ProjectileSource, InventoryHolder{
@@ -166,11 +163,9 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	 * @param Player[]|null $targets
 	 */
 	public function sendSkin(?array $targets = null) : void{
-		TypeConverter::broadcastByTypeConverter($targets ?? $this->hasSpawned, function(TypeConverter $typeConverter) : array{
-			return [
-				PlayerSkinPacket::create($this->getUniqueId(), "", "", $typeConverter->coreSkinToNet($this->skin))
-			];
-		});
+		NetworkBroadcastUtils::broadcastPackets($targets ?? $this->hasSpawned, [
+			PlayerSkinPacket::create($this->getUniqueId(), "", "", TypeConverter::getInstance()->getSkinAdapter()->toSkinData($this->skin))
+		]);
 	}
 
 	public function jump() : void{
@@ -211,8 +206,10 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 
 	protected function applyConsumptionResults(Consumable $consumable) : void{
 		if($consumable instanceof FoodSource){
-			$this->hungerManager->addFood($consumable->getFoodRestore());
-			$this->hungerManager->addSaturation($consumable->getSaturationRestore());
+			$manager = $this->hungerManager;
+			$manager->addFood($consumable->getFoodRestore());
+			//saturation can't exceed the food level
+			$manager->setSaturation(max(0.0, min($manager->getSaturation() + $consumable->getSaturationRestore(), $manager->getFood())));
 		}
 
 		parent::applyConsumptionResults($consumable);
@@ -380,40 +377,25 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	}
 
 	public function applyDamageModifiers(EntityDamageEvent $source) : void{
-		parent::applyDamageModifiers($source);
-
-		$type = $source->getCause();
-		if($type !== EntityDamageEvent::CAUSE_SUICIDE && $type !== EntityDamageEvent::CAUSE_VOID
-			&& ($this->inventory->getItemInHand() instanceof Totem || $this->offHandInventory->getItem(0) instanceof Totem)){
-
-			$compensation = $this->getHealth() - $source->getFinalDamage() - 1;
-			if($compensation <= -1){
-				$source->setModifier($compensation, EntityDamageEvent::MODIFIER_TOTEM);
-			}
-		}
+		parent::applyDamageModifiers($source); //the totem of undying is handled by Living
 	}
 
 	protected function applyPostDamageEffects(EntityDamageEvent $source) : void{
 		parent::applyPostDamageEffects($source);
-		$totemModifier = $source->getModifier(EntityDamageEvent::MODIFIER_TOTEM);
-		if($totemModifier < 0){ //Totem prevented death
-			$this->effectManager->clear();
+	}
 
-			$this->effectManager->add(new EffectInstance(VanillaEffects::REGENERATION(), 40 * 20, 1));
-			$this->effectManager->add(new EffectInstance(VanillaEffects::FIRE_RESISTANCE(), 40 * 20, 1));
-			$this->effectManager->add(new EffectInstance(VanillaEffects::ABSORPTION(), 5 * 20, 1));
+	protected function holdsTotemOfUndying() : bool{
+		return $this->inventory->getItemInHand() instanceof Totem || $this->offHandInventory->getItem(0) instanceof Totem;
+	}
 
-			$this->broadcastAnimation(new TotemUseAnimation($this));
-			$this->broadcastSound(new TotemUseSound());
-
-			$hand = $this->inventory->getItemInHand();
-			if($hand instanceof Totem){
-				$hand->pop(); //Plugins could alter max stack size
-				$this->inventory->setItemInHand($hand);
-			}elseif(($offHand = $this->offHandInventory->getItem(0)) instanceof Totem){
-				$offHand->pop();
-				$this->offHandInventory->setItem(0, $offHand);
-			}
+	protected function consumeTotemOfUndying() : void{
+		$hand = $this->inventory->getItemInHand();
+		if($hand instanceof Totem){
+			$hand->pop(); //Plugins could alter max stack size
+			$this->inventory->setItemInHand($hand);
+		}elseif(($offHand = $this->offHandInventory->getItem(0)) instanceof Totem){
+			$offHand->pop();
+			$this->offHandInventory->setItem(0, $offHand);
 		}
 	}
 
@@ -498,28 +480,27 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	protected function sendSpawnPacket(Player $player) : void{
 		$networkSession = $player->getNetworkSession();
 		$typeConverter = $networkSession->getTypeConverter();
-		$targetProtocol = $networkSession->getProtocolId();
-		$isNpc = !($this instanceof Player);
-		if($isNpc && !$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->coreSkinToNet($this->skin))]))){
-			$this->markSpawnPacketRejected();
-			return;
+		if(!($this instanceof Player)){
+			$networkSession->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($this->uuid, $this->id, $this->getName(), $typeConverter->getSkinAdapter()->toSkinData($this->skin))]));
 		}
 
-		$addPlayerPacket = AddPlayerPacket::create(
+		$networkSession->sendDataPacket(AddPlayerPacket::create(
 			$this->getUniqueId(),
 			$this->getName(),
 			$this->getId(),
 			"",
-			$this->location->asVector3(),
+			$this->getOffsetPosition($this->location), //eyes, like MovePlayer (BDS)
 			$this->getMotion(),
 			$this->location->pitch,
 			$this->location->yaw,
 			$this->location->yaw, //TODO: head yaw
 			ItemStackWrapper::legacy($typeConverter->coreItemStackToNet($this->getInventory()->getItemInHand())),
-			GameMode::SURVIVAL,
+			$this instanceof Player ? $typeConverter->coreGameModeToProtocol($this->getGamemode()) : GameMode::SURVIVAL,
 			$this->getAllNetworkData(),
 			new PropertySyncData([], []),
 			UpdateAbilitiesPacket::create(new AbilitiesData(CommandPermissions::NORMAL, PlayerPermissions::VISITOR, $this->getId() /* TODO: this should be unique ID */, [
+				//BDS lists the spectator layer of a spectator player before the base layer
+				...($this instanceof Player && $this->isSpectator() ? [SpectatorAbilities::layer($this->isFlying(), !$this->hasBlockCollision())] : []),
 				new AbilitiesLayer(
 					AbilitiesLayer::LAYER_BASE,
 					array_fill(0, AbilitiesLayer::NUMBER_OF_ABILITIES, false),
@@ -528,36 +509,11 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 					0.0
 				)
 			])),
-			[], //TODO: entity links
+			$this->getSpawnLinks($player),
 			"", //device ID (we intentionally don't send this - secvuln)
 			DeviceOS::UNKNOWN //we intentionally don't send this (secvuln)
-		);
-		if($targetProtocol < ProtocolInfo::PROTOCOL_1_26_40){
-			// Legacy clients may need the list entry until AddPlayer has reached the client.
-			// A transport receipt does not guarantee rendering, but avoids removing it
-			// in the same outgoing packet batch as the spawn.
-			$networkSession->sendDataPacketWithReceipt($addPlayerPacket)->onCompletion(
-				function() use ($networkSession, $player, $isNpc) : void{
-					if($isNpc && $player->isConnected()){
-						$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
-					}
-				},
-				function() use ($networkSession, $player, $isNpc) : void{
-					if($player->isConnected()){
-						if($isNpc){
-							$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
-						}
-						$this->despawnFrom($player, false);
-					}
-				}
-			);
-		}elseif(!$networkSession->sendDataPacket($addPlayerPacket)){
-			$this->markSpawnPacketRejected();
-			if($isNpc){
-				$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
-			}
-			return;
-		}
+		));
+
 		//TODO: Hack for MCPE 1.2.13: DATA_NAMETAG is useless in AddPlayerPacket, so it has to be sent separately
 		$this->sendData([$player], [EntityMetadataProperties::NAMETAG => new StringMetadataProperty($this->getNameTag())]);
 
@@ -565,13 +521,18 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 		$entityEventBroadcaster->onMobArmorChange([$networkSession], $this);
 		$entityEventBroadcaster->onMobOffHandItemChange([$networkSession], $this);
 
-		if($isNpc && $targetProtocol >= ProtocolInfo::PROTOCOL_1_26_40){
+		if(!($this instanceof Player)){
 			$networkSession->sendDataPacket(PlayerListPacket::remove([PlayerListEntry::createRemovalEntry($this->uuid)]));
 		}
 	}
 
 	public function getOffsetPosition(Vector3 $vector3) : Vector3{
 		return $vector3->add(0, 1.621, 0); //TODO: +0.001 hack for MCPE falling underground
+	}
+
+	public function getSeatedHeightOffset() : float{
+		//the network position of players is their eyes
+		return $this->size->getEyeHeight() * self::SEATED_EYE_HEIGHT_FACTOR;
 	}
 
 	protected function onDispose() : void{

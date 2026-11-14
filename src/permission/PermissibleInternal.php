@@ -25,6 +25,7 @@ namespace pocketmine\permission;
 
 use pocketmine\plugin\Plugin;
 use pocketmine\plugin\PluginException;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\timings\Timings;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\Utils;
@@ -172,7 +173,11 @@ class PermissibleInternal implements Permissible{
 		Timings::$permissibleCalculationCallback->time(function() use ($diff) : void{
 			if(count($diff) > 0){
 				foreach($this->permissionRecalculationCallbacks as $closure){
-					$closure($diff);
+					try{
+						$closure($diff);
+					}catch(\Throwable $e){
+						PluginFaultHandler::isolate($e, null, "permission recalculation callback " . Utils::getNiceClosureName($closure), $closure);
+					}
 				}
 			}
 		});

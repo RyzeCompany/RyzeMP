@@ -83,6 +83,15 @@ abstract class ExperienceUtils{
 			throw new AssumptionFailedError("Expected at least 1 solution");
 		}
 
-		return max($x); //we're only interested in the positive solution
+		//the positive solution gives the level; the progress through it is linear in points like vanilla (2 points at
+		//level 0 are 2/7 of the bar, not the 0.317 of the curve), and the level is corrected for float rounding
+		$level = (int) max($x);
+		while($level > 0 && self::getXpToReachLevel($level) > $xp){
+			--$level;
+		}
+		while(self::getXpToReachLevel($level + 1) <= $xp){
+			++$level;
+		}
+		return $level + ($xp - self::getXpToReachLevel($level)) / self::getXpToCompleteLevel($level);
 	}
 }

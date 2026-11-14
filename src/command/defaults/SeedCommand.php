@@ -24,11 +24,12 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\Player;
 
-class SeedCommand extends NativeCommand{
+class SeedCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -38,7 +39,11 @@ class SeedCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SEED);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if($sender instanceof Player){
 			$seed = $sender->getPosition()->getWorld()->getSeed();
 		}else{

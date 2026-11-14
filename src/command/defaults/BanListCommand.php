@@ -24,6 +24,8 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\BanEntry;
@@ -35,7 +37,7 @@ use function sort;
 use function strtolower;
 use const SORT_STRING;
 
-class BanListCommand extends NativeCommand{
+class BanListCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +48,11 @@ class BanListCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_BAN_LIST);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::enum("type", "BanListType", ["players", "ips"], true)]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(isset($args[0])){
 			$args[0] = strtolower($args[0]);
 			if($args[0] === "ips"){

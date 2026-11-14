@@ -31,24 +31,45 @@ use pocketmine\data\bedrock\LegacyEntityIdToStringIdMap;
 use pocketmine\data\bedrock\PotionTypeIdMap;
 use pocketmine\data\bedrock\PotionTypeIds;
 use pocketmine\data\SavedDataLoadingException;
+use pocketmine\entity\animal\Chicken;
+use pocketmine\entity\animal\Cow;
+use pocketmine\entity\animal\Pig;
+use pocketmine\entity\animal\Sheep;
+use pocketmine\entity\boss\EnderDragon;
+use pocketmine\entity\boss\Wither;
 use pocketmine\entity\EntityDataHelper as Helper;
+use pocketmine\entity\monster\Creeper;
+use pocketmine\entity\monster\HostileMobs;
+use pocketmine\entity\monster\Skeleton;
+use pocketmine\entity\monster\Spider;
+use pocketmine\entity\monster\Warden;
 use pocketmine\entity\object\AreaEffectCloud;
+use pocketmine\entity\object\ArmorStand;
 use pocketmine\entity\object\EndCrystal;
 use pocketmine\entity\object\ExperienceOrb;
 use pocketmine\entity\object\FallingBlock;
 use pocketmine\entity\object\ItemEntity;
+use pocketmine\entity\object\OminousItemSpawner;
 use pocketmine\entity\object\Painting;
 use pocketmine\entity\object\PaintingMotive;
 use pocketmine\entity\object\PrimedTNT;
 use pocketmine\entity\projectile\Arrow;
+use pocketmine\entity\projectile\DangerousWitherSkull;
+use pocketmine\entity\projectile\DragonFireball;
 use pocketmine\entity\projectile\Egg;
 use pocketmine\entity\projectile\EnderPearl;
 use pocketmine\entity\projectile\ExperienceBottle;
 use pocketmine\entity\projectile\IceBomb;
+use pocketmine\entity\projectile\SmallFireball;
 use pocketmine\entity\projectile\Snowball;
 use pocketmine\entity\projectile\SplashPotion;
 use pocketmine\entity\projectile\Trident;
+use pocketmine\entity\projectile\WindCharge;
+use pocketmine\entity\projectile\WitherSkull;
+use pocketmine\entity\vehicle\Boats;
+use pocketmine\entity\vehicle\Minecarts;
 use pocketmine\item\Item;
+use pocketmine\item\VanillaItems;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NbtException;
@@ -62,6 +83,7 @@ use pocketmine\utils\Utils;
 use pocketmine\world\World;
 use function count;
 use function reset;
+use function str_starts_with;
 
 /**
  * This class manages the creation of entities loaded from disk.
@@ -84,6 +106,17 @@ final class EntityFactory{
 	 */
 	private array $saveNames = [];
 
+	/** Save names of the PocketMine-MP 5.44.3 mobs that VanillaMine rewrote with their vanilla AI. */
+	private const REWRITTEN_SAVE_NAMES = ["Squid", "minecraft:squid", "Villager", "minecraft:villager", "Zombie", "minecraft:zombie"];
+
+	/**
+	 * The "minecraft:" save names of VanillaMine's own mobs (see the end of the constructor). A plugin that registers
+	 * one of them again still loads, but saved entities with that name keep loading as ours.
+	 * @var true[]
+	 * @phpstan-var array<string, true>
+	 */
+	private array $keepBuiltIn = [];
+
 	public function __construct(){
 		//define legacy save IDs first - use them for saving for maximum compatibility with Minecraft PC
 		//TODO: index them by version to allow proper multi-save compatibility
@@ -91,6 +124,10 @@ final class EntityFactory{
 		$this->register(AreaEffectCloud::class, function(World $world, CompoundTag $nbt) : AreaEffectCloud{
 			return new AreaEffectCloud(Helper::parseLocation($nbt, $world), $nbt);
 		}, ['AreaEffectCloud', 'minecraft:area_effect_cloud']);
+
+		$this->register(ArmorStand::class, function(World $world, CompoundTag $nbt) : ArmorStand{
+			return new ArmorStand(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['ArmorStand', 'minecraft:armor_stand']);
 
 		$this->register(Arrow::class, function(World $world, CompoundTag $nbt) : Arrow{
 			return new Arrow(Helper::parseLocation($nbt, $world), null, $nbt->getByte(Arrow::TAG_CRIT, 0) === 1, $nbt);
@@ -144,6 +181,10 @@ final class EntityFactory{
 			return new ItemEntity(Helper::parseLocation($nbt, $world), $item, $nbt);
 		}, ['Item', 'minecraft:item']);
 
+		$this->register(OminousItemSpawner::class, function(World $world, CompoundTag $nbt) : OminousItemSpawner{
+			return new OminousItemSpawner(Helper::parseLocation($nbt, $world), VanillaItems::AIR(), $nbt);
+		}, ['OminousItemSpawner', 'minecraft:ominous_item_spawner']);
+
 		$this->register(Painting::class, function(World $world, CompoundTag $nbt) : Painting{
 			$motive = PaintingMotive::getMotiveByName($nbt->getString(Painting::TAG_MOTIVE));
 			if($motive === null){
@@ -168,6 +209,14 @@ final class EntityFactory{
 		$this->register(Snowball::class, function(World $world, CompoundTag $nbt) : Snowball{
 			return new Snowball(Helper::parseLocation($nbt, $world), null, $nbt);
 		}, ['Snowball', 'minecraft:snowball']);
+
+		$this->register(WindCharge::class, function(World $world, CompoundTag $nbt) : WindCharge{
+			return new WindCharge(Helper::parseLocation($nbt, $world), null, $nbt);
+		}, ['minecraft:wind_charge_projectile']);
+
+		$this->register(SmallFireball::class, function(World $world, CompoundTag $nbt) : SmallFireball{
+			return new SmallFireball(Helper::parseLocation($nbt, $world), null, $nbt);
+		}, ['SmallFireball', 'minecraft:small_fireball']);
 
 		$this->register(SplashPotion::class, function(World $world, CompoundTag $nbt) : SplashPotion{
 			$potionType = PotionTypeIdMap::getInstance()->fromId($nbt->getShort(SplashPotion::TAG_POTION_ID, PotionTypeIds::WATER));
@@ -207,9 +256,94 @@ final class EntityFactory{
 			return new Zombie(Helper::parseLocation($nbt, $world), $nbt);
 		}, ['Zombie', 'minecraft:zombie']);
 
+		$this->register(Chicken::class, function(World $world, CompoundTag $nbt) : Chicken{
+			return new Chicken(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Chicken', 'minecraft:chicken']);
+
+		$this->register(Cow::class, function(World $world, CompoundTag $nbt) : Cow{
+			return new Cow(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Cow', 'minecraft:cow']);
+
+		$this->register(Pig::class, function(World $world, CompoundTag $nbt) : Pig{
+			return new Pig(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Pig', 'minecraft:pig']);
+
+		$this->register(Sheep::class, function(World $world, CompoundTag $nbt) : Sheep{
+			return new Sheep(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Sheep', 'minecraft:sheep']);
+
+		$this->register(Creeper::class, function(World $world, CompoundTag $nbt) : Creeper{
+			return new Creeper(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Creeper', 'minecraft:creeper']);
+
+		$this->register(Skeleton::class, function(World $world, CompoundTag $nbt) : Skeleton{
+			return new Skeleton(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Skeleton', 'minecraft:skeleton']);
+
+		$this->register(Spider::class, function(World $world, CompoundTag $nbt) : Spider{
+			return new Spider(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Spider', 'minecraft:spider']);
+
 		$this->register(Human::class, function(World $world, CompoundTag $nbt) : Human{
 			return new Human(Helper::parseLocation($nbt, $world), Human::parseSkinNBT($nbt), $nbt);
 		}, ['Human']);
+
+		HostileMobs::registerEntities($this);
+		MobsPhase2::registerSaveData($this);
+		Minecarts::registerEntities($this);
+		Boats::registerEntities($this);
+		$this->registerBossMobs();
+	}
+
+	/**
+	 * Mobs phase 4: the bosses (ender dragon, wither, warden) and their projectiles.
+	 */
+	private function registerBossMobs() : void{
+		$this->register(Warden::class, function(World $world, CompoundTag $nbt) : Warden{
+			return new Warden(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Warden', 'minecraft:warden']);
+
+		$this->register(Wither::class, function(World $world, CompoundTag $nbt) : Wither{
+			return new Wither(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['WitherBoss', 'minecraft:wither']);
+
+		$this->register(WitherSkull::class, function(World $world, CompoundTag $nbt) : WitherSkull{
+			return new WitherSkull(Helper::parseLocation($nbt, $world), null, $nbt);
+		}, ['WitherSkull', 'minecraft:wither_skull']);
+
+		$this->register(DangerousWitherSkull::class, function(World $world, CompoundTag $nbt) : DangerousWitherSkull{
+			return new DangerousWitherSkull(Helper::parseLocation($nbt, $world), null, $nbt);
+		}, ['WitherSkullDangerous', 'minecraft:wither_skull_dangerous']);
+
+		$this->register(EnderDragon::class, function(World $world, CompoundTag $nbt) : EnderDragon{
+			return new EnderDragon(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['EnderDragon', 'minecraft:ender_dragon']);
+
+		$this->register(DragonFireball::class, function(World $world, CompoundTag $nbt) : DragonFireball{
+			return new DragonFireball(Helper::parseLocation($nbt, $world), null, $nbt);
+		}, ['DragonFireball', 'minecraft:dragon_fireball']);
+
+		//Plugins written for PocketMine-MP 5.44.3 may register mobs that VanillaMine now has (e.g. the Mobs plugin's
+		//"Creeper"), and both must keep working. VanillaMine's own mobs (the added ones, plus squid, villager and zombie,
+		//which got their vanilla AI) save under their "minecraft:" name, and only those names are kept from plugins: the
+		//short names ("Creeper") stay free for the plugin, so its saved mobs come back as its own and ours as ours.
+		$ours = [];
+		foreach([...AddedEntitySaveNames::LIST, ...self::REWRITTEN_SAVE_NAMES] as $name){
+			$ours[$name] = true;
+		}
+		foreach($this->saveNames as $className => $saveName){
+			if(!isset($ours[$saveName])){
+				continue;
+			}
+			$creationFunc = $this->creationFuncs[$saveName];
+			foreach($this->creationFuncs as $name => $func){
+				$name = (string) $name; //numeric save names become int keys
+				if($func === $creationFunc && str_starts_with($name, "minecraft:")){
+					$this->saveNames[$className] = $name;
+					$this->keepBuiltIn[$name] = true;
+				}
+			}
+		}
 	}
 
 	/**
@@ -237,6 +371,10 @@ final class EntityFactory{
 		), $creationFunc);
 
 		foreach($saveNames as $name){
+			if(isset($this->keepBuiltIn[$name])){
+				\GlobalLogger::get()->warning("A plugin tried to register the entity \"$name\" ($className), which this server already provides: saved \"$name\" entities keep loading as the built-in one (register it under a name of its own)");
+				continue;
+			}
 			$this->creationFuncs[$name] = $creationFunc;
 		}
 

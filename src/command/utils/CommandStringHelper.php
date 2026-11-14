@@ -41,15 +41,22 @@ final class CommandStringHelper{
 	 * Examples:
 	 * - `give "steve jobs" apple` -> ['give', 'steve jobs', 'apple']
 	 * - `say "This is a \"string containing quotes\""` -> ['say', 'This is a "string containing quotes"']
+	 * - `kill @e[type=cow, name="Big Bob"]` -> ['kill', '@e[type=cow, name="Big Bob"]'] (target selectors keep their
+	 *   arguments together, unchanged, like Bedrock)
 	 *
 	 * @return string[]
 	 * @phpstan-return list<string>
 	 */
 	public static function parseQuoteAware(string $commandLine) : array{
 		$args = [];
-		preg_match_all('/"((?:\\\\.|[^\\\\"])*)"|(\S+)/u', $commandLine, $matches);
+		preg_match_all('/(@[a-zA-Z_]*\[(?:"(?:\\\\.|[^\\\\"])*"|[^\]"])*\]\S*)|"((?:\\\\.|[^\\\\"])*)"|(\S+)/u', $commandLine, $matches);
 		foreach($matches[0] as $k => $_){
-			for($i = 1; $i <= 2; ++$i){
+			if($matches[1][$k] !== ""){
+				//target selector: the selector parser handles the quotes inside it
+				$args[] = $matches[1][$k];
+				continue;
+			}
+			for($i = 2; $i <= 3; ++$i){
 				if($matches[$i][$k] !== ""){
 					$match = $matches[$i][$k];
 					$args[] = preg_replace('/\\\\([\\\\"])/u', '$1', $match) ?? throw new AssumptionFailedError(preg_last_error_msg());

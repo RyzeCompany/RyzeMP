@@ -23,15 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\entity\monster\Silverfish;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Item;
+use pocketmine\player\Player;
 
 class InfestedStone extends Opaque{
 
 	private int $imitated;
 
 	public function __construct(BlockIdentifier $idInfo, string $name, BlockTypeInfo $typeInfo, Block $imitated){
-		parent::__construct($idInfo, $name, $typeInfo);
 		$this->imitated = $imitated->getStateId();
+		parent::__construct($idInfo, $name, $typeInfo);
 	}
 
 	public function getImitatedBlock() : Block{
@@ -50,5 +53,14 @@ class InfestedStone extends Opaque{
 		return true;
 	}
 
-	//TODO
+	/**
+	 * Breaking an infested block (without Silk Touch) releases the silverfish hiding in it.
+	 */
+	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
+		$result = parent::onBreak($item, $player, $returnedItems);
+		if(!$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH()) && ($player === null || !$player->isCreative())){
+			Silverfish::spawnFromBlock($this->position->getWorld(), $this->position);
+		}
+		return $result;
+	}
 }

@@ -51,7 +51,7 @@ class Torch extends Flowable{
 	}
 
 	public function getLightLevel() : int{
-		return 14;
+		return $this->getTypeId() === BlockTypeIds::SOUL_TORCH ? 10 : 14;
 	}
 
 	public function onNearbyBlockChange() : void{

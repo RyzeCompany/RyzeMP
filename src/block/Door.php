@@ -34,6 +34,7 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\DoorSound;
+use pocketmine\world\vibration\GameEvent;
 
 class Door extends Transparent implements HorizontalFacing{
 	use HorizontalFacingTrait;
@@ -108,7 +109,46 @@ class Door extends Transparent implements HorizontalFacing{
 	public function onNearbyBlockChange() : void{
 		if(!$this->canBeSupportedAt($this) && !$this->getSide(Facing::DOWN) instanceof Door){ //Replace with common break method
 			$this->position->getWorld()->useBreakOn($this->position); //this will delete both halves if they exist
+			return;
 		}
+		$this->updateRedstonePower();
+	}
+
+	/**
+	 * Opens or closes the door when the power received by either half changes.
+	 */
+	private function updateRedstonePower() : void{
+		$redstone = $this->position->getWorld()->getRedstone();
+		if($redstone === null){
+			return;
+		}
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY() - ($this->top ? 1 : 0); //state is remembered at the bottom half
+		$z = $this->position->getFloorZ();
+		$powered = $redstone->isPowered($x, $y, $z) || $redstone->isPowered($x, $y + 1, $z);
+		if($powered === $redstone->getRememberedPowered($x, $y, $z)){
+			return;
+		}
+		$redstone->setRememberedPowered($x, $y, $z, $powered);
+		if($powered !== $this->open){
+			$this->setOpenAndUpdate($powered);
+			$this->position->getWorld()->addGameEvent($this->position, $powered ? GameEvent::BLOCK_OPEN : GameEvent::BLOCK_CLOSE);
+		}
+	}
+
+	/**
+	 * Sets the open state of both halves in the world and plays the door sound.
+	 */
+	protected function setOpenAndUpdate(bool $open) : void{
+		$this->open = $open;
+		$other = $this->getSide($this->top ? Facing::DOWN : Facing::UP);
+		$world = $this->position->getWorld();
+		if($other instanceof Door && $other->hasSameTypeId($this)){
+			$other->open = $this->open;
+			$world->setBlock($other->position, $other);
+		}
+		$world->setBlock($this->position, $this);
+		$world->addSound($this->position, new DoorSound());
 	}
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
@@ -140,18 +180,8 @@ class Door extends Transparent implements HorizontalFacing{
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
-		$this->open = !$this->open;
-
-		$other = $this->getSide($this->top ? Facing::DOWN : Facing::UP);
-		$world = $this->position->getWorld();
-		if($other instanceof Door && $other->hasSameTypeId($this)){
-			$other->open = $this->open;
-			$world->setBlock($other->position, $other);
-		}
-
-		$world->setBlock($this->position, $this);
-		$world->addSound($this->position, new DoorSound());
-
+		$this->setOpenAndUpdate(!$this->open);
+		$this->position->getWorld()->addGameEvent($this->position, $this->open ? GameEvent::BLOCK_OPEN : GameEvent::BLOCK_CLOSE, $player);
 		return true;
 	}
 

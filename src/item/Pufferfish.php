@@ -39,8 +39,8 @@ class Pufferfish extends Food{
 	public function getAdditionalEffects() : array{
 		return [
 			new EffectInstance(VanillaEffects::HUNGER(), 300, 2),
-			new EffectInstance(VanillaEffects::POISON(), 1200, 3),
-			new EffectInstance(VanillaEffects::NAUSEA(), 300, 1)
+			new EffectInstance(VanillaEffects::POISON(), 1200, 1),
+			new EffectInstance(VanillaEffects::NAUSEA(), 300)
 		];
 	}
 }

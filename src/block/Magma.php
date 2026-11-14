@@ -23,30 +23,51 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\SteppedOnBlock;
+use pocketmine\entity\effect\VanillaEffects;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
 use pocketmine\event\entity\EntityDamageByBlockEvent;
 use pocketmine\event\entity\EntityDamageEvent;
 
-class Magma extends Opaque{
+class Magma extends Opaque implements SteppedOnBlock{
 
 	public function getLightLevel() : int{
 		return 3;
 	}
 
 	public function hasEntityCollision() : bool{
-		return true;
+		return false; //it hurts the entities standing on it, not the ones inside it (see onEntityStepOn())
 	}
 
 	public function onEntityInside(Entity $entity) : bool{
-		if($entity instanceof Living && !$entity->isSneaking() && $entity->getFrostWalkerLevel() === 0){
-			$ev = new EntityDamageByBlockEvent($this, $entity, EntityDamageEvent::CAUSE_FIRE, 1);
-			$entity->attack($ev);
-		}
 		return true;
+	}
+
+	public function onEntityStepOn(Entity $entity) : void{
+		//vanilla MagmaBlock.stepOn(): hot floor damage unless sneaking; Frost Walker boots, fire immunity and Fire
+		//Resistance protect (checked here too, so that no damage event is fired every tick for them)
+		if(
+			$entity instanceof Living &&
+			!$entity->isSneaking() &&
+			!$entity->isFireProof() &&
+			$entity->getFrostWalkerLevel() === 0 &&
+			!$entity->getEffects()->has(VanillaEffects::FIRE_RESISTANCE())
+		){
+			$entity->attack(new EntityDamageByBlockEvent($this, $entity, EntityDamageEvent::CAUSE_MAGMA, 1));
+		}
 	}
 
 	public function burnsForever() : bool{
 		return true;
+	}
+
+	public function ticksRandomly() : bool{
+		return true;
+	}
+
+	public function onRandomTick() : void{
+		//builds a missing whirlpool above (e.g. ocean floors of chunks generated before bubble columns existed)
+		BubbleColumn::onColumnSourceRandomTick($this);
 	}
 }

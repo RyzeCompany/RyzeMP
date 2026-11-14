@@ -52,4 +52,8 @@ class Carpet extends Flowable implements Colored{
 	public function getFlammability() : int{
 		return 20;
 	}
+
+	public function getFuelTime() : int{
+		return 67;
+	}
 }

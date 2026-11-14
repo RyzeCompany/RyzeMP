@@ -28,13 +28,13 @@ use pocketmine\item\Item;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\world\World;
 
-class ShulkerBox extends Spawnable implements Container, Nameable{
+class ShulkerBox extends Spawnable implements ComparatorReadableContainer, Nameable{
 	use NameableTrait {
 		addAdditionalSpawnData as addNameSpawnData;
 	}
+	use ComparatorReadableContainerTrait;
 	use ContainerTrait;
 
 	public const TAG_FACING = "facing";
@@ -46,6 +46,7 @@ class ShulkerBox extends Spawnable implements Container, Nameable{
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new ShulkerBoxInventory($this->position);
+		$this->addComparatorInventoryListener();
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
@@ -106,8 +107,8 @@ class ShulkerBox extends Spawnable implements Container, Nameable{
 		return "Shulker Box";
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		$nbt->setByte(self::TAG_FACING, $this->facing);
-		$this->addNameSpawnData($nbt, $typeConverter);
+		$this->addNameSpawnData($nbt);
 	}
 }

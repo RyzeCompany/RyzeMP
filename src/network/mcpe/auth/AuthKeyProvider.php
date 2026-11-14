@@ -44,6 +44,7 @@ class AuthKeyProvider{
 	private ?PromiseResolver $resolver = null;
 
 	private int $lastFetch = 0;
+	private int $lastFetchAttempt = 0;
 
 	public function __construct(
 		private readonly \Logger $logger,
@@ -72,9 +73,32 @@ class AuthKeyProvider{
 			);
 		}else{
 			$this->resolveKey($resolver, $this->keyring, $keyId);
+			$this->refreshInBackgroundIfStale();
 		}
 
 		return $resolver->getPromise();
+	}
+
+	/**
+	 * Starts fetching the keys now if they were never fetched, so that the first Xbox Live login after the server
+	 * started doesn't wait for two HTTPS requests to Mojang's API.
+	 */
+	public function prefetch() : void{
+		if($this->keyring === null){
+			$this->fetchKeys();
+		}
+	}
+
+	/**
+	 * The keys are used as long as they verify logins; once they are older than the refresh interval, a login (which
+	 * doesn't wait for it) starts fetching them again, so that a key Mojang starts using later is already known.
+	 */
+	private function refreshInBackgroundIfStale() : void{
+		$staleBefore = time() - $this->keyRefreshIntervalSeconds;
+		if($this->resolver === null && $this->lastFetch < $staleBefore && $this->lastFetchAttempt < $staleBefore){
+			$this->logger->debug("Authentication keys are older than " . $this->keyRefreshIntervalSeconds . " seconds, refreshing them in the background");
+			$this->fetchKeys();
+		}
 	}
 
 	/**
@@ -157,6 +181,7 @@ class AuthKeyProvider{
 		}
 
 		$this->logger->notice("Fetching new authentication keys");
+		$this->lastFetchAttempt = time();
 
 		/** @phpstan-var PromiseResolver<AuthKeyring> $resolver */
 		$resolver = new PromiseResolver();

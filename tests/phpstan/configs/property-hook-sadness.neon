@@ -43,6 +43,60 @@ parameters:
 			path: ../../../src/entity/Living.php
 
 		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$goalSelector because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$lookControl because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$moveControl because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$navigation because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$sensing because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\Mob\:\:\$targetSelector because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/Mob.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\monster\\AquaticMonster\:\:\$swim because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/monster/AquaticMonster.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\monster\\FlyingMonster\:\:\$flight because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/monster/FlyingMonster.php
+
+		-
+			message: '#^Cannot unset property pocketmine\\entity\\monster\\Slime\:\:\$hop because it might have hooks in a subclass\.$#'
+			identifier: unset.possiblyHookedProperty
+			count: 1
+			path: ../../../src/entity/monster/Slime.php
+
+		-
 			message: '#^Cannot unset property pocketmine\\player\\Player\:\:\$craftingGrid because it might have hooks in a subclass\.$#'
 			identifier: unset.possiblyHookedProperty
 			count: 1

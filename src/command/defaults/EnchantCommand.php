@@ -24,15 +24,20 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\data\bedrock\EnchantmentIdMap;
 use pocketmine\item\enchantment\EnchantingHelper;
 use pocketmine\item\enchantment\EnchantmentInstance;
 use pocketmine\item\enchantment\StringToEnchantmentParser;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
+use function is_numeric;
 
-class EnchantCommand extends NativeCommand{
+class EnchantCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,25 +50,27 @@ class EnchantCommand extends NativeCommand{
 			DefaultPermissionNames::COMMAND_ENCHANT_OTHER
 		]);
 	}
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::target("player"), CommandParameter::int("enchantmentId"), CommandParameter::int("level", true)],
+			[CommandParameter::target("player"), CommandParameter::enchantment("enchantmentName"), CommandParameter::int("level", true)],
+		];
+	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_ENCHANT_SELF, DefaultPermissionNames::COMMAND_ENCHANT_OTHER);
-		if($player === null){
+		$players = $this->fetchPermittedPlayerTargets($sender, $args[0], DefaultPermissionNames::COMMAND_ENCHANT_SELF, DefaultPermissionNames::COMMAND_ENCHANT_OTHER);
+		if(count($players) === 0){
 			return true;
 		}
 
-		$item = $player->getInventory()->getItemInHand();
-
-		if($item->isNull()){
-			$sender->sendMessage(KnownTranslationFactory::commands_enchant_noItem());
-			return true;
-		}
-
-		$enchantment = StringToEnchantmentParser::getInstance()->parse($args[1]);
+		//Bedrock also accepts numeric enchantment IDs
+		$enchantment = is_numeric($args[1]) ?
+			EnchantmentIdMap::getInstance()->fromId((int) $args[1]) :
+			StringToEnchantmentParser::getInstance()->parse($args[1]);
 		if($enchantment === null){
 			$sender->sendMessage(KnownTranslationFactory::commands_enchant_notFound($args[1]));
 			return true;
@@ -77,11 +84,26 @@ class EnchantCommand extends NativeCommand{
 			}
 		}
 
-		//this is necessary to deal with enchanted books, which are a different item type than regular books
-		$enchantedItem = EnchantingHelper::enchantItem($item, [new EnchantmentInstance($enchantment, $level)]);
-		$player->getInventory()->setItemInHand($enchantedItem);
+		$enchanted = [];
+		foreach($players as $player){
+			$item = $player->getInventory()->getItemInHand();
+			if($item->isNull()){
+				if(count($players) === 1){
+					$sender->sendMessage(KnownTranslationFactory::commands_enchant_noItem());
+				}
+				continue;
+			}
+			//this is necessary to deal with enchanted books, which are a different item type than regular books
+			$enchantedItem = EnchantingHelper::enchantItem($item, [new EnchantmentInstance($enchantment, $level)]);
+			$player->getInventory()->setItemInHand($enchantedItem);
+			$enchanted[] = $player;
+		}
 
-		self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_enchant_success($player->getName()));
+		if(count($enchanted) > 0){
+			self::broadcastCommandMessage($sender, KnownTranslationFactory::commands_enchant_success(TargetSelector::joinNames($enchanted)));
+		}elseif(count($players) > 1){
+			$sender->sendMessage(KnownTranslationFactory::commands_enchant_noItem());
+		}
 		return true;
 	}
 }

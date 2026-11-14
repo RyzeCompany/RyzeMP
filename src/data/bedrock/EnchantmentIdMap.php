@@ -66,7 +66,28 @@ final class EnchantmentIdMap{
 		$this->register(EnchantmentIds::VANISHING, VanillaEnchantments::VANISHING());
 
 		$this->register(EnchantmentIds::SWIFT_SNEAK, VanillaEnchantments::SWIFT_SNEAK());
+		$this->register(EnchantmentIds::SOUL_SPEED, VanillaEnchantments::SOUL_SPEED());
 
 		$this->register(EnchantmentIds::FROST_WALKER, VanillaEnchantments::FROST_WALKER());
+
+		$this->register(EnchantmentIds::MULTISHOT, VanillaEnchantments::MULTISHOT());
+		$this->register(EnchantmentIds::QUICK_CHARGE, VanillaEnchantments::QUICK_CHARGE());
+
+		$this->register(EnchantmentIds::WIND_BURST, VanillaEnchantments::WIND_BURST());
+		$this->register(EnchantmentIds::DENSITY, VanillaEnchantments::DENSITY());
+		$this->register(EnchantmentIds::BREACH, VanillaEnchantments::BREACH());
+		$this->register(EnchantmentIds::LUNGE, VanillaEnchantments::LUNGE());
+		$this->register(EnchantmentIds::LOOTING, VanillaEnchantments::LOOTING());
+		$this->register(EnchantmentIds::CHANNELING, VanillaEnchantments::CHANNELING());
+		$this->register(EnchantmentIds::SMITE, VanillaEnchantments::SMITE());
+		$this->register(EnchantmentIds::BANE_OF_ARTHROPODS, VanillaEnchantments::BANE_OF_ARTHROPODS());
+		$this->register(EnchantmentIds::DEPTH_STRIDER, VanillaEnchantments::DEPTH_STRIDER());
+		$this->register(EnchantmentIds::LUCK_OF_THE_SEA, VanillaEnchantments::LUCK_OF_THE_SEA());
+		$this->register(EnchantmentIds::LURE, VanillaEnchantments::LURE());
+		$this->register(EnchantmentIds::IMPALING, VanillaEnchantments::IMPALING());
+		$this->register(EnchantmentIds::RIPTIDE, VanillaEnchantments::RIPTIDE());
+		$this->register(EnchantmentIds::LOYALTY, VanillaEnchantments::LOYALTY());
+		$this->register(EnchantmentIds::PIERCING, VanillaEnchantments::PIERCING());
+		$this->register(EnchantmentIds::BINDING, VanillaEnchantments::BINDING());
 	}
 }

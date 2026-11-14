@@ -64,5 +64,7 @@
     "whitelist_info",
     "whitelist_warning",
     "you_have_finished",
-    "you_have_to_accept_the_license"
+    "you_have_to_accept_the_license",
+    "commands.locate.usage",
+    "commands.tag.usage"
 ]

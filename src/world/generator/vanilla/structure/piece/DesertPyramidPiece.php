@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\structure\piece;
 
+use pocketmine\block\tile\BrushableBlock;
 use pocketmine\world\generator\vanilla\feature\block\Direction;
 use pocketmine\world\generator\vanilla\feature\BlockEntityData;
 use pocketmine\world\generator\vanilla\random\LegacyRandom;
@@ -347,7 +348,7 @@ final class DesertPyramidPiece extends OrientedPiece{
 			return;
 		}
 		$c->level->setState($x, $y, $z, $c->blocks->defaultOf("minecraft:suspicious_sand"));
-		$c->level->setBlockEntity($x, $y, $z, BlockEntityData::brushable("minecraft:archaeology/desert_pyramid", self::blockPosLong($x, $y, $z))->setString("type", "minecraft:suspicious_sand"));
+		$c->level->setBlockEntity($x, $y, $z, BlockEntityData::brushable("minecraft:archaeology/desert_pyramid", self::blockPosLong($x, $y, $z))->setString(BrushableBlock::TAG_TYPE, "minecraft:suspicious_sand"));
 	}
 
 	/**

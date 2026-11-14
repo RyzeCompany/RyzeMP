@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\entity\Entity;
+use pocketmine\entity\Mob;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 
@@ -35,6 +36,10 @@ class Cobweb extends Flowable{
 
 	public function onEntityInside(Entity $entity) : bool{
 		$entity->resetFallDistance();
+		if($entity instanceof Mob){
+			//players are slowed down by their client
+			$entity->makeStuckInBlock($this, 0.25, 0.05, 0.25);
+		}
 		return true;
 	}
 

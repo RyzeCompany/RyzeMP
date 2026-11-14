@@ -33,6 +33,7 @@ use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\RedstonePowerOffSound;
 use pocketmine\world\sound\RedstonePowerOnSound;
+use pocketmine\world\vibration\GameEvent;
 
 abstract class Button extends Flowable implements AnyFacing{
 	use AnyFacingTrait;
@@ -67,8 +68,10 @@ abstract class Button extends Flowable implements AnyFacing{
 			$this->pressed = true;
 			$world = $this->position->getWorld();
 			$world->setBlock($this->position, $this);
+			$world->getRedstone()?->updateAroundSide($this->position, Facing::opposite($this->facing));
 			$world->scheduleDelayedBlockUpdate($this->position, $this->getActivationTime());
 			$world->addSound($this->position->add(0.5, 0.5, 0.5), new RedstonePowerOnSound());
+			$world->addGameEvent($this->position, GameEvent::BLOCK_ACTIVATE, $player);
 		}
 
 		return true;
@@ -79,7 +82,9 @@ abstract class Button extends Flowable implements AnyFacing{
 			$this->pressed = false;
 			$world = $this->position->getWorld();
 			$world->setBlock($this->position, $this);
+			$world->getRedstone()?->updateAroundSide($this->position, Facing::opposite($this->facing));
 			$world->addSound($this->position->add(0.5, 0.5, 0.5), new RedstonePowerOffSound());
+			$world->addGameEvent($this->position, GameEvent::BLOCK_DEACTIVATE);
 		}
 	}
 
@@ -91,5 +96,29 @@ abstract class Button extends Flowable implements AnyFacing{
 
 	private function canBeSupportedAt(Block $block, int $face) : bool{
 		return $block->getAdjacentSupportType(Facing::opposite($face))->hasCenterSupport();
+	}
+
+	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
+		$result = parent::onBreak($item, $player, $returnedItems);
+		if($this->pressed){
+			$this->position->getWorld()->getRedstone()?->updateAroundSide($this->position, Facing::opposite($this->facing));
+		}
+		return $result;
+	}
+
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->pressed ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->pressed && $face === Facing::opposite($this->facing) ? 15 : 0;
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
 	}
 }

@@ -37,6 +37,10 @@ class Carrot extends Food{
 	}
 
 	public function getSaturationRestore() : float{
-		return 4.8;
+		return 3.6;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 65;
 	}
 }

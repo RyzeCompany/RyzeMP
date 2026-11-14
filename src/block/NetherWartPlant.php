@@ -47,7 +47,7 @@ class NetherWartPlant extends Flowable implements Ageable{
 	}
 
 	public function onRandomTick() : void{
-		if($this->age < self::MAX_AGE && mt_rand(0, 10) === 0){ //Still growing
+		if($this->age < self::MAX_AGE && mt_rand(0, 9) === 0){ //Still growing (1 in 10, vanilla)
 			$block = clone $this;
 			$block->age++;
 			BlockEventHelper::grow($this, $block, null);
@@ -59,4 +59,6 @@ class NetherWartPlant extends Flowable implements Ageable{
 			$this->asItem()->setCount($this->age === self::MAX_AGE ? FortuneDropHelper::discrete($item, 2, 4) : 1)
 		];
 	}
+
+	public function getCompostabilityChance() : int{ return 65; }
 }

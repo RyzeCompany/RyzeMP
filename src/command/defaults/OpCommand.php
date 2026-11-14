@@ -25,6 +25,10 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\CommandTargets;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
@@ -33,7 +37,7 @@ use pocketmine\utils\TextFormat;
 use function array_shift;
 use function count;
 
-class OpCommand extends NativeCommand{
+class OpCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -44,21 +48,34 @@ class OpCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_OP_GIVE);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::target("player")]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) === 0){
 			throw new InvalidCommandSyntaxException();
 		}
 
 		$name = array_shift($args);
-		if(!Player::isValidUserName($name)){
+		if(TargetSelector::isSelectorArgument($name)){
+			$names = [];
+			foreach(CommandTargets::players($sender, $name) as $player){
+				$names[] = $player->getName();
+			}
+		}elseif(Player::isValidUserName($name)){
+			$names = [$name];
+		}else{
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$sender->getServer()->addOp($name);
-		if(($player = $sender->getServer()->getPlayerExact($name)) !== null){
-			$player->sendMessage(KnownTranslationFactory::commands_op_message()->prefix(TextFormat::GRAY));
+		foreach($names as $opName){
+			$sender->getServer()->addOp($opName);
+			if(($player = $sender->getServer()->getPlayerExact($opName)) !== null){
+				$player->sendMessage(KnownTranslationFactory::commands_op_message()->prefix(TextFormat::GRAY));
+			}
+			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_op_success($opName));
 		}
-		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_op_success($name));
 		return true;
 	}
 }

@@ -59,4 +59,13 @@ final class EffectIds{
 	public const BAD_OMEN = 28;
 	public const VILLAGE_HERO = 29;
 	public const DARKNESS = 30;
+	public const TRIAL_OMEN = 31;
+	public const WIND_CHARGED = 32;
+	public const WEAVING = 33;
+	public const OOZING = 34;
+	public const INFESTED = 35;
+	public const RAID_OMEN = 36;
+	public const BREATH_OF_THE_NAUTILUS = 37;
+	/** Experimental in Bedrock 1.26.60 (Drop 4 2026); id checked on BDS 1.26.60.6. Not implemented yet. */
+	public const FREEZING = 38;
 }

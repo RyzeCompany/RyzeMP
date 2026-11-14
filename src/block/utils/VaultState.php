@@ -26,9 +26,9 @@ namespace pocketmine\block\utils;
 /**
  * State of a vault (https://minecraft.wiki/w/Vault).
  */
-enum VaultState : string{
-	case INACTIVE = "inactive";
-	case ACTIVE = "active";
-	case UNLOCKING = "unlocking";
-	case EJECTING = "ejecting";
+enum VaultState{
+	case INACTIVE;
+	case ACTIVE;
+	case UNLOCKING;
+	case EJECTING;
 }

@@ -67,4 +67,8 @@ final class PotionTypeIds{
 	public const SLOW_FALLING = 40;
 	public const LONG_SLOW_FALLING = 41;
 	public const STRONG_SLOWNESS = 42;
+	public const WIND_CHARGED = 43;
+	public const WEAVING = 44;
+	public const OOZING = 45;
+	public const INFESTED = 46;
 }

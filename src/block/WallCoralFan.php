@@ -48,7 +48,8 @@ final class WallCoralFan extends BaseCoral implements HorizontalFacing{
 		}
 		$this->facing = $face;
 
-		$this->dead = !$this->isCoveredWithWater();
+		//a dead fan stays dead in water; a live one placed out of water dies
+		$this->dead = $this->dead || !$this->isCoveredWithWater();
 
 		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
 	}

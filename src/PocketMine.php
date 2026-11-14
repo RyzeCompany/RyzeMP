@@ -268,7 +268,7 @@ JIT_WARNING
 		}
 		require_once($bootstrap);
 
-		$composerGitHash = InstalledVersions::getReference('ryzemcbe/ryzemp');
+		$composerGitHash = InstalledVersions::getReference('pocketmine/pocketmine-mp');
 		if($composerGitHash !== null){
 			//we can't verify dependency versions if we were installed without using git
 			$currentGitHash = explode("-", VersionInfo::GIT_HASH(), 2)[0];
@@ -283,23 +283,6 @@ JIT_WARNING
 		}
 
 		ErrorToExceptionHandler::set();
-
-		// One-shot, explicit bootstrap for the Pterodactyl Egg. This runs before
-		// starting the server, so no worlds or worker threads are live.
-		if(isset(getopt("", ["prepare-vanilla-worldgen"])["prepare-vanilla-worldgen"])){
-			try{
-				$root = realpath(Utils::assumeNotFalse(getcwd()));
-				\pocketmine\world\generator\vanilla\VanillaWorldgenSetup::prepare(
-					$root,
-					static function(string $message) : void{ echo "[Worldgen setup] $message\n"; }
-				);
-				exit(0);
-			}catch(\Throwable $error){
-				critical_error("Vanilla worldgen setup failed: " . $error->getMessage());
-				critical_error("No world was generated. The existing worlds were not deleted.");
-				exit(1);
-			}
-		}
 
 		if(count(getopt("", [BootstrapOptions::VERSION])) > 0){
 			printf("%s %s (git hash %s) for Minecraft: Bedrock Edition %s\n", VersionInfo::NAME, VersionInfo::VERSION()->getFullVersion(true), VersionInfo::GIT_HASH(), ProtocolInfo::MINECRAFT_VERSION);
@@ -385,7 +368,7 @@ JIT_WARNING
 
 			$logger->info("Stopping other threads");
 
-			$killer = new ServerKiller(120);
+			$killer = new ServerKiller(8);
 			$killer->start();
 			usleep(10000); //Fixes ServerKiller not being able to start on single-core machines
 

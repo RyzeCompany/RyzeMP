@@ -26,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\block\tile\MobHead as TileMobHead;
 use pocketmine\block\utils\MobHeadType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\entity\boss\WitherSummonPattern;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
@@ -126,5 +127,32 @@ class MobHead extends Flowable{
 			$this->rotation = ((int) floor(($player->getLocation()->getYaw() * 16 / 360) + 0.5)) & 0xf;
 		}
 		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
+	}
+
+	/**
+	 * Powered dragon and piglin heads move their mouths (BDS 1.26.52 sets the block entity's DoingAnimation and the
+	 * client animates it). Other heads ignore redstone.
+	 */
+	public function onNearbyBlockChange() : void{
+		if($this->mobHeadType !== MobHeadType::DRAGON && $this->mobHeadType !== MobHeadType::PIGLIN){
+			return;
+		}
+		$world = $this->position->getWorld();
+		$redstone = $world->getRedstone();
+		$tile = $world->getTile($this->position);
+		if($redstone === null || !$tile instanceof TileMobHead){
+			return;
+		}
+		$powered = $redstone->isPowered($this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
+		if($powered !== $tile->isDoingAnimation()){
+			$tile->setDoingAnimation($powered, $world->getServer()->getTick());
+			$tile->broadcastState();
+		}
+	}
+
+	public function onPostPlace() : void{
+		if($this->mobHeadType === MobHeadType::WITHER_SKELETON){
+			WitherSummonPattern::trySummon($this->position->getWorld(), $this->position);
+		}
 	}
 }

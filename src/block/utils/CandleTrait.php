@@ -35,6 +35,7 @@ use pocketmine\player\Player;
 use pocketmine\world\sound\BlazeShootSound;
 use pocketmine\world\sound\FireExtinguishSound;
 use pocketmine\world\sound\FlintSteelSound;
+use pocketmine\world\vibration\GameEvent;
 
 trait CandleTrait{
 	use LightableTrait;
@@ -61,6 +62,7 @@ trait CandleTrait{
 			}
 			$this->position->getWorld()->addSound($this->position, new FlintSteelSound());
 			$this->position->getWorld()->setBlock($this->position, $this->setLit(true));
+			$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE, $player);
 
 			return true;
 		}
@@ -70,6 +72,7 @@ trait CandleTrait{
 			}
 			$this->position->getWorld()->addSound($this->position, new FireExtinguishSound());
 			$this->position->getWorld()->setBlock($this->position, $this->setLit(false));
+			$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE, $player);
 
 			return true;
 		}

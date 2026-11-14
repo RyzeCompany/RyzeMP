@@ -25,21 +25,24 @@ namespace pocketmine\world\particle;
 
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\LevelEvent;
+use pocketmine\utils\Binary;
 
 /**
  * This particle appears when a player is attacking a block face in survival mode attempting to break it.
  */
-class BlockPunchParticle extends BlockParticle{
+class BlockPunchParticle implements Particle{
 	public function __construct(
-		Block $block,
+		private Block $block,
 		private int $face
-	){
-		parent::__construct($block);
-	}
+	){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::create(LevelEvent::PARTICLE_PUNCH_BLOCK, $this->toRuntimeId() | ($this->face << 24), $pos)];
+		//TODO: with hashed block network IDs the full 32 bits are used by the hash, so packing the face into the top
+		//byte corrupts it. Mask to 32 bits to keep the varint encoder happy; the client will show a generic particle.
+		$blockNetworkId = TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId());
+		return [LevelEventPacket::create(LevelEvent::PARTICLE_PUNCH_BLOCK, Binary::signInt(($blockNetworkId | ($this->face << 24)) & 0xffffffff), $pos)];
 	}
 }

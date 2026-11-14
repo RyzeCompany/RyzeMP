@@ -44,12 +44,14 @@ use pocketmine\block\utils\CopperOxidation;
 use pocketmine\block\utils\CoralMaterial;
 use pocketmine\block\utils\CoralType;
 use pocketmine\block\utils\DyeColor;
+use pocketmine\block\utils\HorizontalConnections;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\Lightable;
 use pocketmine\block\utils\MultiAnyFacing;
 use pocketmine\block\utils\PillarRotation;
 use pocketmine\block\utils\SignLikeRotation;
 use pocketmine\block\utils\SlabType;
+use pocketmine\block\utils\StairShape;
 use pocketmine\block\Wall;
 use pocketmine\block\Wood;
 use pocketmine\data\bedrock\block\BlockLegacyMetadata;
@@ -203,8 +205,24 @@ final class CommonProperties{
 	 */
 	public readonly array $wallProperties;
 
+	/**
+	 * 1.26.50: minecraft:connection_{north,east,south,west} of fences, glass panes, bars and trip wire.
+	 * The properties are optional on read so that data saved by older versions (without them) still loads.
+	 *
+	 * @var Property[]
+	 * @phpstan-var non-empty-list<Property<contravariant HorizontalConnections>>
+	 */
+	public readonly array $horizontalConnectionProperties;
+
 	private function __construct(){
 		$vm = ValueMappings::getInstance();
+
+		$this->horizontalConnectionProperties = [
+			new BoolProperty(StateNames::MC_CONNECTION_EAST, fn(HorizontalConnections $b) => $b->hasConnection(Facing::EAST), fn(HorizontalConnections $b, bool $v) => $b->setConnection(Facing::EAST, $v), defaultIfMissing: false),
+			new BoolProperty(StateNames::MC_CONNECTION_NORTH, fn(HorizontalConnections $b) => $b->hasConnection(Facing::NORTH), fn(HorizontalConnections $b, bool $v) => $b->setConnection(Facing::NORTH, $v), defaultIfMissing: false),
+			new BoolProperty(StateNames::MC_CONNECTION_SOUTH, fn(HorizontalConnections $b) => $b->hasConnection(Facing::SOUTH), fn(HorizontalConnections $b, bool $v) => $b->setConnection(Facing::SOUTH, $v), defaultIfMissing: false),
+			new BoolProperty(StateNames::MC_CONNECTION_WEST, fn(HorizontalConnections $b) => $b->hasConnection(Facing::WEST), fn(HorizontalConnections $b, bool $v) => $b->setConnection(Facing::WEST, $v), defaultIfMissing: false),
+		];
 
 		$hfGet = fn(HorizontalFacing $v) => $v->getFacing();
 		$hfSet = fn(HorizontalFacing $v, int $facing) => $v->setFacing($facing);
@@ -392,6 +410,14 @@ final class CommonProperties{
 		$this->stairProperties = [
 			new BoolProperty(StateNames::UPSIDE_DOWN_BIT, fn(Stair $b) => $b->isUpsideDown(), fn(Stair $b, bool $v) => $b->setUpsideDown($v)),
 			new ValueFromIntProperty(StateNames::WEIRDO_DIRECTION, $vm->horizontalFacing5Minus, $hfGet, $hfSet),
+			//1.26.50: the corner shape is a block state now; optional on read so older saved data still loads
+			new ValueFromStringProperty(
+				StateNames::MC_CORNER,
+				$vm->stairCorner,
+				fn(Stair $b) => $b->getShape(),
+				fn(Stair $b, StairShape $v) => $b->setShape($v),
+				defaultRawIfMissing: BlockStateStringValues::MC_CORNER_NONE
+			),
 		];
 
 		$this->stemProperties = [

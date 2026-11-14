@@ -34,10 +34,10 @@ class WoodenStairs extends Stair implements WoodMaterial{
 	}
 
 	public function getFlameEncouragement() : int{
-		return 5;
+		return $this->woodType->isFlammable() ? 5 : 0;
 	}
 
 	public function getFlammability() : int{
-		return 20;
+		return $this->woodType->isFlammable() ? 20 : 0;
 	}
 }

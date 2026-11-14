@@ -35,6 +35,26 @@ class CopperDoor extends Door implements CopperMaterial{
 		onInteract as onInteractCopper;
 	}
 
+	public function ticksRandomly() : bool{
+		//the bottom half weathers for the whole door
+		return !$this->top && !$this->waxed && $this->oxidation->getNext() !== null;
+	}
+
+	public function onRandomTick() : void{
+		$next = $this->getWeatheringResult();
+		if($next === null){
+			return;
+		}
+		$world = $this->position->getWorld();
+		$other = $this->getSide($this->top ? Facing::DOWN : Facing::UP);
+		$this->oxidation = $next;
+		$world->setBlock($this->position, $this);
+		if($other instanceof CopperDoor && $other->top !== $this->top){
+			$other->setOxidation($next);
+			$world->setBlock($other->position, $other);
+		}
+	}
+
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if ($player !== null && $player->isSneaking() && $this->onInteractCopper($item, $face, $clickVector, $player, $returnedItems)) {
 			//copy copper properties to other half

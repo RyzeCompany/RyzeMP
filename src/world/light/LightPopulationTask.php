@@ -31,6 +31,8 @@ use pocketmine\world\format\LightArray;
 use pocketmine\world\SimpleChunkManager;
 use pocketmine\world\utils\SubChunkExplorer;
 use pocketmine\world\World;
+use function class_exists;
+use function count;
 use function igbinary_serialize;
 use function igbinary_unserialize;
 
@@ -54,10 +56,55 @@ class LightPopulationTask extends AsyncTask{
 	public function onRun() : void{
 		$chunk = FastChunkSerializer::deserializeTerrain($this->chunk);
 
+		[$heightMap, $skyLightArrays, $blockLightArrays] = self::computeLight($chunk);
+
+		$this->resultHeightMap = igbinary_serialize($heightMap);
+		$this->resultSkyLightArrays = igbinary_serialize($skyLightArrays);
+		$this->resultBlockLightArrays = igbinary_serialize($blockLightArrays);
+	}
+
+	private static bool $nativeEnabled = true;
+
+	/**
+	 * @internal for tests and benchmarks: false makes {@link LightPopulationTask::computeLight()} always use the PHP
+	 * light updates (in the calling thread)
+	 */
+	public static function setNativeEnabled(bool $enabled) : void{
+		self::$nativeEnabled = $enabled;
+	}
+
+	/**
+	 * Computes the light of a chunk standing alone (no neighbours): block light, then heightmap and sky light. Uses
+	 * NativeLightPopulation of chunkutils2 >= 0.3.13 when present (the same results bit for bit, ~30-50x faster;
+	 * NativeLightPopulationTest), else BlockLightUpdate and SkyLightUpdate. The chunk's light arrays and heightmap are
+	 * only written by the PHP path; callers use the returned values.
+	 *
+	 * @internal
+	 * @return array{list<int>, array<int, LightArray>, array<int, LightArray>} heightmap, sky light, block light
+	 */
+	public static function computeLight(Chunk $chunk) : array{
+		$blockFactory = RuntimeBlockStateRegistry::getInstance();
+
+		if(self::$nativeEnabled && class_exists(NativeLightPopulation::class)){
+			$emptyBlockIds = [];
+			$layers = [];
+			foreach($chunk->getSubChunks() as $y => $subChunk){
+				$emptyBlockIds[$y] = $subChunk->getEmptyBlockId();
+				$subChunkLayers = $subChunk->getBlockLayers();
+				if(count($subChunkLayers) > 0){
+					$layers[$y] = $subChunkLayers[0];
+				}
+			}
+			$result = NativeLightPopulation::populate(Chunk::MIN_SUBCHUNK_INDEX, Chunk::MAX_SUBCHUNK_INDEX, $emptyBlockIds, $layers, $blockFactory->lightFilter, $blockFactory->light, $blockFactory->blocksDirectSkyLight);
+			if($result !== null){
+				return $result;
+			}
+			//null: a table value the native code leaves to PHP
+		}
+
 		$manager = new SimpleChunkManager(World::Y_MIN, World::Y_MAX);
 		$manager->setChunk(0, 0, $chunk);
 
-		$blockFactory = RuntimeBlockStateRegistry::getInstance();
 		foreach([
 			"Block" => new BlockLightUpdate(new SubChunkExplorer($manager), $blockFactory->lightFilter, $blockFactory->light),
 			"Sky" => new SkyLightUpdate(new SubChunkExplorer($manager), $blockFactory->lightFilter, $blockFactory->blocksDirectSkyLight),
@@ -68,15 +115,13 @@ class LightPopulationTask extends AsyncTask{
 
 		$chunk->setLightPopulated();
 
-		$this->resultHeightMap = igbinary_serialize($chunk->getHeightMapArray());
 		$skyLightArrays = [];
 		$blockLightArrays = [];
 		foreach($chunk->getSubChunks() as $y => $subChunk){
 			$skyLightArrays[$y] = $subChunk->getBlockSkyLightArray();
 			$blockLightArrays[$y] = $subChunk->getBlockLightArray();
 		}
-		$this->resultSkyLightArrays = igbinary_serialize($skyLightArrays);
-		$this->resultBlockLightArrays = igbinary_serialize($blockLightArrays);
+		return [$chunk->getHeightMapArray(), $skyLightArrays, $blockLightArrays];
 	}
 
 	public function onCompletion() : void{

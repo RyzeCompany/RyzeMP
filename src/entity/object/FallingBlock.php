@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\entity\object;
 
 use pocketmine\block\Block;
+use pocketmine\block\PointedDripstone;
 use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\utils\Fallable;
 use pocketmine\data\bedrock\block\BlockStateDeserializeException;
@@ -44,7 +45,6 @@ use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
-use pocketmine\player\Player;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\sound\BlockBreakSound;
 use function abs;
@@ -143,6 +143,13 @@ class FallingBlock extends Entity{
 			if($this->onGround || $blockTarget !== null){
 				$this->flagForDespawn();
 
+				if($blockTarget === null && $this->block instanceof PointedDripstone){
+					//a stalactite that started on the ground (no fall, so no onHitGround()) shatters too: it would
+					//fall again as soon as it was placed
+					$this->block->onHitGround($this);
+					return true;
+				}
+
 				$blockResult = $blockTarget ?? $this->block;
 				$block = $world->getBlock($pos);
 				if(!$block->canBeReplaced() || !$world->isInWorld($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ()) || ($this->onGround && abs($this->location->y - $this->location->getFloorY()) > 0.001)){
@@ -173,7 +180,7 @@ class FallingBlock extends Entity{
 				$damage = min($fallenBlocks * $damagePerBlock, $this->block->getMaxFallDamage());
 				foreach($this->getWorld()->getCollidingEntities($this->getBoundingBox()) as $entity){
 					if($entity instanceof Living){
-						$ev = new EntityDamageByEntityEvent($this, $entity, EntityDamageEvent::CAUSE_FALLING_BLOCK, $damage);
+						$ev = new EntityDamageByEntityEvent($this, $entity, $this->block instanceof PointedDripstone ? EntityDamageEvent::CAUSE_STALACTITE : EntityDamageEvent::CAUSE_FALLING_BLOCK, $damage);
 						$entity->attack($ev);
 					}
 				}
@@ -200,19 +207,11 @@ class FallingBlock extends Entity{
 		return $this->block->asItem();
 	}
 
-	protected function sendSpawnPacket(Player $player) : void{
-		$typeConverter = $player->getNetworkSession()->getTypeConverter();
-		$this->getNetworkProperties()->setInt(EntityMetadataProperties::VARIANT, $typeConverter->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()));
-		$this->getNetworkProperties()->clearDirtyProperties(); //needed for multi protocol
+	protected function syncNetworkData(EntityMetadataCollection $properties) : void{
+		parent::syncNetworkData($properties);
 
-		parent::sendSpawnPacket($player);
+		$properties->setInt(EntityMetadataProperties::VARIANT, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()));
 	}
-
-	//protected function syncNetworkData(EntityMetadataCollection $properties) : void{ No need due to multi protocol
-	//	parent::syncNetworkData($properties);
-	//
-	//	$properties->setInt(EntityMetadataProperties::VARIANT, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()));
-	//}
 
 	public function getOffsetPosition(Vector3 $vector3) : Vector3{
 		return $vector3->add(0, 0.49, 0); //TODO: check if height affects this

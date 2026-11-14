@@ -230,4 +230,12 @@ class Bamboo extends Transparent{
 	public function asItem() : Item{
 		return VanillaItems::BAMBOO();
 	}
+
+	public function getFlameEncouragement() : int{
+		return 5;
+	}
+
+	public function getFlammability() : int{
+		return 20;
+	}
 }

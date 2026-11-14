@@ -26,6 +26,7 @@ namespace pocketmine\item\enchantment;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\lang\Translatable;
 use function array_fill_keys;
+use function ceil;
 use function floor;
 
 class ProtectionEnchantment extends Enchantment{
@@ -68,6 +69,14 @@ class ProtectionEnchantment extends Enchantment{
 	 */
 	public function getProtectionFactor(int $level) : int{
 		return (int) floor((6 + $level ** 2) * $this->typeModifier / 3);
+	}
+
+	/**
+	 * Returns the EPF this enchantment type offers for the given level on Bedrock: 1 per level for Protection, 2 for
+	 * Fire, Blast and Projectile Protection and 3 for Feather Falling (the type modifier rounded up).
+	 */
+	public function getBedrockProtectionFactor(int $level) : int{
+		return $level * (int) ceil($this->typeModifier);
 	}
 
 	/**

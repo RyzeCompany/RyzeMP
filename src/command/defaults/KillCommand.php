@@ -25,13 +25,21 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\entity\Living;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function count;
 
-class KillCommand extends NativeCommand{
+/**
+ * /kill [target]: kills the targets (players, mobs, or any entity with a selector such as @e[type=cow,r=20]);
+ * entities that cannot die (items, arrows...) are removed, like Bedrock.
+ */
+class KillCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,21 +51,32 @@ class KillCommand extends NativeCommand{
 		$this->setPermissions([DefaultPermissionNames::COMMAND_KILL_SELF, DefaultPermissionNames::COMMAND_KILL_OTHER]);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::target("target", true)]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) >= 2){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_KILL_SELF, DefaultPermissionNames::COMMAND_KILL_OTHER);
-		if($player === null){
+		$targets = $this->fetchPermittedEntityTargets($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_KILL_SELF, DefaultPermissionNames::COMMAND_KILL_OTHER);
+		if(count($targets) === 0){
 			return true;
 		}
 
-		$player->attack(new EntityDamageEvent($player, EntityDamageEvent::CAUSE_SUICIDE, $player->getHealth()));
-		if($player === $sender){
-			$sender->sendMessage(KnownTranslationFactory::commands_kill_successful($sender->getName()));
+		foreach($targets as $entity){
+			if($entity instanceof Living){
+				$entity->attack(new EntityDamageEvent($entity, EntityDamageEvent::CAUSE_SUICIDE, $entity->getHealth()));
+			}else{
+				$entity->flagForDespawn();
+			}
+		}
+		$names = TargetSelector::joinNames($targets);
+		if(count($targets) === 1 && $targets[0] === $sender){
+			$sender->sendMessage(KnownTranslationFactory::commands_kill_successful($names));
 		}else{
-			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_kill_successful($player->getName()));
+			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_kill_successful($names));
 		}
 
 		return true;

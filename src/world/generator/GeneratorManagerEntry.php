@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator;
 
+use pocketmine\world\dimension\Dimension;
+
 final class GeneratorManagerEntry{
 
 	/**
@@ -32,13 +34,20 @@ final class GeneratorManagerEntry{
 	public function __construct(
 		private string $generatorClass,
 		private \Closure $presetValidator,
-		private readonly bool $fast
+		private readonly bool $fast,
+		private readonly ?Dimension $dimension = null
 	){}
 
 	/** @phpstan-return class-string<Generator> */
 	public function getGeneratorClass() : string{ return $this->generatorClass; }
 
 	public function isFast() : bool{ return $this->fast; }
+
+	/**
+	 * Dimension of the worlds this generator makes, or null for ordinary Overworld terrain. Used as the dimension of a
+	 * world when its configuration doesn't set one.
+	 */
+	public function getDimension() : ?Dimension{ return $this->dimension; }
 
 	/**
 	 * @throws InvalidGeneratorOptionsException

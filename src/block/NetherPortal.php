@@ -25,13 +25,24 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\entity\BabySpawning;
 use pocketmine\entity\Entity;
+use pocketmine\entity\Location;
+use pocketmine\entity\monster\ZombifiedPiglin;
+use pocketmine\entity\SpawnReason;
+use pocketmine\event\entity\EntityNaturalSpawnEvent;
 use pocketmine\item\Item;
 use pocketmine\math\Axis;
-use pocketmine\Server;
-use pocketmine\world\dimension\portal\NetherPortalFrame;
+use pocketmine\math\Facing;
+use pocketmine\world\dimension\Dimension;
+use pocketmine\world\dimension\NetherPortalShape;
+use pocketmine\world\dimension\PortalTravel;
+use pocketmine\world\GameRules;
+use function mt_rand;
 
 class NetherPortal extends Transparent{
+	/** A random tick spawns a zombified piglin when a roll in [0, 2000) is below the difficulty id. */
+	private const ZOMBIFIED_PIGLIN_SPAWN_ROLL = 2000;
 
 	protected int $axis = Axis::X;
 
@@ -79,15 +90,64 @@ class NetherPortal extends Transparent{
 		return true;
 	}
 
-	public function onEntityInside(Entity $entity) : bool{
-		Server::getInstance()->getDimensionManager()->touchNetherPortal($entity);
+	public function ticksRandomly() : bool{
 		return true;
 	}
 
-	public function onNearbyBlockChange() : void{
+	/**
+	 * Vanilla NetherPortalBlock.randomTick(): outside the Nether and the End, a portal block may spawn a zombified
+	 * piglin (chance difficulty / 2000 per random tick, so never in Peaceful) standing on the block under the portal
+	 * column, with a portal cooldown.
+	 */
+	public function onRandomTick() : void{
 		$world = $this->position->getWorld();
-		if(!NetherPortalFrame::isPortalBlockSupported($world, $this, $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ())){
-			$world->setBlock($this->position, VanillaBlocks::AIR());
+		if(mt_rand(0, self::ZOMBIFIED_PIGLIN_SPAWN_ROLL - 1) >= $world->getDifficulty() ||
+			$world->getDimension() !== Dimension::OVERWORLD || !$world->areMobsEnabled() || $world->getGameRule(GameRules::DO_MOB_SPAWNING) !== true
+		){
+			return;
+		}
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$minY = $world->getMinY();
+		while($y > $minY && $world->getBlockAt($x, $y, $z) instanceof NetherPortal){
+			--$y;
+		}
+		if($world->getBlockAt($x, $y, $z)->getSupportType(Facing::UP) !== SupportType::FULL){
+			return;
+		}
+		$piglin = new ZombifiedPiglin(new Location($x + 0.5, $y + 1, $z + 0.5, $world, mt_rand(0, 359), 0));
+		$piglin->setPersistent(false);
+		$piglin->setSpawnReason(SpawnReason::STRUCTURE);
+		BabySpawning::rollSpawnBaby($piglin);
+		$ev = new EntityNaturalSpawnEvent($piglin, EntityNaturalSpawnEvent::CAUSE_STRUCTURE, true);
+		$ev->call();
+		if($ev->isCancelled() || $piglin->isClosed()){
+			$piglin->close();
+			return;
+		}
+		//vanilla: a full portal cooldown, so that it doesn't go through the portal it came out of at once
+		PortalTravel::getInstance()->setPortalCooldown($piglin);
+		$piglin->spawnToAll();
+	}
+
+	public function onEntityInside(Entity $entity) : bool{
+		PortalTravel::getInstance()->onEntityInsidePortal($entity, Dimension::NETHER, $this->position);
+		return true;
+	}
+
+	/**
+	 * A portal block needs portal blocks of the same axis or obsidian above, below and on both sides along its axis;
+	 * otherwise it breaks, and the neighbour updates break the rest of the portal.
+	 */
+	public function onNearbyBlockChange() : void{
+		$alongAxis = $this->axis === Axis::X ? [Facing::WEST, Facing::EAST] : [Facing::NORTH, Facing::SOUTH];
+		foreach([Facing::UP, Facing::DOWN, ...$alongAxis] as $face){
+			$side = $this->getSide($face);
+			if(!($side instanceof NetherPortal && $side->axis === $this->axis) && !NetherPortalShape::isFrame($side)){
+				$this->position->getWorld()->setBlock($this->position, VanillaBlocks::AIR());
+				return;
+			}
 		}
 	}
 }

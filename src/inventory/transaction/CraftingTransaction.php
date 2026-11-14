@@ -25,6 +25,7 @@ namespace pocketmine\inventory\transaction;
 
 use pocketmine\crafting\CraftingManager;
 use pocketmine\crafting\CraftingRecipe;
+use pocketmine\crafting\MultiCraftingRecipe;
 use pocketmine\crafting\RecipeIngredient;
 use pocketmine\event\inventory\CraftItemEvent;
 use pocketmine\item\Item;
@@ -242,14 +243,23 @@ class CraftingTransaction extends InventoryTransaction{
 		return $iterations;
 	}
 
+	/**
+	 * @return RecipeIngredient[]
+	 * @phpstan-return list<RecipeIngredient>
+	 */
+	private function getIngredientsFor(CraftingRecipe $recipe) : array{
+		//client-hardcoded recipes consume whatever is in the grid
+		return $recipe instanceof MultiCraftingRecipe ? $recipe->getIngredientListFor($this->source->getActiveCraftingGrid()) : $recipe->getIngredientList();
+	}
+
 	private function validateRecipe(CraftingRecipe $recipe, ?int $expectedRepetitions) : int{
 		//compute number of times recipe was crafted
-		$repetitions = $this->matchOutputs($this->outputs, $recipe->getResultsFor($this->source->getCraftingGrid()));
+		$repetitions = $this->matchOutputs($this->outputs, $recipe->getResultsFor($this->source->getActiveCraftingGrid()));
 		if($expectedRepetitions !== null && $repetitions !== $expectedRepetitions){
 			throw new TransactionValidationException("Expected $expectedRepetitions repetitions, got $repetitions");
 		}
 		//assert that $repetitions x recipe ingredients should be consumed
-		self::matchIngredients($this->inputs, $recipe->getIngredientList(), $repetitions);
+		self::matchIngredients($this->inputs, $this->getIngredientsFor($recipe), $repetitions);
 
 		return $repetitions;
 	}
@@ -267,9 +277,9 @@ class CraftingTransaction extends InventoryTransaction{
 			foreach($this->craftingManager->matchRecipeByOutputs($this->outputs) as $recipe){
 				try{
 					//compute number of times recipe was crafted
-					$this->repetitions = $this->matchOutputs($this->outputs, $recipe->getResultsFor($this->source->getCraftingGrid()));
+					$this->repetitions = $this->matchOutputs($this->outputs, $recipe->getResultsFor($this->source->getActiveCraftingGrid()));
 					//assert that $repetitions x recipe ingredients should be consumed
-					self::matchIngredients($this->inputs, $recipe->getIngredientList(), $this->repetitions);
+					self::matchIngredients($this->inputs, $this->getIngredientsFor($recipe), $this->repetitions);
 
 					//Success!
 					$this->recipe = $recipe;
@@ -285,6 +295,14 @@ class CraftingTransaction extends InventoryTransaction{
 			}
 		}else{
 			$this->repetitions = $this->validateRecipe($this->recipe, $this->repetitions);
+		}
+	}
+
+	public function execute() : void{
+		parent::execute();
+
+		if($this->recipe instanceof MultiCraftingRecipe){
+			$this->recipe->onCraftExecuted($this->outputs, $this->source);
 		}
 	}
 
