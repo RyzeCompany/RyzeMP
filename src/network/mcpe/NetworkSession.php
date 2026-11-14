@@ -1394,6 +1394,9 @@ class NetworkSession{
 
 			$overloads = \pocketmine\command\CommandMetadata::forProtocol($command, $this->player, $this->getProtocolId());
 			if($overloads === []){continue;}
+			// VanillaMine compatibility: append a free-text fallback AFTER typed
+			// overloads for protocol 1.26.40+, preserving custom enum suggestions.
+			$overloads = \pocketmine\command\CommandMetadata::withVanillaCompatibleFallback($command, $overloads, $this->getProtocolId());
 			$lname = strtolower($command->getLabel());
 			$aliases = $command->getAliases();
 			$aliasObj = null;
