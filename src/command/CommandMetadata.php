@@ -201,6 +201,37 @@ final class CommandMetadata{
 		return $lines;
 	}
 
+	/**
+	 * Diagnostic C: A/B-test the client handling of hard-enum identifiers.
+	 * Keep /crateprobe with the original namespaced enum names. Publish the
+	 * same values in /crateprobenative with short alphanumeric enum names.
+	 *
+	 * This alters only packet-local data for a single synthetic test command.
+	 * It must not be used as evidence of a permanent fix until tested in-game.
+	 *
+	 * @param list<CommandData> $commands
+	 * @return list<CommandData>
+	 */
+	public static function rewriteDiagnosticProbeEnumNames(array $commands) : array{
+		foreach($commands as $command){
+			if(strtolower($command->getName()) !== "crateprobenative"){continue;}
+			foreach($command->getOverloads() as $overload){
+				foreach($overload->getParameters() as $parameter){
+					if(!$parameter->enum instanceof CommandHardEnum || $parameter->enum instanceof CommandSoftEnum){continue;}
+					$name = match($parameter->paramName){
+						"namecrate" => "RyzeProbeNativeNamesB",
+						"effect" => "RyzeProbeNativeEffectsB",
+						default => null
+					};
+					if($name !== null){
+						$parameter->enum = new CommandHardEnum($name, $parameter->enum->getValues());
+					}
+				}
+			}
+		}
+		return $commands;
+	}
+
 	/** Refresh after dynamic names or visibility change; use only on the server thread. */
 	public static function refresh(Server $server) : void{
 		foreach($server->getOnlinePlayers() as $player){
