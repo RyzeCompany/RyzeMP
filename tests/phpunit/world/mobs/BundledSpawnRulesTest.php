@@ -71,4 +71,17 @@ final class BundledSpawnRulesTest extends TestCase{
 		self::assertNotNull($density);
 		self::assertFalse(NaturalSpawnPolicy::underCap(5, $density));
 	}
+
+	public function testHuskUsesDesertRuleOnly() : void{
+		$rules = BundledSpawnRules::get();
+		self::assertNotNull($rules);
+		$husks = array_values(array_filter($rules->forBiome(BiomeIds::DESERT),
+			static fn($rule) => $rule->identifier === "minecraft:husk"));
+		self::assertNotEmpty($husks);
+		self::assertSame([], array_values(array_filter($rules->forBiome(BiomeIds::PLAINS),
+			static fn($rule) => $rule->identifier === "minecraft:husk")));
+		$dark = new SpawnSpot(0, 64, 0, true, SpawnSpot::MEDIUM_AIR,
+			"minecraft:sand", "minecraft:air", 0, 15, BiomeIds::DESERT, 30.0);
+		self::assertTrue($husks[0]->matchesSpot($dark, new SpawnContext(2, 15, 15)));
+	}
 }

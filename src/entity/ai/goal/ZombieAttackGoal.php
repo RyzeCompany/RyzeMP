@@ -3,8 +3,6 @@ declare(strict_types=1);
 namespace pocketmine\entity\ai\goal;
 
 use pocketmine\entity\Zombie;
-use pocketmine\event\entity\EntityDamageByEntityEvent;
-use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\player\Player;
 use pocketmine\math\VoxelRayTrace;
 use pocketmine\world\World;
@@ -53,7 +51,7 @@ final class ZombieAttackGoal extends Goal{
 			$this->zombie->getNavigation()->stop();
 			if($this->attackCooldown===0 && $this->hasLineOfSight($player)){
 				$this->attackCooldown=20;
-				$player->attack(new EntityDamageByEntityEvent($this->zombie,$player,EntityDamageEvent::CAUSE_ENTITY_ATTACK,3.0));
+				$this->zombie->attackMelee($player);
 			}
 		}elseif($this->repathCooldown===0){
 			$this->repathCooldown=16;

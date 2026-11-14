@@ -24,10 +24,13 @@ declare(strict_types=1);
 namespace pocketmine\entity;
 
 use pocketmine\entity\ai\goal\ZombieAttackGoal;
+use pocketmine\event\entity\EntityDamageByEntityEvent;
+use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\world\World;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
+use pocketmine\player\Player;
 use function mt_rand;
 
 class Zombie extends Mob{
@@ -39,6 +42,12 @@ class Zombie extends Mob{
 	protected function registerGoals() : void{
 		$this->getGoalSelector()->addGoal(1, new ZombieAttackGoal($this));
 		parent::registerGoals();
+	}
+
+	public function attackMelee(Player $target) : bool{
+		$event = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, 3.0);
+		$target->attack($event);
+		return !$event->isCancelled();
 	}
 
 

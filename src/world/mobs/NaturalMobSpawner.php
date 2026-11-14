@@ -12,6 +12,7 @@ use pocketmine\entity\animal\Cow;
 use pocketmine\entity\animal\Pig;
 use pocketmine\entity\animal\Sheep;
 use pocketmine\entity\Creeper;
+use pocketmine\entity\Husk;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
 use pocketmine\entity\Skeleton;
@@ -64,6 +65,15 @@ final class NaturalMobSpawner{
 
 	public function getAttemptCount() : int{ return $this->attempted; }
 	public function getSpawnCount() : int{ return $this->spawned; }
+
+	/** Carry transient natural-spawn state across a vanilla mob conversion. */
+	public function transferNaturalMob(Living $from, Living $to) : void{
+		if(isset($this->natural[$from])){
+			$this->natural[$to] = $this->natural[$from];
+			$this->naturalSurface[$to] = $this->naturalSurface[$from];
+			unset($this->natural[$from], $this->naturalSurface[$from]);
+		}
+	}
 
 	public function tick(int $currentTick) : void{
 		if(!$this->settings->enabled){return;}
@@ -358,7 +368,7 @@ final class NaturalMobSpawner{
 		$population = $category === "water_animal" ? "animal" : $category;
 		$allowed = match($category){
 			"animal" => [Cow::getNetworkTypeId(), Pig::getNetworkTypeId(), Sheep::getNetworkTypeId(), Chicken::getNetworkTypeId()],
-			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId(), Spider::getNetworkTypeId()],
+			"monster" => [Zombie::getNetworkTypeId(), Skeleton::getNetworkTypeId(), Creeper::getNetworkTypeId(), Spider::getNetworkTypeId(), Husk::getNetworkTypeId()],
 			"water_animal" => [Squid::getNetworkTypeId()],
 			default => []
 		};
