@@ -1,0 +1,30 @@
+name: Bootstrap VanillaMine base
+on:
+  push:
+    branches:
+      - integration/vanillamine-base
+    paths:
+      - .github/workflows/bootstrap-vanillamine.yml
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Import pinned VanillaMine gameplay tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --branch vanilla-content --depth 1 https://gitlab.com/VanillaMine/VanillaMine.git "$RUNNER_TEMP/vanillamine"
+          test "$(git -C "$RUNNER_TEMP/vanillamine" rev-parse HEAD)" = "4dd2228b47d64c8015c28138c846e6c4acb28345"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf -- {} +
+          tar -C "$RUNNER_TEMP/vanillamine" --exclude='./.git' -cf - . | tar -xf -
+          test -f src/Server.php && test -f LICENSE
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Import VanillaMine 4dd2228 as RyzeMP gameplay base'
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
