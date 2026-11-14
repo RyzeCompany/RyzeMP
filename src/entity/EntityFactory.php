@@ -227,6 +227,10 @@ final class EntityFactory{
 			return new Spider(Helper::parseLocation($nbt, $world), $nbt);
 		}, ['Spider', 'minecraft:spider']);
 
+		$this->register(CaveSpider::class, function(World $world, CompoundTag $nbt) : CaveSpider{
+			return new CaveSpider(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['CaveSpider', 'minecraft:cave_spider']);
+
 		$this->register(Squid::class, function(World $world, CompoundTag $nbt) : Squid{
 			return new Squid(Helper::parseLocation($nbt, $world), $nbt);
 		}, ['Squid', 'minecraft:squid']);

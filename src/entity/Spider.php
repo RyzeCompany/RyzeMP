@@ -51,6 +51,13 @@ class Spider extends Mob{
 		}
 	}
 
+	/** Returns false when a plugin or invulnerability cancelled the hit. */
+	public function attackMelee(Player $target) : bool{
+		$event = new EntityDamageByEntityEvent($this, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, 2.0);
+		$target->attack($event);
+		return !$event->isCancelled();
+	}
+
 	protected function entityBaseTick(int $tickDiff = 1) : bool{
 		$changed = parent::entityBaseTick($tickDiff);
 		if($this->getWorld()->getDifficulty() === World::DIFFICULTY_PEACEFUL){

@@ -14,6 +14,8 @@ use pocketmine\entity\Zombie;
 use pocketmine\entity\Skeleton;
 use pocketmine\entity\Creeper;
 use pocketmine\entity\Spider;
+use pocketmine\entity\CaveSpider;
+use pocketmine\world\World;
 
 final class MobRegistrationTest extends TestCase{
 	public function testNewMobsHavePersistentIdsAndSpawnerFactories() : void{
@@ -27,10 +29,18 @@ final class MobRegistrationTest extends TestCase{
 			Zombie::class=>"minecraft:zombie",
 			Skeleton::class=>"minecraft:skeleton",
 			Creeper::class=>"minecraft:creeper",
-			Spider::class=>"minecraft:spider"
+			Spider::class=>"minecraft:spider",
+			CaveSpider::class=>"minecraft:cave_spider"
 		] as $class=>$id){
 			self::assertTrue($factory->isRegistered($class),$class." must save/reload in LevelDB");
 			self::assertTrue($spawn->isRegistered($id),$id." must be spawnable");
 		}
+	}
+
+	public function testCaveSpiderPoisonScalesWithDifficulty() : void{
+		self::assertSame(0, CaveSpider::getPoisonTicks(World::DIFFICULTY_PEACEFUL));
+		self::assertSame(0, CaveSpider::getPoisonTicks(World::DIFFICULTY_EASY));
+		self::assertSame(140, CaveSpider::getPoisonTicks(World::DIFFICULTY_NORMAL));
+		self::assertSame(300, CaveSpider::getPoisonTicks(World::DIFFICULTY_HARD));
 	}
 }

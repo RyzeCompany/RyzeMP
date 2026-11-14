@@ -4,8 +4,6 @@ declare(strict_types=1);
 namespace pocketmine\entity\ai\goal;
 
 use pocketmine\entity\Spider;
-use pocketmine\event\entity\EntityDamageByEntityEvent;
-use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\math\VoxelRayTrace;
 use pocketmine\player\Player;
 use pocketmine\world\World;
@@ -65,7 +63,7 @@ final class SpiderAttackGoal extends Goal{
 			$this->spider->getNavigation()->stop();
 			if($this->attackCooldown === 0 && $this->hasLineOfSight($target)){
 				$this->attackCooldown = 20;
-				$target->attack(new EntityDamageByEntityEvent($this->spider, $target, EntityDamageEvent::CAUSE_ENTITY_ATTACK, 2.0));
+				$this->spider->attackMelee($target);
 			}
 		}elseif($this->repathCooldown === 0){
 			$this->repathCooldown = 16;
