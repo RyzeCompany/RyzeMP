@@ -36,6 +36,42 @@ paquete global y el parser de comandos del cliente/protocolo.
 Este cambio requiere instalar un **nuevo PHAR de RyzeMP** de esta rama,
 reiniciar y reconectar; conservar el PHAR experimental de HCF PR #4.
 
+## Comparación con VanillaMine: compatibilidad de overloads en 1.26
+
+Investigación basada en el código fuente de `VanillaMine/VanillaMine` (rama
+`vanilla-content`) y `VanillaMine/BedrockProtocol` (rama `hashed-block-ids`)
+en GitLab, sin modificar esos repositorios.
+
+**Diferencias confirmadas**:
+- Ambas implementaciones ya **excluyen /help** del paquete de comandos.
+  No era una explicación de este bug.
+- VanillaMine usa `CommandOverloadMapper` para mantener primero los
+  overloads tipados y añadir a los comandos no exhaustivos un argumento
+  opcional `args: RAWTEXT`. RyzeMP no añadía ese fallback a los comandos
+  que implementan `CommandOverloadProvider`.
+- VanillaMine comparte hard enums por nombre con política "first wins";
+  RyzeMP canoniza objetos y renombra un nombre si detecta distintos valores.
+  No se cambió esa política en este experimento.
+- En el protocolo 2225, las estructuras de bytes para índices, enums y
+  flags inspeccionadas son equivalentes. VanillaMine usa una única versión
+  de protocolo más reciente; RyzeMP mantiene rutas para múltiples protocolos.
+
+**Prueba de compatibilidad experimental**:
+- Para clientes desde protocolo 2168 (1.26.40), RyzeMP conserva primero
+  todos los overloads tipados y agrega **al final** un overload
+  opcional `args: RAWTEXT` si el comando implementa
+  `CommandOverloadProvider` y aún no tiene uno equivalente.
+- No se agregan overloads a comandos ocultos, ni a comandos clásicos con
+  fallback, ni a versiones anteriores a 2168.
+- Las pruebas verifican que el formato enviado en 2168/2193/2225 incluye
+  exactamente una alternativa `args` sin duplicados.
+
+**Límite de evidencia**: el cambio es un mecanismo probado en VanillaMine,
+pero todavía **no es una corrección visual confirmada** del literal
+`default default`. Las pruebas de PHAR/CI validan la composición y
+serialización, no el parser del cliente real. Mantener el PR como Draft
+hasta probar autocompletado en 1.26.40 y 1.26.60.
+
 ## Cambios en esta rama
 - Únicamente instrumentación de los paquetes `AvailableCommandsPacket`
   **ya serializados, después de `DataPacketSendEvent`**.
