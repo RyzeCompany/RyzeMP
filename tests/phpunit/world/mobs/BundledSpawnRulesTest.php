@@ -22,6 +22,8 @@ final class BundledSpawnRulesTest extends TestCase{
 		$grass = new SpawnSpot(0, 64, 0, true, SpawnSpot::MEDIUM_AIR,
 			"minecraft:grass_block", "minecraft:air", 0, 15, BiomeIds::PLAINS, 30.0);
 		self::assertTrue($cows[0]->matchesSpot($grass, $day));
+		self::assertSame(2, $cows[0]->herds[0]->minSize);
+		self::assertSame(3, $cows[0]->herds[0]->maxSize);
 		self::assertSame([], array_values(array_filter($rules->forBiome(BiomeIds::DESERT),
 			static fn($rule) => $rule->identifier === "minecraft:cow")));
 	}
@@ -51,6 +53,8 @@ final class BundledSpawnRulesTest extends TestCase{
 		$riverWater = new SpawnSpot(0, 62, 0, true, SpawnSpot::MEDIUM_WATER,
 			"minecraft:water", "minecraft:water", 0, 15, BiomeIds::RIVER, 30.0);
 		self::assertTrue($squids[0]->matchesSpot($riverWater, new SpawnContext(2, 0, 0)));
+		self::assertSame(2, $squids[0]->herds[0]->minSize);
+		self::assertSame(4, $squids[0]->herds[0]->maxSize);
 		$creepers = array_values(array_filter($rules->forBiome(BiomeIds::PLAINS),
 			static fn($rule) => $rule->identifier === "minecraft:creeper" && $rule->getDensityLimit(true) !== null));
 		self::assertNotEmpty($creepers);

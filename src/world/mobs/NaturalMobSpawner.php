@@ -132,8 +132,11 @@ final class NaturalMobSpawner{
 		if($count >= $this->settings->globalCap){return;}
 
 		$created = 0;
+		// A selected column may produce a herd; bound entity creation separately
+		// from maxAttempts, which limits the number of sampled columns.
+		$maxCreated = $this->settings->mode === MobSpawningSettings::MODE_VANILLA ? 8 : 2;
 		foreach($columns as [$x, $z]){
-			if($created >= 2 || $count >= $this->settings->globalCap){break;}
+			if($created >= $maxCreated || $count >= $this->settings->globalCap){break;}
 			++$this->attempted;
 			$chunk = $world->getChunk($x >> 4, $z >> 4);
 			if($chunk === null || !$chunk->isPopulated() || $chunk->isLightPopulated() !== true ||
@@ -146,6 +149,8 @@ final class NaturalMobSpawner{
 
 			$identifier = null;
 			$rule = null;
+			$spot = null;
+			$context = null;
 			$surface = true;
 			$category = "animal";
 			$biomeId = 0;
@@ -223,60 +228,127 @@ final class NaturalMobSpawner{
 				$category = $rule->population;
 			}
 
-			$localCap = $this->settings->populationCap($category, $surface);
-			if($this->settings->mode === MobSpawningSettings::MODE_LEGACY){
-				// Legacy caps are per player, measured within 64 blocks.
-				$nearCount = 0;
-				foreach($counted as $existing){
-					if($this->category($existing) === $category &&
-						$existing->getPosition()->distanceSquared($pos) <= 64 ** 2){
-						++$nearCount;
-					}
+			$herdSize = $rule?->pickHerd()->rollSize() ?? 1;
+			$used = [$x . ":" . $y . ":" . $z => true];
+			for($member = 0; $member < $herdSize && $created < $maxCreated && $count < $this->settings->globalCap; ++$member){
+				if($member > 0){
+					if($rule === null || $spot === null || $context === null){break;}
+					$next = $this->findHerdSpot($spot, $rule, $context, $players, $used);
+					if($next === null){break;}
+					$spot = $next;
+					$x = $spot->x;
+					$y = $spot->y;
+					$z = $spot->z;
+					$pos = new Vector3($x + 0.5, $y, $z + 0.5);
+					$used[$x . ":" . $y . ":" . $z] = true;
 				}
-			}else{
-				$nearCount = Policy::populationInChunkRadiusForGroup($byChunk,
-					$x >> 4, $z >> 4, $category, $surface);
-			}
-			if(!Policy::underCap($nearCount, $localCap)){continue;}
-			if($rule !== null && ($density = $rule->getDensityLimit($surface)) !== null &&
-				!Policy::underCap(Policy::populationInChunkRadiusForGroup($byType,
-					$x >> 4, $z >> 4, $identifier, $surface), $density)){
-				continue;
-			}
-
-			$location = new Location($x + 0.5, $y, $z + 0.5, $world, 0.0, 0.0);
-			if(MobPreSpawnEvent::hasHandlers()){
-				$event = new MobPreSpawnEvent($identifier, $location, SpawnReason::NATURAL);
-				$event->call();
-				if($event->isCancelled()){continue;}
-			}
-			$mob = SpawnerEntityRegistry::getInstance()->spawn($identifier, $location);
-			if(!$mob instanceof Living){
-				$mob?->close();
-				continue;
-			}
-			$mob->setCanSaveWithChunk(false);
-			if(EntityNaturalSpawnEvent::hasHandlers()){
-				$event = new EntityNaturalSpawnEvent($mob, EntityNaturalSpawnEvent::CAUSE_NATURAL, $surface);
-				$event->call();
-				if($event->isCancelled()){
-					$mob->close();
+				$localCap = $this->settings->populationCap($category, $surface);
+				if($this->settings->mode === MobSpawningSettings::MODE_LEGACY){
+					// Legacy caps are per player, measured within 64 blocks.
+					$nearCount = 0;
+					foreach($counted as $existing){
+						if($this->category($existing) === $category &&
+							$existing->getPosition()->distanceSquared($pos) <= 64 ** 2){
+							++$nearCount;
+						}
+					}
+				}else{
+					$nearCount = Policy::populationInChunkRadiusForGroup($byChunk,
+						$x >> 4, $z >> 4, $category, $surface);
+				}
+				if(!Policy::underCap($nearCount, $localCap)){continue;}
+				if($rule !== null && ($density = $rule->getDensityLimit($surface)) !== null &&
+					!Policy::underCap(Policy::populationInChunkRadiusForGroup($byType,
+						$x >> 4, $z >> 4, $identifier, $surface), $density)){
 					continue;
 				}
+
+				$location = new Location($x + 0.5, $y, $z + 0.5, $world, 0.0, 0.0);
+				if(MobPreSpawnEvent::hasHandlers()){
+					$event = new MobPreSpawnEvent($identifier, $location, SpawnReason::NATURAL);
+					$event->call();
+					if($event->isCancelled()){continue;}
+				}
+				$mob = SpawnerEntityRegistry::getInstance()->spawn($identifier, $location);
+				if(!$mob instanceof Living){
+					$mob?->close();
+					continue;
+				}
+				$mob->setCanSaveWithChunk(false);
+				if(EntityNaturalSpawnEvent::hasHandlers()){
+					$event = new EntityNaturalSpawnEvent($mob, EntityNaturalSpawnEvent::CAUSE_NATURAL, $surface);
+					$event->call();
+					if($event->isCancelled()){
+						$mob->close();
+						continue;
+					}
+				}
+				$mob->spawnToAll();
+				$this->natural[$mob] = 0;
+				$this->naturalSurface[$mob] = $surface;
+				$counted[] = $mob;
+				$key = ($x >> 4) . ":" . ($z >> 4);
+				$group = $category . ($surface ? ":surface" : ":cave");
+				$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
+				$typeGroup = $mob::getNetworkTypeId() . ($surface ? ":surface" : ":cave");
+				$byType[$key][$typeGroup] = ($byType[$key][$typeGroup] ?? 0) + 1;
+				++$count;
+				++$created;
+				++$this->spawned;
 			}
-			$mob->spawnToAll();
-			$this->natural[$mob] = 0;
-			$this->naturalSurface[$mob] = $surface;
-			$counted[] = $mob;
-			$key = ($x >> 4) . ":" . ($z >> 4);
-			$group = $category . ($surface ? ":surface" : ":cave");
-			$byChunk[$key][$group] = ($byChunk[$key][$group] ?? 0) + 1;
-			$typeGroup = $mob::getNetworkTypeId() . ($surface ? ":surface" : ":cave");
-			$byType[$key][$typeGroup] = ($byType[$key][$typeGroup] ?? 0) + 1;
-			++$count;
-			++$created;
-			++$this->spawned;
 		}
+	}
+
+	/**
+	 * Try nearby loaded blocks for the next member of the same Bedrock spawn rule.
+	 * Every candidate is checked against the original rule and player distances.
+	 *
+	 * @param list<Player> $players
+	 * @param array<string, true> $used
+	 */
+	private function findHerdSpot(SpawnSpot $from, SpawnCondition $rule, SpawnContext $context, array $players, array $used) : ?SpawnSpot{
+		$world = $this->world;
+		$serializer = GlobalBlockStateHandlers::getSerializer();
+		for($attempt = 0; $attempt < 5; ++$attempt){
+			$x = $from->x + mt_rand(-5, 5);
+			$z = $from->z + mt_rand(-5, 5);
+			$chunk = $world->getChunk($x >> 4, $z >> 4);
+			if($chunk === null || !$chunk->isPopulated() || $chunk->isLightPopulated() !== true || $world->isChunkLocked($x >> 4, $z >> 4)){
+				continue;
+			}
+			foreach([0, 1, -1, 2, -2] as $dy){
+				$y = $from->y + $dy;
+				if(!$world->isInWorld($x, $y, $z) || $y <= $world->getMinY() ||
+					isset($used[$x . ":" . $y . ":" . $z])){continue;}
+				if($from->medium === SpawnSpot::MEDIUM_WATER){
+					if(!$world->getBlockAt($x, $y, $z) instanceof Water){continue;}
+				}elseif(!GroundPathFinder::walkable($world, $x, $y, $z)){
+					continue;
+				}
+				$pos = new Vector3($x + 0.5, $y, $z + 0.5);
+				$nearest = INF;
+				$eligible = false;
+				foreach($players as $player){
+					$d2 = $player->getPosition()->distanceSquared($pos);
+					$nearest = min($nearest, $d2);
+					if($d2 < Policy::MIN_PLAYER_DISTANCE ** 2){$eligible = false;break;}
+					if(Policy::withinPlayerRange($d2, $this->settings->maxDistance)){$eligible = true;}
+				}
+				if(!$eligible){continue;}
+				try{
+					$below = $serializer->serialize($world->getBlockAt($x, $y - 1, $z)->getStateId())->getName();
+					$feet = $serializer->serialize($world->getBlockAt($x, $y, $z)->getStateId())->getName();
+				}catch(BlockStateSerializeException){continue;}
+				$biomeId = $chunk->getBiomeId($x & 15, $y, $z & 15);
+				$spot = new SpawnSpot($x, $y, $z, $from->surface, $from->medium, $below, $feet,
+					$world->getBlockLightAt($x, $y, $z), $world->getPotentialBlockSkyLightAt($x, $y, $z),
+					$biomeId, sqrt($nearest));
+				if($rule->matchesSpot($spot, $context) && in_array($rule, $this->rules->forBiome($biomeId), true)){
+				return $spot;
+				}
+			}
+		}
+		return null;
 	}
 
 	private function pickSupportedRule(SpawnSpot $spot, SpawnContext $context, string $category) : ?SpawnCondition{
