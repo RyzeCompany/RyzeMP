@@ -12,6 +12,7 @@ use pocketmine\entity\animal\Cow;
 use pocketmine\entity\animal\Pig;
 use pocketmine\entity\animal\Sheep;
 use pocketmine\entity\Creeper;
+use pocketmine\entity\Endermite;
 use pocketmine\entity\Husk;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
@@ -65,6 +66,13 @@ final class NaturalMobSpawner{
 
 	public function getAttemptCount() : int{ return $this->attempted; }
 	public function getSpawnCount() : int{ return $this->spawned; }
+	public function isEnabled() : bool{ return $this->settings->enabled; }
+
+	/** Register a special vanilla spawn, such as an endermite from an ender pearl. */
+	public function trackSpecialNaturalMob(Living $mob, bool $surface = true) : void{
+		$this->natural[$mob] = 0;
+		$this->naturalSurface[$mob] = $surface;
+	}
 
 	/** Carry transient natural-spawn state across a vanilla mob conversion. */
 	public function transferNaturalMob(Living $from, Living $to) : void{
@@ -395,7 +403,7 @@ final class NaturalMobSpawner{
 			$entity instanceof Animal => "animal",
 			$entity instanceof Squid => $this->settings->mode === MobSpawningSettings::MODE_VANILLA ? "animal" : "water_animal",
 			$entity instanceof Zombie || $entity instanceof Skeleton ||
-				$entity instanceof Creeper || $entity instanceof Spider => "monster",
+				$entity instanceof Creeper || $entity instanceof Spider || $entity instanceof Endermite => "monster",
 			default => null
 		};
 	}

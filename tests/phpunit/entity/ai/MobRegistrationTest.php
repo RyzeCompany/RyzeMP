@@ -16,6 +16,7 @@ use pocketmine\entity\Creeper;
 use pocketmine\entity\Spider;
 use pocketmine\entity\CaveSpider;
 use pocketmine\entity\Husk;
+use pocketmine\entity\Endermite;
 use pocketmine\world\World;
 
 final class MobRegistrationTest extends TestCase{
@@ -32,7 +33,8 @@ final class MobRegistrationTest extends TestCase{
 			Creeper::class=>"minecraft:creeper",
 			Spider::class=>"minecraft:spider",
 			CaveSpider::class=>"minecraft:cave_spider",
-			Husk::class=>"minecraft:husk"
+			Husk::class=>"minecraft:husk",
+			Endermite::class=>"minecraft:endermite"
 		] as $class=>$id){
 			self::assertTrue($factory->isRegistered($class),$class." must save/reload in LevelDB");
 			self::assertTrue($spawn->isRegistered($id),$id." must be spawnable");

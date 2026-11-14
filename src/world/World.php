@@ -609,6 +609,15 @@ class World implements ChunkManager{
 		$this->naturalMobSpawner->transferNaturalMob($from, $to);
 	}
 
+	public function isNaturalMobSpawningEnabled() : bool{
+		return $this->naturalMobSpawner->isEnabled() && $this->getGameRules()->getBool(GameRules::DO_MOB_SPAWNING);
+	}
+
+	/** Keep special vanilla spawns in the same transient despawn and population system. */
+	public function trackSpecialNaturalMob(Living $mob) : void{
+		$this->naturalMobSpawner->trackSpecialNaturalMob($mob);
+	}
+
 	private function initRandomTickBlocksFromConfig(ServerConfigGroup $cfg) : void{
 		$dontTickBlocks = [];
 		$parser = StringToItemParser::getInstance();

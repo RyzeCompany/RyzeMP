@@ -247,6 +247,10 @@ final class EntityFactory{
 			return new Husk(Helper::parseLocation($nbt, $world), $nbt);
 		}, ['Husk', 'minecraft:husk']);
 
+		$this->register(Endermite::class, function(World $world, CompoundTag $nbt) : Endermite{
+			return new Endermite(Helper::parseLocation($nbt, $world), $nbt);
+		}, ['Endermite', 'minecraft:endermite']);
+
 		$this->register(Human::class, function(World $world, CompoundTag $nbt) : Human{
 			return new Human(Helper::parseLocation($nbt, $world), Human::parseSkinNBT($nbt), $nbt);
 		}, ['Human']);
