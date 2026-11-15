@@ -88,3 +88,68 @@ jobs:
             tests/phpunit/entity/ai/RaidGardenBenchmarkTest.php \
             tests/phpunit/world/WindBurstWorldTest.php \
             tests/phpunit/world/structure/StructureLoadBenchmarkTest.php
+
+  native-all-coverage:
+    name: All PHPUnit cases with official native chunkutils2 0.3.15 and vanilla data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      MOB_BENCH: '1'
+      STRUCTURE_BENCH: '1'
+      POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-native-full-vanilla
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Obtain pinned VanillaMine chunkutils2 native 0.3.15 source from GitLab
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch 0.3.15 https://gitlab.com/VanillaMine/ext-chunkutils2.git "$RUNNER_TEMP/ext-chunkutils2"
+          test "$(git -C "$RUNNER_TEMP/ext-chunkutils2" rev-parse HEAD)" = ed1da313796674970a8a0cb0637976f05c4e09be
+      - name: Compile genuine PHP 8.4 ZTS chunkutils2 extension with official headers
+        run: |
+          set -euo pipefail
+          docker run --rm --mount "type=bind,source=$RUNNER_TEMP/ext-chunkutils2,target=/work" \
+            --workdir /work php:8.4-zts bash -ec '
+              apt-get update -qq
+              apt-get install -qq -y ${PHPIZE_DEPS} g++ make autoconf > /dev/null
+              phpize
+              ./configure --enable-chunkutils2
+              make -j2
+              test -s modules/chunkutils2.so
+            '
+      - name: Replace only CI runner native module and confirm API 0.3.15
+        run: |
+          set -euo pipefail
+          ext="$(php -r 'echo ini_get("extension_dir");')/chunkutils2.so"
+          test -s "$ext"
+          cp "$ext" "$RUNNER_TEMP/chunkutils2-original.so"
+          cp "$RUNNER_TEMP/ext-chunkutils2/modules/chunkutils2.so" "$ext"
+          php -r '
+            if (phpversion("chunkutils2") !== "0.3.15") throw new RuntimeException("Native chunkutils2 version mismatch");
+            foreach (["pocketmine\\network\\mcpe\\NativeSendBuffers", "pocketmine\\world\\light\\NativeLightPopulation"] as $name) {
+              if (!class_exists($name)) throw new RuntimeException("Native class missing: " . $name);
+            }
+            echo "Native chunkutils2 0.3.15 loaded and accelerated classes available\n";'
+      - name: Fetch official pinned Mojang generator test data
+        run: |
+          php -d memory_limit=2G tools/fetch-vanilla-worldgen-data.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/template_pool"
+      - name: Obtain official Bedrock food fixtures for the pinned test version
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --proto '=https' \
+            'https://github.com/Mojang/bedrock-samples/releases/download/v1.26.50.4/bedrock-samples-v1.26.50.4-min.zip' \
+            -o "$RUNNER_TEMP/bedrock.zip"
+          unzip -q "$RUNNER_TEMP/bedrock.zip" -d "$RUNNER_TEMP/bedrock"
+          dir="$(find "$RUNNER_TEMP/bedrock" -type d -name behavior_pack -print -quit)"
+          test -n "$dir" && test -d "$dir/items"
+          echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
+      - name: Require a truly complete PHPUnit run (no skipped native or data tests)
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php \
+            --display-skipped --fail-on-skipped --fail-on-warning tests/phpunit
