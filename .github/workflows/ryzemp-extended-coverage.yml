@@ -146,6 +146,16 @@ jobs:
           dir="$(find "$RUNNER_TEMP/bedrock" -type d -name behavior_pack -print -quit)"
           test -n "$dir" && test -d "$dir/items"
           echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Build native Go vanillagen for remaining equivalence cases
+        env:
+          NATIVE_TARGETS: linux/amd64
+        run: |
+          bash build/ci/build-native.sh "full-coverage-$GITHUB_RUN_NUMBER"
+          test -x native/vanillagen/bin/vanillagen-linux-amd64
       - name: Require a truly complete PHPUnit run (no skipped native or data tests)
         run: |
           php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php \
