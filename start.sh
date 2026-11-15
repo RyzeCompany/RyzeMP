@@ -33,11 +33,13 @@ if [ "$PHP_BINARY" == "" ]; then
 fi
 
 if [ "$POCKETMINE_FILE" == "" ]; then
-	if [ -f ./PocketMine-MP.phar ]; then
+	if [ -f ./RyzeMP.phar ]; then
+		POCKETMINE_FILE="./RyzeMP.phar"
+	elif [ -f ./PocketMine-MP.phar ]; then
 		POCKETMINE_FILE="./PocketMine-MP.phar"
 	else
-		echo "PocketMine-MP.phar not found"
-		echo "Downloads can be found at https://github.com/pmmp/PocketMine-MP/releases"
+		echo "RyzeMP.phar not found"
+		echo "Downloads can be found at https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml"
 		exit 1
 	fi
 fi
