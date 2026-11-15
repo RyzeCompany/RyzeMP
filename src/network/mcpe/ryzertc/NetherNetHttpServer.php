@@ -15,11 +15,18 @@ final class NetherNetHttpServer{
      */
     public function __construct(
         private string $ip, private int $port, private \Closure $metadata,
-        private \Closure $offer, private \Closure $cancel
+        private \Closure $offer, private \Closure $cancel,
+        private string $certificate = '', private string $privateKey = ''
     ){}
 
     public function start() : void{
         if($this->listener !== null){return;}
+        if(($this->certificate === '') !== ($this->privateKey === '')){
+            throw new \InvalidArgumentException('NetherNet HTTPS needs both a certificate and a private key');
+        }
+        if($this->certificate !== '' && (!is_file($this->certificate) || !is_file($this->privateKey))){
+            throw new \InvalidArgumentException('NetherNet HTTPS certificate or private key not found');
+        }
         $socket = @stream_socket_server("tcp://{$this->ip}:{$this->port}", $code, $error, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
         if($socket === false){throw new \RuntimeException("Cannot bind NetherNet TCP {$this->ip}:{$this->port}: $error ($code)");}
         stream_set_blocking($socket, false);
@@ -38,7 +45,7 @@ final class NetherNetHttpServer{
             if(count($this->clients) >= 64 || $sameIp >= 8){fclose($s); continue;}
             stream_set_blocking($s, false);
             $this->clients[++$this->sequence] = ['socket' => $s, 'ip' => $remoteIp, 'data' => '', 'response' => null,
-                'header' => null, 'length' => 0, 'waiting' => false, 'expires' => $now + 4.0];
+                'header' => null, 'length' => 0, 'waiting' => false, 'state' => 'detect', 'expires' => $now + 6.0];
         }
         $budget = 262144;
         $offers = 0;
@@ -46,6 +53,37 @@ final class NetherNetHttpServer{
             if(!isset($this->clients[$id])){continue;}
             $client = &$this->clients[$id];
             if($now >= $client['expires'] || feof($client['socket'])){$this->close($id); unset($client); continue;}
+            // HTTP and HTTPS share server-port. Peek without consuming ClientHello: OpenSSL
+            // must receive the complete TLS record, including its first byte.
+            if($client['state'] === 'detect'){
+                $native = @socket_import_stream($client['socket']);
+                if($native === false){$this->close($id); unset($client); continue;}
+                $peek = '';
+                $received = @socket_recv($native, $peek, 1, MSG_PEEK | MSG_DONTWAIT);
+                if($received !== 1){unset($client); continue;}
+                if($peek === "\x16"){
+                    if($this->certificate === ''){
+                        // Bedrock Android/Windows retry HTTP after the standard TLS alert.
+                        // Consume the initial record to avoid resetting the TCP connection.
+                        @fread($client['socket'], 16384);
+                        $client['response'] = "\x15\x03\x03\x00\x02\x02\x28";
+                        $client['state'] = 'reject-tls';
+                    }else{
+                        @stream_context_set_option($client['socket'], 'ssl', 'local_cert', $this->certificate);
+                        @stream_context_set_option($client['socket'], 'ssl', 'local_pk', $this->privateKey);
+                        @stream_context_set_option($client['socket'], 'ssl', 'verify_peer', false);
+                        $client['state'] = 'tls-handshake';
+                    }
+                }else{
+                    $client['state'] = 'http';
+                }
+            }
+            if($client['state'] === 'tls-handshake'){
+                $result = @stream_socket_enable_crypto($client['socket'], true, STREAM_CRYPTO_METHOD_TLSv1_2_SERVER | STREAM_CRYPTO_METHOD_TLSv1_3_SERVER);
+                if($result === false){$this->close($id); unset($client); continue;}
+                if($result === 0){unset($client); continue;}
+                $client['state'] = 'http';
+            }
             if($client['response'] !== null){
                 $written = @fwrite($client['socket'], substr($client['response'], 0, 16384));
                 if($written === false){$this->close($id);}else{
