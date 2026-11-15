@@ -62,6 +62,23 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 		$this->broadcaster->broadcastPackets($recipients, [$packet]);
 	}
 
+	/**
+	 * Send packets containing network item IDs only to sessions using the palette that encoded them.
+	 * Keep using the injected broadcaster so packet-send events and custom broadcasters still run.
+	 *
+	 * @param NetworkSession[] $recipients
+	 * @param \Closure(TypeConverter) : ClientboundPacket $packetFactory
+	 */
+	private function sendConvertedDataPacket(array $recipients, \Closure $packetFactory) : void{
+		$groups = [];
+		foreach($recipients as $recipient){
+			$groups[$recipient->getProtocolId()][] = $recipient;
+		}
+		foreach($groups as $group){
+			$this->sendDataPacket($group, $packetFactory($group[0]->getTypeConverter()));
+		}
+	}
+
 	public function syncAttributes(array $recipients, Living $entity, array $attributes) : void{
 		if(count($attributes) > 0){
 			$this->sendDataPacket($recipients, UpdateAttributesPacket::create(
@@ -104,9 +121,9 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 	public function onMobMainHandItemChange(array $recipients, Human $mob) : void{
 		//TODO: we could send zero for slot here because remote players don't need to know which slot was selected
 		$inv = $mob->getInventory();
-		$this->sendDataPacket($recipients, MobEquipmentPacket::create(
+		$this->sendConvertedDataPacket($recipients, fn(TypeConverter $converter) : ClientboundPacket => MobEquipmentPacket::create(
 			$mob->getId(),
-			ItemStackWrapper::legacy($this->typeConverter->coreItemStackToNet($inv->getItemInHand())),
+			ItemStackWrapper::legacy($converter->coreItemStackToNet($inv->getItemInHand())),
 			$inv->getHeldItemIndex(),
 			$inv->getHeldItemIndex(),
 			ContainerIds::INVENTORY
@@ -115,9 +132,9 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 
 	public function onMobOffHandItemChange(array $recipients, Human $mob) : void{
 		$inv = $mob->getOffHandInventory();
-		$this->sendDataPacket($recipients, MobEquipmentPacket::create(
+		$this->sendConvertedDataPacket($recipients, fn(TypeConverter $converter) : ClientboundPacket => MobEquipmentPacket::create(
 			$mob->getId(),
-			ItemStackWrapper::legacy($this->typeConverter->coreItemStackToNet($inv->getItem(0))),
+			ItemStackWrapper::legacy($converter->coreItemStackToNet($inv->getItem(0))),
 			0,
 			0,
 			ContainerIds::OFFHAND
@@ -126,8 +143,7 @@ final class StandardEntityEventBroadcaster implements EntityEventBroadcaster{
 
 	public function onMobArmorChange(array $recipients, Living $mob) : void{
 		$inv = $mob->getArmorInventory();
-		$converter = $this->typeConverter;
-		$this->sendDataPacket($recipients, MobArmorEquipmentPacket::create(
+		$this->sendConvertedDataPacket($recipients, fn(TypeConverter $converter) : ClientboundPacket => MobArmorEquipmentPacket::create(
 			$mob->getId(),
 			ItemStackWrapper::legacy($converter->coreItemStackToNet($inv->getHelmet())),
 			ItemStackWrapper::legacy($converter->coreItemStackToNet($inv->getChestplate())),
