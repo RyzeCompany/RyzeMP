@@ -123,19 +123,20 @@ class RakLibServer extends Thread{
 			new UserToRakLibThreadMessageReceiver(new PthreadsChannelReader($this->mainToThreadBuffer)),
 			new RakLibToUserThreadMessageSender(new SnoozeAwarePthreadsChannelWriter($this->threadToMainBuffer, $this->sleeperEntry->createNotifier())),
 			new ExceptionTraceCleaner($this->mainPath),
-			recvMaxSplitParts: 512,
-			cookieRotationIntervalSeconds: $this->antiSpoofingCookies ? 5 : 0
+			recvMaxSplitParts: 512
 		);
 		//against reflection attacks with spoofed pings (needs a RakLib with the pong limit)
-		/** @phpstan-ignore function.alreadyNarrowedType (older RakLib versions lack it) */
+		/** @phpstan-ignore function.impossibleType (older RakLib versions lack it) */
 		if($this->maxPongsPerSecond > 0 && method_exists($manager, "setPongRateLimit")){
+			/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
 			$manager->setPongRateLimit($this->maxPongsPerSecond);
 		}
 		//proxies send all their players from one address: a flood block would disconnect all of them
-		/** @phpstan-ignore function.alreadyNarrowedType (older RakLib versions lack it) */
+		/** @phpstan-ignore function.impossibleType (older RakLib versions lack it) */
 		if($this->autoBlockExemptAddresses !== "" && method_exists($manager, "setAutoBlockExemption")){
 			try{
 				$exempt = new AddressSet(explode(",", $this->autoBlockExemptAddresses, 256));
+				/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
 				$manager->setAutoBlockExemption(static fn(string $address) : bool => $exempt->contains($address));
 			}catch(\InvalidArgumentException){
 				//already reported by the server when it read network.connection-limits.exempt-addresses
@@ -145,11 +146,15 @@ class RakLibServer extends Thread{
 		//Received datagrams are still read on RakLib's tick schedule (wakeOnReceive false): waking up for each one would
 		//also wake the main thread up for each one, which costs more CPU than it saves latency once several players are
 		//online. Without the socket, packets wait for RakLib's next tick, as before.
-		$wakeSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-		if($wakeSocket !== false && @socket_bind($wakeSocket, "127.0.0.1", 0) && @socket_getsockname($wakeSocket, $wakeAddress, $wakePort)){
-			socket_set_nonblock($wakeSocket);
-			$manager->setWakeSocket($wakeSocket, false);
-			$this->wakePort = $wakePort;
+		/** @phpstan-ignore function.impossibleType (available in newer RakLib versions) */
+		if(method_exists($manager, "setWakeSocket")){
+			$wakeSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+			if($wakeSocket !== false && @socket_bind($wakeSocket, "127.0.0.1", 0) && @socket_getsockname($wakeSocket, $wakeAddress, $wakePort)){
+				socket_set_nonblock($wakeSocket);
+				/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
+				$manager->setWakeSocket($wakeSocket, false);
+				$this->wakePort = $wakePort;
+			}
 		}
 		$this->synchronized(function() : void{
 			$this->ready = true;
