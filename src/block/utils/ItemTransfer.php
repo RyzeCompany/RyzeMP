@@ -117,12 +117,12 @@ final class ItemTransfer{
 	 * Adds one of the given item to the first slot of a container minecart that can take it. Returns whether it was
 	 * added.
 	 */
-	public static function insertOneIntoEntity(ContainerMinecart $minecart, Item $item) : bool{
+	public static function insertOneIntoEntity(ContainerMinecart $minecart, Item $item, ?\Closure $beforeInsert = null) : bool{
 		if($item->isNull()){
 			return false;
 		}
 		$inventory = $minecart->getInventory();
-		return self::addOneToSlots($inventory, range(0, $inventory->getSize() - 1), $item);
+		return self::addOneToSlots($inventory, range(0, $inventory->getSize() - 1), $item, $beforeInsert);
 	}
 
 	/**
@@ -217,13 +217,24 @@ final class ItemTransfer{
 	}
 
 	/**
-	 * Adds one of the given item to the first of the given slots that can take it. Returns whether it was added.
+	 * Adds one of the given item to the first eligible slot. The optional callback
+	 * may veto the transfer BEFORE either inventory is modified (e.g. for a hopper
+	 * protection event). A veto aborts this attempt instead of trying other slots.
 	 *
 	 * @param int[] $slots
+	 * @param null|\Closure(Inventory, int, Item): bool $beforeInsert
 	 */
-	public static function addOneToSlots(Inventory $inventory, array $slots, Item $item) : bool{
+	public static function addOneToSlots(Inventory $inventory, array $slots, Item $item, ?\Closure $beforeInsert = null) : bool{
 		$maxStack = min($inventory->getMaxStackSize(), $item->getMaxStackSize());
 		foreach($slots as $slot){
+			$existing = $inventory->getItem($slot);
+			if(!$existing->isNull() && ($existing->getCount() >= $maxStack || !$existing->canStackWith($item))){
+				continue;
+			}
+			if($beforeInsert !== null && !$beforeInsert($inventory, $slot, (clone $item)->setCount(1))){
+				return false;
+			}
+			// An event listener may have changed the destination during the callback.
 			$existing = $inventory->getItem($slot);
 			if($existing->isNull()){
 				$inventory->setItem($slot, (clone $item)->setCount(1));
@@ -233,6 +244,7 @@ final class ItemTransfer{
 				$inventory->setItem($slot, $existing->setCount($existing->getCount() + 1));
 				return true;
 			}
+			return false;
 		}
 		return false;
 	}
@@ -241,7 +253,7 @@ final class ItemTransfer{
 	 * Tries to insert one of the given item into the container (or composter) at the given position, through the
 	 * given face of it. Returns whether the item was taken.
 	 */
-	public static function insertOne(World $world, int $x, int $y, int $z, int $face, Item $item) : bool{
+	public static function insertOne(World $world, int $x, int $y, int $z, int $face, Item $item, ?\Closure $beforeInsert = null) : bool{
 		if($item->isNull()){
 			return false;
 		}
@@ -260,13 +272,13 @@ final class ItemTransfer{
 			//the item, so that the hopper woken up by the change is scheduled after the cooldown.
 			$oldNextTransferTick = $tile->getNextTransferTick();
 			$tile->setNextTransferTick($world->getServer()->getTick() + self::HOPPER_COOLDOWN_TICKS);
-			if(!self::addOneToSlots($inventory, $slots, $item)){
+			if(!self::addOneToSlots($inventory, $slots, $item, $beforeInsert)){
 				$tile->setNextTransferTick($oldNextTransferTick);
 				return false;
 			}
 			return true;
 		}
-		return self::addOneToSlots($inventory, $slots, $item);
+		return self::addOneToSlots($inventory, $slots, $item, $beforeInsert);
 	}
 
 	/**

@@ -32,6 +32,7 @@ use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\event\block\BlockItemPickupEvent;
+use pocketmine\event\inventory\HopperTransferItemEvent;
 use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
@@ -211,7 +212,7 @@ class Hopper extends Transparent implements PoweredByRedstone{
 				return false;
 			}
 			foreach($inventory->getContents() as $slot => $item){
-				if(ItemTransfer::insertOneIntoEntity($minecart, $item)){
+				if(ItemTransfer::insertOneIntoEntity($minecart, $item, fn(Inventory $destination, int $destinationSlot, Item $moved) : bool => $this->allowInventoryTransfer($inventory, $slot, $destination, $destinationSlot, $moved))){
 					$inventory->setItem($slot, $item->setCount($item->getCount() - 1));
 					return true;
 				}
@@ -220,7 +221,7 @@ class Hopper extends Transparent implements PoweredByRedstone{
 		}
 		$targetFace = Facing::opposite($this->facing);
 		foreach($inventory->getContents() as $slot => $item){
-			if(ItemTransfer::insertOne($world, $tx, $ty, $tz, $targetFace, $item)){
+			if(ItemTransfer::insertOne($world, $tx, $ty, $tz, $targetFace, $item, fn(Inventory $destination, int $destinationSlot, Item $moved) : bool => $this->allowInventoryTransfer($inventory, $slot, $destination, $destinationSlot, $moved))){
 				$inventory->setItem($slot, $item->setCount($item->getCount() - 1));
 				return true;
 			}
@@ -248,7 +249,7 @@ class Hopper extends Transparent implements PoweredByRedstone{
 			$sourceInventory = $source->getInventory();
 			foreach(ItemTransfer::getExtractSlots($source, $sourceInventory, Facing::DOWN) as $slot){
 				$item = $sourceInventory->getItem($slot);
-				if(!$item->isNull() && ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item)){
+				if(!$item->isNull() && ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item, fn(Inventory $destination, int $destinationSlot, Item $moved) : bool => $this->allowInventoryTransfer($sourceInventory, $slot, $destination, $destinationSlot, $moved))){
 					$sourceInventory->setItem($slot, $item->setCount($item->getCount() - 1));
 					return true;
 				}
@@ -271,7 +272,7 @@ class Hopper extends Transparent implements PoweredByRedstone{
 			//a chest or hopper minecart on a rail above
 			$sourceInventory = $minecart->getInventory();
 			foreach($sourceInventory->getContents() as $slot => $item){
-				if(ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item)){
+				if(ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item, fn(Inventory $destination, int $destinationSlot, Item $moved) : bool => $this->allowInventoryTransfer($sourceInventory, $slot, $destination, $destinationSlot, $moved))){
 					$sourceInventory->setItem($slot, $item->setCount($item->getCount() - 1));
 					return true;
 				}
@@ -280,6 +281,19 @@ class Hopper extends Transparent implements PoweredByRedstone{
 		}
 
 		return $this->collectItemEntity($inventory);
+	}
+
+	/**
+	 * Called only for real inventory-to-inventory moves. A cancelled transfer
+	 * must not modify either inventory or consume the hopper cooldown.
+	 */
+	private function allowInventoryTransfer(Inventory $source, int $sourceSlot, Inventory $destination, int $destinationSlot, Item $item) : bool{
+		if(!HopperTransferItemEvent::hasHandlers()){
+			return true;
+		}
+		$event = new HopperTransferItemEvent($this, $source, $sourceSlot, $destination, $destinationSlot, $item);
+		$event->call();
+		return !$event->isCancelled();
 	}
 
 	private function collectItemEntity(Inventory $inventory) : bool{
