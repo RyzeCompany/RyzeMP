@@ -185,7 +185,11 @@ final class BlockStateDictionary{
 		);
 	}
 
-	public static function loadFromString(string $blockPaletteContents, string $metaMapContents) : self{
+	/**
+	 * @param list<int>|null $networkIds Explicit IDs for palettes using hashed network IDs.
+	 *                           Older palettes use their position in the list instead.
+	 */
+	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null, bool $useHashedIds = true) : self{
 		$metaMap = json_decode($metaMapContents, flags: JSON_THROW_ON_ERROR);
 		if(!is_array($metaMap)){
 			throw new \InvalidArgumentException("Invalid metaMap, expected array for root type, got " . get_debug_type($metaMap));
@@ -203,7 +207,11 @@ final class BlockStateDictionary{
 			}
 		}
 
-		foreach(self::loadPaletteFromString($blockPaletteContents) as $i => $state){
+		$palette = self::loadPaletteFromString($blockPaletteContents);
+		if(count($palette) !== count($metaMap) || ($networkIds !== null && count($palette) !== count($networkIds))){
+			throw new \InvalidArgumentException("Palette, metadata and network IDs must have matching lengths");
+		}
+		foreach($palette as $i => $state){
 			$meta = $metaMap[$i] ?? null;
 			if($meta === null){
 				throw new \InvalidArgumentException("Missing associated meta value for state $i (" . $state->toNbt() . ")");
@@ -216,9 +224,12 @@ final class BlockStateDictionary{
 			//Network IDs are hashes of the blockstate NBT rather than positions in the palette. This makes the server
 			//independent of the (unpublished) order of Mojang's internal block registry: the palette file only needs to
 			//contain the right set of states, which can be regenerated from Mojang's public vanilla data.
-			$networkId = self::computeNetworkId($uniqueName, $state->getStates());
+			$networkId = $networkIds !== null ? ($networkIds[$i] ?? null) : ($useHashedIds ? self::computeNetworkId($uniqueName, $state->getStates()) : $i);
+			if(!is_int($networkId)){
+				throw new \InvalidArgumentException("Invalid network ID for state $i");
+			}
 			if(isset($entries[$networkId])){
-				throw new \InvalidArgumentException("Blockstate hash collision: " . $state->toNbt() . " and " . $entries[$networkId]->generateStateData()->toNbt() . " both hash to $networkId");
+				throw new \InvalidArgumentException("Duplicate network ID $networkId for state $i");
 			}
 			$entries[$networkId] = new BlockStateDictionaryEntry($uniqueName, $state->getStates(), $meta);
 		}

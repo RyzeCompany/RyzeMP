@@ -27,9 +27,11 @@ use pocketmine\errorhandler\ErrorToExceptionHandler;
 use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\ItemTypeEntry;
 use pocketmine\utils\AssumptionFailedError;
+use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
 use function base64_decode;
 use function is_array;
@@ -39,6 +41,15 @@ use function is_string;
 use function json_decode;
 
 final class ItemTypeDictionaryFromDataHelper{
+	public static function loadFromProtocolId(int $protocolId) : ItemTypeDictionary{
+		$suffix = match($protocolId){
+			ProtocolInfo::PROTOCOL_1_26_60 => "-1.26.60",
+			ProtocolInfo::PROTOCOL_1_26_52 => "-1.26.51",
+			ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45 => "",
+			default => throw new \InvalidArgumentException("Unsupported item palette protocol $protocolId")
+		};
+		return self::loadFromString(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "required_item_list$suffix.json"));
+	}
 
 	public static function loadFromString(string $data) : ItemTypeDictionary{
 		$table = json_decode($data, true);

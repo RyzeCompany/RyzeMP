@@ -27,12 +27,46 @@ use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockStateSerializeException;
 use pocketmine\data\bedrock\block\BlockStateSerializer;
 use pocketmine\data\bedrock\block\BlockTypeNames;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\utils\AssumptionFailedError;
+use pocketmine\utils\Filesystem;
+use pocketmine\world\format\io\GlobalBlockStateHandlers;
+use function json_decode;
+use const JSON_THROW_ON_ERROR;
 
 /**
  * @internal
  */
 final class BlockTranslator{
+	public static function loadFromProtocolId(int $protocolId) : self{
+		[$suffix, $networkIdsFile] = match($protocolId){
+			ProtocolInfo::PROTOCOL_1_26_60 => ["-1.26.60", "block_network_ids-1.26.60.json"],
+			ProtocolInfo::PROTOCOL_1_26_52 => ["-1.26.50", "block_network_ids-1.26.50.json"],
+			ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45 => ["", null],
+			default => throw new \InvalidArgumentException("Unsupported block palette protocol $protocolId")
+		};
+		$path = \pocketmine\BEDROCK_DATA_PATH;
+		$networkIds = $networkIdsFile === null ? null : json_decode(Filesystem::fileGetContents($path . $networkIdsFile), true, flags: JSON_THROW_ON_ERROR);
+		if($networkIds !== null){
+			if(!is_array($networkIds) || !array_is_list($networkIds)){
+				throw new \UnexpectedValueException("Invalid block network ID list for protocol $protocolId");
+			}
+			foreach($networkIds as $networkId){
+				if(!is_int($networkId)){
+					throw new \UnexpectedValueException("Invalid block network ID for protocol $protocolId");
+				}
+			}
+		}
+		return new self(
+			BlockStateDictionary::loadFromString(
+				Filesystem::fileGetContents($path . "canonical_block_states$suffix.nbt"),
+				Filesystem::fileGetContents($path . "block_state_meta_map$suffix.json"),
+				$networkIds,
+				$networkIdsFile !== null
+			),
+			GlobalBlockStateHandlers::getSerializer()
+		);
+	}
 	/**
 	 * @var int[]
 	 * @phpstan-var array<int, int>

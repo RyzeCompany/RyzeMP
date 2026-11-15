@@ -31,7 +31,6 @@ use pocketmine\crafting\ExactRecipeIngredient;
 use pocketmine\crafting\MetaWildcardRecipeIngredient;
 use pocketmine\crafting\RecipeIngredient;
 use pocketmine\crafting\TagWildcardRecipeIngredient;
-use pocketmine\data\bedrock\BedrockDataFiles;
 use pocketmine\data\bedrock\item\BlockItemIdMap;
 use pocketmine\data\bedrock\item\ItemTypeNames;
 use pocketmine\data\SavedDataLoadingException;
@@ -47,6 +46,7 @@ use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\nbt\UnexpectedTagTypeException;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\GameMode as ProtocolGameMode;
 use pocketmine\network\mcpe\protocol\types\inventory\ItemStack;
 use pocketmine\network\mcpe\protocol\types\inventory\ItemStackExtraData;
@@ -57,8 +57,6 @@ use pocketmine\network\mcpe\protocol\types\recipe\StringIdMetaItemDescriptor;
 use pocketmine\network\mcpe\protocol\types\recipe\TagItemDescriptor;
 use pocketmine\player\GameMode;
 use pocketmine\utils\AssumptionFailedError;
-use pocketmine\utils\Filesystem;
-use pocketmine\utils\SingletonTrait;
 use pocketmine\utils\Utils;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\GlobalItemDataHandlers;
@@ -66,7 +64,24 @@ use function get_class;
 use function hash;
 
 class TypeConverter{
-	use SingletonTrait;
+	/** @var array<int, self> */
+	private static array $instances = [];
+
+	public static function getInstance(int $protocolId = ProtocolInfo::CURRENT_PROTOCOL) : self{
+		return self::$instances[$protocolId] ??= new self($protocolId);
+	}
+
+	public static function setInstance(self $instance) : void{
+		self::$instances[$instance->protocolId] = $instance;
+	}
+
+	public static function reset() : void{
+		self::$instances = [];
+	}
+
+	public function getProtocolId() : int{
+		return $this->protocolId;
+	}
 
 	private const PM_ID_TAG = "___Id___";
 	private const PM_FULL_NBT_HASH_TAG = "___FullNbtHash___";
@@ -81,18 +96,13 @@ class TypeConverter{
 
 	private SkinAdapter $skinAdapter;
 
-	public function __construct(){
+	public function __construct(private int $protocolId = ProtocolInfo::CURRENT_PROTOCOL){
 		//TODO: inject stuff via constructor
 		$this->blockItemIdMap = BlockItemIdMap::getInstance();
 
-		$canonicalBlockStatesRaw = Filesystem::fileGetContents(BedrockDataFiles::CANONICAL_BLOCK_STATES_NBT);
-		$metaMappingRaw = Filesystem::fileGetContents(BedrockDataFiles::BLOCK_STATE_META_MAP_JSON);
-		$this->blockTranslator = new BlockTranslator(
-			BlockStateDictionary::loadFromString($canonicalBlockStatesRaw, $metaMappingRaw),
-			GlobalBlockStateHandlers::getSerializer()
-		);
+		$this->blockTranslator = BlockTranslator::loadFromProtocolId($protocolId);
 
-		$this->itemTypeDictionary = ItemTypeDictionaryFromDataHelper::loadFromString(Filesystem::fileGetContents(BedrockDataFiles::REQUIRED_ITEM_LIST_JSON));
+		$this->itemTypeDictionary = ItemTypeDictionaryFromDataHelper::loadFromProtocolId($protocolId);
 		$this->shieldRuntimeId = $this->itemTypeDictionary->fromStringId(ItemTypeNames::SHIELD);
 
 		$this->itemTranslator = new ItemTranslator(
