@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - integration/vanillamine-base
+      - main
   pull_request:
   workflow_dispatch:
 

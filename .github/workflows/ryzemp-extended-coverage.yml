@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - integration/vanillamine-base
+      - main
   workflow_dispatch:
 
 permissions:
