@@ -79,6 +79,10 @@ final class YmlServerProperties{
 	public const DEBUG_LEVEL = 'debug.level';
 	public const DIMENSIONS = 'dimensions';
 	public const DIMENSIONS_ENABLED = 'dimensions.enabled';
+	public const FISHING = 'fishing';
+	public const FISHING_ENABLED = 'fishing.enabled';
+	public const FISHING_MAX_DISTANCE = 'fishing.max-distance';
+	public const FISHING_PVP_ENABLED = 'fishing.pvp-enabled';
 	public const LEVEL_SETTINGS = 'level-settings';
 	public const LEVEL_SETTINGS_DEFAULT_FORMAT = 'level-settings.default-format';
 	public const LOOT_TABLES = 'loot-tables';
