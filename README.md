@@ -1,25 +1,12 @@
-<p align="center">
-	<img src=".github/readme/pocketmine-rgb.gif" alt="The PocketMine-MP logo" loading="eager" /><br>
-	<b>A highly customisable, open source server software for Minecraft: Bedrock Edition written in PHP — now with vanilla gameplay</b>
-</p>
+# RyzeMP — vanilla gameplay with multiversion Bedrock networking
 
-<p align="center">
-	<a href="https://gitlab.com/VanillaPocketMine/VanillaMine/-/pipelines"><img src="https://gitlab.com/VanillaPocketMine/VanillaMine/badges/vanilla-content/pipeline.svg" alt="pipeline status" /></a>
-	<a href="https://gitlab.com/VanillaPocketMine/VanillaMine/-/releases"><img src="https://gitlab.com/VanillaPocketMine/VanillaMine/-/badges/release.svg" alt="latest release" /></a>
-	<img src="https://img.shields.io/badge/Bedrock-1.26.52-62B47A" alt="Minecraft: Bedrock Edition 1.26.52" />
-	<img src="https://img.shields.io/badge/PHP-8.2%20%7C%208.3%20%7C%208.4-777BB4?logo=php&logoColor=white" alt="PHP 8.2 | 8.3 | 8.4" />
-</p>
+**Status: development integration (`integration/vanillamine-base`).** This branch is not a production release. It combines the VanillaMine game engine with RyzeMP's Bedrock multi-protocol packet and item conversion. Until real-client tests pass, use the [integration CI artifacts](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) only on a disposable test server; do not replace a production PHAR.
 
-> [!NOTE]
-> **This is a fork of [PocketMine-MP](https://github.com/pmmp/PocketMine-MP).**
-> The original project was created and maintained for over 10 years by the [PMMP team](https://github.com/pmmp).
-> In July 2026 the PMMP team [ended support](https://github.com/pmmp/PocketMine-MP#end-of-support-announcement)
-> and archived its repositories; their last release was 5.44.3 for Bedrock 1.26.30.
->
-> **VanillaPocketMine** continues the project:
-> updates for new Minecraft versions, our own builds of the libraries and PHP binaries, and the vanilla game
-> features PocketMine-MP never had. We are not affiliated with the PMMP team; all credit for the original work goes
-> to them and to every contributor of the original project.
+**Compatibility:** PocketMine-MP 5 plugin API and world data are retained; the core API version is independent from RyzeMP release tags. Target clients: Bedrock 1.26.40, 1.26.45, 1.26.52 and 1.26.60, including mixed sessions. Client compatibility has **not yet been validated end-to-end**.
+
+**Attribution:** RyzeMP incorporates [VanillaMine](https://gitlab.com/VanillaMine/VanillaMine) and descends from [PocketMine-MP](https://github.com/pmmp/PocketMine-MP). Their original copyrights, attributions and LGPL license are retained. RyzeCompany does not claim authorship of the upstream code.
+
+**Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) remains the only supported egg. It installs native RyzeRTC outside the PHAR. This integration branch also contains VanillaMine's different `pm-nethernet` bridge: the two implementations must not be launched on the same public port. The final production transport and egg integration require real-client tests before release.
 
 ## What is this?
 PocketMine-MP is a highly customisable server software for Minecraft: Bedrock Edition, built from scratch in PHP.
@@ -66,16 +53,16 @@ This fork changes that. Implemented so far:
 - Auto-updater served from `updates.vanillamine.com`
 
 Vanilla behaviour is still a work in progress: some mechanics are simplified or missing. If you find something that
-behaves differently from Bedrock Dedicated Server, please [open an issue](https://gitlab.com/VanillaPocketMine/VanillaMine/-/issues).
+behaves differently from Bedrock Dedicated Server, please [open an issue](https://github.com/RyzeCompany/RyzeMP/issues).
 
 ## Getting Started
-- [Downloads](https://gitlab.com/VanillaPocketMine/VanillaMine/-/releases) - `PocketMine-MP.phar` and start scripts
-- [PHP binaries](https://gitlab.com/VanillaPocketMine/PHP-Binaries/-/packages) - PocketMine-MP needs its own PHP build with the required extensions
+- [Integration test PHAR](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) - artifacts are published only when CI passes; production release is not yet authorized
+- [Official RyzeMP Egg](https://github.com/RyzeCompany/egg-ryzemp) - installs the PHP runtime and native transport separately from the PHAR
 - [Building and running from source](BUILDING.md)
 - [Original documentation](https://doc.pmmp.io/) - installation and configuration are still the same as upstream
 - [Plugin repository (Poggit)](https://poggit.pmmp.io/plugins) - PocketMine-MP 5 plugins
 
-Coming from PocketMine-MP 5.44.3? Replace `PocketMine-MP.phar` with ours; worlds, plugins and configuration are kept.
+Keep a backup of worlds, plugins and configuration when testing a new major server base; importing this branch directly into production is not supported.
 
 ## Developing Plugins
 The plugin API is the PocketMine-MP 5 API, so the upstream resources still apply:
@@ -89,11 +76,11 @@ New APIs added by this fork are additive: existing interfaces are never changed,
 or sub-interfaces.
 
 ## Contributing
-Contributions are welcome! Report bugs and send merge requests on [GitLab](https://gitlab.com/VanillaPocketMine/VanillaMine).
+Contributions are welcome! Report RyzeMP issues and open pull requests on [GitHub](https://github.com/RyzeCompany/RyzeMP).
  * [Building and running PocketMine-MP from source](BUILDING.md)
  * [Contributing Guidelines](CONTRIBUTING.md)
 
-Related repositories (our forks): [BedrockProtocol](https://gitlab.com/VanillaPocketMine/BedrockProtocol),
+Original VanillaMine dependency repositories (for provenance; RyzeMP uses its committed Composer lockfile): [BedrockProtocol](https://gitlab.com/VanillaPocketMine/BedrockProtocol),
 [BedrockData](https://gitlab.com/VanillaPocketMine/BedrockData), [RakLib](https://gitlab.com/VanillaPocketMine/RakLib),
 [BedrockBlockUpgradeSchema](https://gitlab.com/VanillaPocketMine/BedrockBlockUpgradeSchema),
 [BedrockItemUpgradeSchema](https://gitlab.com/VanillaPocketMine/BedrockItemUpgradeSchema),
