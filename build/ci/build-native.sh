@@ -1,13 +1,14 @@
 #!/bin/bash
 # CI step for the native programs, into native/*/bin where server-phar.php picks them up:
 # - pm-nethernet (NetherNet bridge): downloaded from the releases of gitlab.com/VanillaPocketMine/nethernet, version
-#   NETHERNET_VERSION (a CI/CD variable; default in .gitlab-ci.yml), checked against the release's SHA256SUMS.
+#   NETHERNET_VERSION (default 0.1.2), checked against the upstream release's SHA256SUMS.
 # - vanillagen (terrain core): built from native/vanillagen (Linux counterpart of native/vanillagen/build.ps1).
-# Usage: build/ci/build-native.sh [version]
+# Usage: NATIVE_TARGETS="linux/amd64" build/ci/build-native.sh [version]
+# Third-party native bridge and Go generator retain their upstream attribution.
 set -euo pipefail
 
 VERSION="${1:-git-$(git rev-parse --short HEAD)}"
-TARGETS="windows/amd64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64"
+TARGETS="${NATIVE_TARGETS:-windows/amd64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64}"
 NETHERNET_VERSION="${NETHERNET_VERSION:-0.1.2}"
 NETHERNET_PACKAGE_URL="${NETHERNET_PACKAGE_URL:-https://gitlab.com/api/v4/projects/VanillaPocketMine%2Fnethernet/packages/generic/pm-nethernet}"
 export CGO_ENABLED=0
