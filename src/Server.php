@@ -1164,7 +1164,8 @@ class Server{
 				$this->locatorBarUpdater = new LocatorBarUpdater();
 			}
 
-			$this->updater = new UpdateChecker($this, $this->configGroup->getPropertyString(Yml::AUTO_UPDATER_HOST, "updates.vanillamine.com"));
+			// The Egg checks official RyzeMP GitHub releases. Do not inherit VanillaMine's updater URL.
+			$this->updater = new UpdateChecker($this, $this->configGroup->getPropertyString(Yml::AUTO_UPDATER_HOST, ""));
 
 			$this->queryInfo = new QueryInfo($this);
 

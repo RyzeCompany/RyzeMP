@@ -42,10 +42,19 @@ class UpdateChecker{
 	public function __construct(Server $server, string $endpoint){
 		$this->server = $server;
 		$this->logger = new \PrefixedLogger($server->getLogger(), "Update Checker");
-		$this->endpoint = "http://$endpoint/api/";
+		// The original PocketMine and VanillaMine hosts do not announce RyzeMP releases.
+		// Never contact them by default, or send update checks over cleartext HTTP.
+		$host = strtolower(trim($endpoint));
+		$legacy = in_array($host, ["updates.vanillamine.com", "update.pmmp.io", "updates.pmmp.io"], true);
+		$validHost = preg_match('/^[a-z0-9.-]+(?::[0-9]{1,5})?$/D', $host) === 1;
+		$this->endpoint = $host !== "" && !$legacy && $validHost ? "https://$host/api/" : "";
 
-		if($server->getConfigGroup()->getPropertyBool(YmlServerProperties::AUTO_UPDATER_ENABLED, true)){
-			$this->doCheck();
+		if($server->getConfigGroup()->getPropertyBool(YmlServerProperties::AUTO_UPDATER_ENABLED, false)){
+			if($this->endpoint === ""){
+				$this->logger->warning("Legacy/empty update host ignored: use official RyzeMP GitHub releases and the Egg, or configure a trusted RyzeMP-compatible HTTPS API.");
+			}else{
+				$this->doCheck();
+			}
 		}
 	}
 
@@ -131,6 +140,9 @@ class UpdateChecker{
 	 * Schedules an AsyncTask to check for an update.
 	 */
 	public function doCheck() : void{
+		if($this->endpoint === ""){
+			return; //No configured RyzeMP-compatible update API.
+		}
 		$this->server->getAsyncPool()->submitTask(new UpdateCheckTask($this, $this->endpoint, $this->getChannel()));
 	}
 
