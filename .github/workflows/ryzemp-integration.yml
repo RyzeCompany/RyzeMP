@@ -86,6 +86,8 @@ jobs:
       - name: Headless world start smoke (non-retail)
         run: |
           mkdir -p "$RUNNER_TEMP/ryzemp-smoke/plugins"
+          cp resources/pocketmine.yml "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
+          sed -i "s/enable-dev-builds: false/enable-dev-builds: true/" "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
           set +e
           timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
           code=$?
