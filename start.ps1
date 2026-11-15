@@ -21,11 +21,13 @@ if($php -ne ""){
 }
 
 if($file -eq ""){
-	if(Test-Path "PocketMine-MP.phar"){
+	if(Test-Path "RyzeMP.phar"){
+	    $file = "RyzeMP.phar"
+	}elseif(Test-Path "PocketMine-MP.phar"){
 	    $file = "PocketMine-MP.phar"
 	}else{
-	    echo "PocketMine-MP.phar not found"
-	    echo "Downloads can be found at https://github.com/pmmp/PocketMine-MP/releases"
+	    echo "RyzeMP.phar not found"
+	    echo "Downloads can be found at https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml"
 	    pause
 	    exit 1
 	}
