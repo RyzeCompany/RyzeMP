@@ -40,39 +40,43 @@ use function strlen;
  * This class is used by the current MCPE protocol system to store cached chunk packets for fast resending.
  */
 class ChunkCache implements ChunkListener{
-	/** @var self[][] */
+	/** @var self[][][] */
 	private static array $instances = [];
 
 	/**
 	 * Fetches the ChunkCache instance for the given world. This lazily creates cache systems as needed.
 	 */
-	public static function getInstance(World $world, Compressor $compressor) : self{
+	public static function getInstance(World $world, Compressor $compressor, int $protocolId = \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL) : self{
 		$worldId = spl_object_id($world);
 		$compressorId = spl_object_id($compressor);
 		if(!isset(self::$instances[$worldId])){
 			self::$instances[$worldId] = [];
 			$world->addOnUnloadCallback(static function() use ($worldId) : void{
-				foreach(self::$instances[$worldId] as $cache){
-					$cache->caches = [];
+				foreach(self::$instances[$worldId] as $protocolCaches){
+					foreach($protocolCaches as $cache){
+						$cache->caches = [];
+					}
 				}
 				unset(self::$instances[$worldId]);
 				\GlobalLogger::get()->debug("Destroyed chunk packet caches for world#$worldId");
 			});
 		}
-		if(!isset(self::$instances[$worldId][$compressorId])){
+		if(!isset(self::$instances[$worldId][$compressorId][$protocolId])){
 			\GlobalLogger::get()->debug("Created new chunk packet cache (world#$worldId, compressor#$compressorId)");
-			self::$instances[$worldId][$compressorId] = new self($world, $compressor);
+			self::$instances[$worldId][$compressorId][$protocolId] = new self($world, $compressor, $protocolId);
 		}
-		return self::$instances[$worldId][$compressorId];
+		return self::$instances[$worldId][$compressorId][$protocolId];
 	}
 
 	public static function pruneCaches() : void{
 		foreach(self::$instances as $compressorMap){
-			foreach($compressorMap as $chunkCache){
-				foreach($chunkCache->caches as $chunkHash => $promise){
-					if(is_string($promise)){
-						//Do not clear promises that are not yet fulfilled; they will have requesters waiting on them
-						unset($chunkCache->caches[$chunkHash]);
+			foreach($compressorMap as $protocolCaches){
+				foreach($protocolCaches as $chunkCache){
+					foreach($chunkCache->caches as $chunkHash => $promise){
+						if(is_string($promise)){
+							//Do not clear promises that are not yet fulfilled; they will have requesters waiting on them
+							unset($chunkCache->caches[$chunkHash]);
+						}
 					}
 				}
 			}
@@ -101,7 +105,8 @@ class ChunkCache implements ChunkListener{
 
 	private function __construct(
 		private World $world,
-		private Compressor $compressor
+		private Compressor $compressor,
+		private int $protocolId
 	){
 		$this->dimensionId = $world->getDimension()->getNetworkId();
 	}
@@ -156,7 +161,8 @@ class ChunkCache implements ChunkListener{
 					$this->dimensionId,
 					$chunk,
 					$task,
-					$this->compressor
+					$this->compressor,
+					$this->protocolId
 				)
 			);
 		}finally{

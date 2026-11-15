@@ -38,12 +38,14 @@ use pocketmine\network\mcpe\protocol\ItemRegistryPacket;
 use pocketmine\network\mcpe\protocol\MapInfoRequestPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
+use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestChunkRadiusPacket;
 use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\SetPlayerGameTypePacket;
 use pocketmine\network\mcpe\protocol\StartGamePacket;
 use pocketmine\network\mcpe\protocol\TrimDataPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
+use pocketmine\network\mcpe\protocol\types\BlockPaletteEntry;
 use pocketmine\network\mcpe\protocol\types\BoolGameRule;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\Experiments;
@@ -90,6 +92,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$world = $location->getWorld();
 
 			$typeConverter = $this->session->getTypeConverter();
+			$protocolId = $this->session->getProtocolId();
 
 			$ticket = $this->session->getProxyTicket();
 			if($ticket !== null && $ticket->transfer){
@@ -121,8 +124,18 @@ class PreSpawnPacketHandler extends PacketHandler{
 			$levelSettings->experiments = new Experiments([], false);
 
 			//1.26.50+: the client disconnects with "MissingStructureData" unless it gets this before StartGamePacket
-			$this->session->getLogger()->debug("Sending jigsaw structure data");
-			$this->session->sendDataPacket(StaticPacketCache::getInstance()->getJigsawStructureData());
+			if($protocolId >= ProtocolInfo::PROTOCOL_1_26_52){
+				$this->session->getLogger()->debug("Sending jigsaw structure data");
+				$this->session->sendDataPacket(StaticPacketCache::getInstance()->getJigsawStructureData());
+			}
+
+			$blockNetworkIdsAreHashes = $protocolId >= ProtocolInfo::PROTOCOL_1_26_52;
+			$blockPalette = [];
+			if(!$blockNetworkIdsAreHashes){
+				foreach($typeConverter->getBlockTranslator()->getBlockStateDictionary()->getStates() as $state){
+					$blockPalette[] = new BlockPaletteEntry($state->getStateName(), new CacheableNbt($state->generateStateData()->toVanillaNbt()));
+				}
+			}
 
 			$this->session->sendDataPacket(StartGamePacket::create(
 				$this->player->getId(),
@@ -145,13 +158,13 @@ class PreSpawnPacketHandler extends PacketHandler{
 				sprintf("%s %s", VersionInfo::NAME, VersionInfo::VERSION()->getFullVersion(true)),
 				Uuid::fromString(Uuid::NIL),
 				false,
-				true, //blockNetworkIdsAreHashes - see BlockStateDictionary::computeNetworkId()
+				$blockNetworkIdsAreHashes,
 				false,
 				new NetworkPermissions(disableClientSounds: true),
 				true,
 				null,
 				new ServerTelemetryData("", "", "", ""),
-				[],
+				$blockPalette,
 				0,
 				$typeConverter->getItemTypeDictionary()->getEntries(),
 			));
@@ -240,10 +253,10 @@ class PreSpawnPacketHandler extends PacketHandler{
 		if(DataPacketSendEvent::hasHandlers()){
 			//the handlers get the cached packet itself and may change it, as before: it is encoded as they leave it
 			$craftingDataCache->clearEncodedCache($craftingManager);
-			$this->session->sendDataPacket($craftingDataCache->getCache($craftingManager));
+			$this->session->sendDataPacket($craftingDataCache->getCache($craftingManager, $this->session->getTypeConverter()));
 		}else{
 			$this->session->sendEncodedDataPacket(
-				$craftingDataCache->getCache($craftingManager),
+				$craftingDataCache->getCache($craftingManager, $this->session->getTypeConverter()),
 				$craftingDataCache->getEncodedCache($craftingManager, $this->session->getTypeConverter())
 			);
 		}

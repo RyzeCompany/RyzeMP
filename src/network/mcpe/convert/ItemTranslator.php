@@ -33,7 +33,6 @@ use pocketmine\data\SavedDataLoadingException;
 use pocketmine\item\Item;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
-use pocketmine\utils\AssumptionFailedError;
 
 /**
  * This class handles translation between network item ID+metadata to PocketMine-MP internal ID+metadata and vice versa.
@@ -98,13 +97,17 @@ final class ItemTranslator{
 
 		$itemData = $this->itemSerializer->serializeType($item);
 
-		$numericId = $this->itemTypeDictionary->fromStringId($itemData->getName());
+		try{
+			$numericId = $this->itemTypeDictionary->fromStringId($itemData->getName());
+		}catch(\InvalidArgumentException $e){
+			throw new ItemTypeSerializeException("Item type " . $itemData->getName() . " is not available to this client", previous: $e);
+		}
 		$blockStateData = $itemData->getBlock();
 
 		if($blockStateData !== null){
 			$blockRuntimeId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
 			if($blockRuntimeId === null){
-				throw new AssumptionFailedError("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+				throw new ItemTypeSerializeException("Block state is not available to this client: " . $blockStateData->toNbt());
 			}
 		}else{
 			$blockRuntimeId = null;

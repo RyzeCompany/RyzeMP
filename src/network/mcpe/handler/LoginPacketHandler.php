@@ -85,6 +85,9 @@ class LoginPacketHandler extends PacketHandler{
 	}
 
 	public function handleLogin(LoginPacket $packet) : bool{
+		if($packet->protocol !== $this->session->getProtocolId()){
+			throw new PacketHandlingException("Login protocol does not match negotiated network settings");
+		}
 		$authInfo = $this->parseAuthInfo($packet->authInfoJson);
 
 		if($authInfo->AuthenticationType === AuthenticationType::FULL->value){
@@ -156,6 +159,7 @@ class LoginPacketHandler extends PacketHandler{
 		}
 
 		$clientData = $this->parseClientData($packet->clientDataJwt);
+		$this->session->setGameVersion($clientData->GameVersion);
 
 		try{
 			$skinData = ClientDataToSkinDataHelper::fromClientData($clientData);

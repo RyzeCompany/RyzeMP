@@ -41,13 +41,14 @@ final class CreativeInventoryCache{
 	use SingletonTrait;
 
 	/**
-	 * @var CreativeInventoryCacheEntry[]
-	 * @phpstan-var array<int, CreativeInventoryCacheEntry>
+	 * @var CreativeInventoryCacheEntry[][]
+	 * @phpstan-var array<int, array<int, CreativeInventoryCacheEntry>>
 	 */
 	private array $caches = [];
 
-	private function getCacheEntry(CreativeInventory $inventory) : CreativeInventoryCacheEntry{
+	private function getCacheEntry(CreativeInventory $inventory, TypeConverter $typeConverter) : CreativeInventoryCacheEntry{
 		$id = spl_object_id($inventory);
+		$converterId = spl_object_id($typeConverter);
 		if(!isset($this->caches[$id])){
 			$inventory->getDestructorCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id]);
@@ -55,19 +56,17 @@ final class CreativeInventoryCache{
 			$inventory->getContentChangedCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id]);
 			});
-			$this->caches[$id] = $this->buildCacheEntry($inventory);
 		}
-		return $this->caches[$id];
+		return $this->caches[$id][$converterId] ??= $this->buildCacheEntry($inventory, $typeConverter);
 	}
 
 	/**
 	 * Rebuild the cache for the given inventory.
 	 */
-	private function buildCacheEntry(CreativeInventory $inventory) : CreativeInventoryCacheEntry{
+	private function buildCacheEntry(CreativeInventory $inventory, TypeConverter $typeConverter) : CreativeInventoryCacheEntry{
 		$categories = [];
 		$groups = [];
 
-		$typeConverter = TypeConverter::getInstance();
 
 		$nextIndex = 0;
 		$groupIndexes = [];
@@ -112,7 +111,7 @@ final class CreativeInventoryCache{
 	 * @internal
 	 */
 	public function warmUp(CreativeInventory $inventory) : void{
-		$this->getCacheEntry($inventory);
+		$this->getCacheEntry($inventory, TypeConverter::getInstance());
 	}
 
 	public function buildPacket(CreativeInventory $inventory, NetworkSession $session) : CreativeContentPacket{
@@ -120,7 +119,7 @@ final class CreativeInventoryCache{
 		$language = $player->getLanguage();
 		$forceLanguage = $player->getServer()->isLanguageForced();
 		$typeConverter = $session->getTypeConverter();
-		$cachedEntry = $this->getCacheEntry($inventory);
+		$cachedEntry = $this->getCacheEntry($inventory, $typeConverter);
 		$translate = function(Translatable|string $translatable) use ($session, $language, $forceLanguage) : string{
 			if(is_string($translatable)){
 				$message = $translatable;

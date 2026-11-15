@@ -45,6 +45,7 @@ final class SessionStartPacketHandler extends PacketHandler{
 
 			return true;
 		}
+		$this->session->setProtocolId($protocolVersion);
 
 		//TODO: we're filling in the defaults to get pre-1.19.30 behaviour back for now, but we should explore the new options in the future
 		$this->session->sendDataPacket(NetworkSettingsPacket::create(
@@ -60,6 +61,11 @@ final class SessionStartPacketHandler extends PacketHandler{
 	}
 
 	protected function isCompatibleProtocol(int $protocolVersion) : bool{
-		return $protocolVersion === ProtocolInfo::CURRENT_PROTOCOL;
+		return in_array($protocolVersion, [
+			ProtocolInfo::PROTOCOL_1_26_40,
+			ProtocolInfo::PROTOCOL_1_26_45,
+			ProtocolInfo::PROTOCOL_1_26_52,
+			ProtocolInfo::CURRENT_PROTOCOL
+		], true);
 	}
 }

@@ -51,6 +51,32 @@ final class StandardPacketBroadcaster implements PacketBroadcaster{
 			$packets = $ev->getPackets();
 		}
 
+		if(!NetworkSession::hasOnlyStandardSessions()){
+			//A packet and its compressed batch can be shared only by sessions that agree on
+			//the wire protocol, client patch version and compressor.
+			$groups = [];
+			foreach($recipients as $recipient){
+				$compressor = $recipient->getCompressor();
+				$key = $recipient->getProtocolId() . ":" . ($recipient->getGameVersion() ?? "") . ":" . spl_object_id($compressor);
+				$groups[$key]["compressor"] = $compressor;
+				$groups[$key]["targets"][] = $recipient;
+			}
+			$writer = new ByteBufferWriter();
+			foreach($groups as $group){
+				$first = $group["targets"][0];
+				$buffers = [];
+				$totalLength = 0;
+				foreach($packets as $packet){
+					$writer->clear();
+					$buffer = NetworkSession::prefixPacketBuffer(NetworkSession::encodePacketTimed($writer, $packet, $first->getProtocolId(), $first->getGameVersion()));
+					$totalLength += strlen($buffer);
+					$buffers[] = $buffer;
+				}
+				$this->broadcastToCompressorGroup($group["targets"], $group["compressor"], $buffers, $totalLength);
+			}
+			return;
+		}
+
 		//each packet is encoded and length-prefixed once, whatever the number of recipients (this runs for every
 		//movement of every entity, to every viewer)
 		$totalLength = 0;

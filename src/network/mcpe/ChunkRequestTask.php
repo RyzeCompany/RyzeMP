@@ -53,7 +53,7 @@ class ChunkRequestTask extends AsyncTask{
 	/**
 	 * @phpstan-param DimensionIds::* $dimensionId
 	 */
-	public function __construct(int $chunkX, int $chunkZ, int $dimensionId, Chunk $chunk, CompressBatchPromise $promise, Compressor $compressor){
+	public function __construct(int $chunkX, int $chunkZ, int $dimensionId, Chunk $chunk, CompressBatchPromise $promise, Compressor $compressor, private int $protocolId = \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL){
 		$this->compressor = new NonThreadSafeValue($compressor);
 
 		$this->chunk = FastChunkSerializer::serializeTerrain($chunk);
@@ -70,11 +70,11 @@ class ChunkRequestTask extends AsyncTask{
 		$dimensionId = $this->dimensionId;
 
 		$subCount = ChunkSerializer::getSubChunkCount($chunk, $dimensionId);
-		$converter = TypeConverter::getInstance();
+		$converter = TypeConverter::getInstance($this->protocolId);
 		$payload = ChunkSerializer::serializeFullChunk($chunk, $dimensionId, $converter->getBlockTranslator(), $this->tiles);
 
 		$stream = new ByteBufferWriter();
-		PacketBatch::encodePackets($stream, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL, [LevelChunkPacket::create(new ChunkPosition($this->chunkX, $this->chunkZ), $dimensionId, $subCount, false, null, $payload)]);
+		PacketBatch::encodePackets($stream, $this->protocolId, [LevelChunkPacket::create(new ChunkPosition($this->chunkX, $this->chunkZ), $dimensionId, $subCount, false, null, $payload)]);
 
 		$compressor = $this->compressor->deserialize();
 		$this->setResult(chr($compressor->getNetworkId()) . $compressor->compress($stream->getData()));

@@ -71,6 +71,7 @@ use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
 use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
+use pocketmine\network\mcpe\protocol\DataPacket;
 use pocketmine\network\mcpe\protocol\DisconnectPacket;
 use pocketmine\network\mcpe\protocol\GameRulesChangedPacket;
 use pocketmine\network\mcpe\protocol\LevelChunkPacket;
@@ -232,6 +233,8 @@ class NetworkSession{
 	private bool $connected = true;
 	/** connected sessions with a non-standard broadcaster or compressor, see hasOnlyStandardSessions() */
 	private static int $nonStandardSessions = 0;
+	private ?int $protocolId = null;
+	private ?string $gameVersion = null;
 	private bool $standardSession;
 
 	/** the send buffers of every session, in C++ (chunkutils2 >= 0.3.9), null = PHP arrays */
@@ -453,6 +456,39 @@ class NetworkSession{
 	 */
 	public static function hasOnlyStandardSessions() : bool{
 		return self::$nonStandardSessions === 0;
+	}
+
+	public function getProtocolId() : int{
+		return $this->protocolId ?? ProtocolInfo::CURRENT_PROTOCOL;
+	}
+
+	/** Called once after RequestNetworkSettings, before login or compressed packets. */
+	public function setProtocolId(int $protocolId) : void{
+		if($this->protocolId !== null){
+			throw new \LogicException("Protocol was already negotiated");
+		}
+		$this->typeConverter = TypeConverter::getInstance($protocolId);
+		$this->protocolId = $protocolId;
+		if($protocolId !== ProtocolInfo::CURRENT_PROTOCOL && $this->standardSession){
+			//Native broadcast buffers assume identical encodings for every session.
+			$this->standardSession = false;
+			self::$nonStandardSessions++;
+		}
+		if($this->entityEventBroadcaster instanceof StandardEntityEventBroadcaster){
+			$this->entityEventBroadcaster = new StandardEntityEventBroadcaster($this->broadcaster, $this->typeConverter);
+		}
+	}
+
+	public function setGameVersion(string $gameVersion) : void{
+		$this->gameVersion = $gameVersion;
+		if($gameVersion !== ProtocolInfo::MINECRAFT_VERSION_NETWORK && $this->standardSession){
+			$this->standardSession = false;
+			self::$nonStandardSessions++;
+		}
+	}
+
+	public function getGameVersion() : ?string{
+		return $this->gameVersion;
 	}
 
 	private function isStandardSession() : bool{
@@ -734,7 +770,11 @@ class NetworkSession{
 			try{
 				$stream = new ByteBufferReader($buffer);
 				try{
-				$packet->decode($stream, ProtocolInfo::CURRENT_PROTOCOL);
+					if($packet instanceof DataPacket){
+						$packet->decode($stream, $this->getProtocolId(), $this->gameVersion);
+					}else{
+						$packet->decode($stream, $this->getProtocolId());
+					}
 				}catch(PacketDecodeException $e){
 					throw PacketHandlingException::wrap($e);
 				}
@@ -824,7 +864,7 @@ class NetworkSession{
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
 				$writer->clear(); //memory reuse let's gooooo
-				$this->addToSendBuffer(self::encodePacketTimed($writer, $evPacket));
+				$this->addToSendBuffer(self::encodePacketTimed($writer, $evPacket, $this->getProtocolId(), $this->gameVersion));
 			}
 			if($immediate){
 				$this->flushGamePacketQueue();
@@ -869,11 +909,15 @@ class NetworkSession{
 	/**
 	 * @internal
 	 */
-	public static function encodePacketTimed(ByteBufferWriter $serializer, ClientboundPacket $packet) : string{
+	public static function encodePacketTimed(ByteBufferWriter $serializer, ClientboundPacket $packet, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL, ?string $gameVersion = null) : string{
 		$timings = Timings::getEncodeDataPacketTimings($packet);
 		$timings->startTiming();
 		try{
-			$packet->encode($serializer, ProtocolInfo::CURRENT_PROTOCOL);
+			if($packet instanceof DataPacket){
+				$packet->encode($serializer, $protocolId, $gameVersion);
+			}else{
+				$packet->encode($serializer, $protocolId);
+			}
 			return $serializer->getData();
 		}finally{
 			$timings->stopTiming();
@@ -1957,7 +2001,7 @@ class NetworkSession{
 	 */
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
 		$world = $this->player->getLocation()->getWorld();
-		$promiseOrPacket = ChunkCache::getInstance($world, $this->compressor)->request($chunkX, $chunkZ);
+		$promiseOrPacket = ChunkCache::getInstance($world, $this->compressor, $this->getProtocolId())->request($chunkX, $chunkZ);
 		if(is_string($promiseOrPacket)){
 			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
 			return;

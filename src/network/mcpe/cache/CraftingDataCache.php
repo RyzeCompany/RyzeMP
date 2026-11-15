@@ -64,8 +64,8 @@ final class CraftingDataCache{
 	use SingletonTrait;
 
 	/**
-	 * @var CraftingDataPacket[]
-	 * @phpstan-var array<int, CraftingDataPacket>
+	 * @var CraftingDataPacket[][]
+	 * @phpstan-var array<int, array<int, CraftingDataPacket>>
 	 */
 	private array $caches = [];
 	/**
@@ -81,8 +81,10 @@ final class CraftingDataCache{
 	 */
 	public const RECIPE_ID_OFFSET = 1;
 
-	public function getCache(CraftingManager $manager) : CraftingDataPacket{
+	public function getCache(CraftingManager $manager, ?TypeConverter $converter = null) : CraftingDataPacket{
 		$id = spl_object_id($manager);
+		$converter ??= TypeConverter::getInstance();
+		$converterId = spl_object_id($converter);
 		if(!isset($this->caches[$id])){
 			$manager->getDestructorCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id], $this->encodedCaches[$id]);
@@ -90,9 +92,8 @@ final class CraftingDataCache{
 			$manager->getRecipeRegisteredCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id], $this->encodedCaches[$id]);
 			});
-			$this->caches[$id] = $this->buildCraftingDataCache($manager);
 		}
-		return $this->caches[$id];
+		return $this->caches[$id][$converterId] ??= $this->buildCraftingDataCache($manager, $converter);
 	}
 
 	/**
@@ -103,8 +104,8 @@ final class CraftingDataCache{
 	 * @internal
 	 */
 	public function getEncodedCache(CraftingManager $manager, TypeConverter $typeConverter) : string{
-		$packet = $this->getCache($manager);
-		return $this->encodedCaches[spl_object_id($manager)][spl_object_id($typeConverter)] ??= NetworkSession::encodePacketTimed(new ByteBufferWriter(), $packet);
+		$packet = $this->getCache($manager, $typeConverter);
+		return $this->encodedCaches[spl_object_id($manager)][spl_object_id($typeConverter)] ??= NetworkSession::encodePacketTimed(new ByteBufferWriter(), $packet, $typeConverter->getProtocolId());
 	}
 
 	/**
@@ -120,11 +121,10 @@ final class CraftingDataCache{
 	/**
 	 * Rebuilds the cached CraftingDataPacket.
 	 */
-	private function buildCraftingDataCache(CraftingManager $manager) : CraftingDataPacket{
+	private function buildCraftingDataCache(CraftingManager $manager, TypeConverter $converter) : CraftingDataPacket{
 		Timings::$craftingDataCacheRebuild->startTiming();
 
 		$nullUUID = Uuid::fromString(Uuid::NIL);
-		$converter = TypeConverter::getInstance();
 		$recipesWithTypeIds = [];
 
 		$unlockIndex = RecipeUnlockIndex::get($manager);

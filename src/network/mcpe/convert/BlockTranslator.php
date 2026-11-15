@@ -64,7 +64,8 @@ final class BlockTranslator{
 				$networkIds,
 				$networkIdsFile !== null
 			),
-			GlobalBlockStateHandlers::getSerializer()
+			GlobalBlockStateHandlers::getSerializer(),
+			$protocolId < ProtocolInfo::CURRENT_PROTOCOL
 		);
 	}
 	/**
@@ -79,7 +80,8 @@ final class BlockTranslator{
 
 	public function __construct(
 		private BlockStateDictionary $blockStateDictionary,
-		private BlockStateSerializer $blockStateSerializer
+		private BlockStateSerializer $blockStateSerializer,
+		private bool $allowMissingStates = false
 	){
 		$this->fallbackStateData = BlockStateData::current(BlockTypeNames::INFO_UPDATE, []);
 		$this->fallbackStateId = $this->blockStateDictionary->lookupStateIdFromData($this->fallbackStateData) ??
@@ -96,7 +98,10 @@ final class BlockTranslator{
 
 			$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
 			if($networkId === null){
-				throw new AssumptionFailedError("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+				if(!$this->allowMissingStates){
+					throw new AssumptionFailedError("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+				}
+				$networkId = $this->fallbackStateId;
 			}
 		}catch(BlockStateSerializeException){
 			//TODO: this will swallow any error caused by invalid block properties; this is not ideal, but it should be
