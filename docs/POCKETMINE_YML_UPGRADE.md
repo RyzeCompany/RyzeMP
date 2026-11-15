@@ -16,8 +16,7 @@ Este documento compara `main` (configuración anterior de RyzeMP) con la nueva b
 | `network.compression-level` | `6` | `1` para reducir CPU | En servidores actualizados, cambiar a `1` si se busca rendimiento; `6` sigue funcionando |
 | `memory.async-worker-hard-limit` | `256` MiB | `384` MiB | Revisar RAM disponible y trabajadores si se usa generación Vanilla |
 | `auto-report.enabled` | `false` | **`false`** (corregido; VanillaMine lo habilitaba) | Mantenerlo desactivado salvo consentimiento explícito |
-| `auto-updater.enabled` | `false` | **`false`** (corregido; VanillaMine lo habilitaba) | Usar releases de GitHub y el Egg para las actualizaciones |
-| `auto-updater.host` | `update.pmmp.io` | Vacío; no usar `updates.vanillamine.com` | Las APIs heredadas no publican las releases de RyzeMP. Un endpoint personalizado necesita HTTPS y formato compatible |
+| `auto-updater.*` | Se conserva si existía | **Obsoleto y eliminado del núcleo** | RyzeMP ignora los ajustes antiguos; únicamente el Egg administra actualizaciones mediante GitHub Releases |
 | `fishing.enabled` | `true` | Compatible | Se respeta la configuración anterior; `false` desactiva la caña |
 | `fishing.pvp-enabled` | `true` | Compatible | Se respeta; también depende de `pvp` en `server.properties` |
 | `fishing.max-distance` | `24` | `32` para instalaciones nuevas, **valor anterior conservado** | Si conservas `24`, la caña respeta `24` |
@@ -33,10 +32,10 @@ Este documento compara `main` (configuración anterior de RyzeMP) con la nueva b
 2. Mantén el `pocketmine.yml` actual; RyzeMP **no hará una migración ni lo reemplazará automáticamente**.
 3. Compara con el [archivo nuevo de referencia](https://github.com/RyzeCompany/RyzeMP/blob/integration/vanillamine-base/resources/pocketmine.yml). Copia únicamente las opciones que quieras personalizar. Las ausentes no requieren añadirse.
 4. Recomendación de rendimiento para equipos con suficiente memoria: `network.compression-level: 1` y `memory.async-worker-hard-limit: 384`. Conserva valores antiguos si tienes limitaciones de RAM o razones para usarlos.
-5. Verifica que `auto-report.enabled` y `auto-updater.enabled` estén en `false`; en archivos viejos con `true` explícito, el sistema **respeta la elección del operador**. Las URLs PMMP/VanillaMine dejan de usarse para comprobaciones de actualización.
+5. Verifica que `auto-report.enabled` permanezca en `false` salvo consentimiento explícito. Los antiguos valores de `auto-updater.*` se ignoran por completo, incluso si `enabled: true`; **no se borran ni reescriben en los archivos existentes**. Las actualizaciones oficiales se administran desde el Egg usando manifiestos verificados de GitHub Releases.
 6. Confirma el mismo `server-port` para TCP y UDP en Wings. Para NetherNet se requiere RyzeRTC API 2 cargado desde el Egg. El nuevo `level-type=vanilla` se aplica **solo a un servidor nuevo** sin `server.properties` antiguo.
 
-No borres el archivo actual para «recibir las opciones nuevas»: eso descarta ajustes de red, memoria, juego y plugins. No copies ciegamente el archivo VanillaMine sobre el de RyzeMP.
+No borres el archivo actual para «recibir las opciones nuevas»: eso descarta ajustes de red, memoria, juego y plugins. No copies ciegamente el archivo VanillaMine sobre el de RyzeMP. Los enlaces de documentación y plugins de VanillaMine y el antiguo banner de inicio se eliminaron; `Done` y los mensajes relevantes de arranque permanecen.
 
 ## Límites de validación antes de una release
 
