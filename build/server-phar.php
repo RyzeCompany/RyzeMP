@@ -164,8 +164,7 @@ function main() : void{
 		dirname(__DIR__) . DIRECTORY_SEPARATOR,
 		[
 			'generated',
-			'native/nethernet/bin', //pm-nethernet bridge binaries, if present (downloaded by build/ci/build-native.sh, see native/nethernet/README.md)
-			'native/vanillagen/bin', //vanillagen terrain core binaries, if built (native/vanillagen/build.ps1)
+			// Native Go and NetherNet executables are provisioned externally by the Egg.
 			'resources',
 			'src',
 			'vendor'
