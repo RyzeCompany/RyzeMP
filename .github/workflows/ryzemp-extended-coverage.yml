@@ -99,18 +99,38 @@ jobs:
       POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-native-full-vanilla
     steps:
       - uses: actions/checkout@v4
-      - name: Install VanillaMine PHP 8.4 binary with bundled native chunkutils2 0.3.15
+      - name: Install SHA256-verified VanillaMine PHP 8.4 v2 release (2026-10-26)
         run: |
           set -euo pipefail
-          source build/ci/setup-php.sh 8.4
-          echo "$PWD/bin/php7/bin" >> "$GITHUB_PATH"
-          php -r '
+          name='PHP-8.4-Linux-x86-64-v2-PM5.tar.gz'
+          base='https://gitlab.com/api/v4/projects/87651115/packages/generic/PHP-Binaries/php-8.4-20261026'
+          curl --fail --location --retry 3 --proto '=https' "$base/$name" -o "$RUNNER_TEMP/$name"
+          curl --fail --location --retry 3 --proto '=https' "$base/$name.sha256" -o "$RUNNER_TEMP/$name.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum -c "$name.sha256")
+          tar -xzf "$RUNNER_TEMP/$name" -C "$GITHUB_WORKSPACE"
+          binary="$GITHUB_WORKSPACE/bin/php7/bin/php"
+          ini="$GITHUB_WORKSPACE/bin/php7/bin/php.ini"
+          test -x "$binary"
+          extensionDir="$(find "$GITHUB_WORKSPACE/bin/php7/lib/php/extensions" -maxdepth 1 -type d -name '*debug-zts*' -print -quit)"
+          if [ -n "$extensionDir" ]; then
+            if grep -q '^extension_dir' "$ini"; then
+              sed -i "s|^extension_dir.*$|extension_dir=\"$extensionDir\"|" "$ini"
+            else
+              printf '\nextension_dir="%s"\n' "$extensionDir" >> "$ini"
+            fi
+          fi
+          curl --fail --location --retry 3 --proto '=https' \
+            'https://getcomposer.org/download/latest-2.x/composer.phar' \
+            -o "$GITHUB_WORKSPACE/bin/php7/bin/composer"
+          chmod +x "$GITHUB_WORKSPACE/bin/php7/bin/composer"
+          echo "$GITHUB_WORKSPACE/bin/php7/bin" >> "$GITHUB_PATH"
+          "$binary" -r '
             $v = phpversion("chunkutils2");
-            if ($v !== "0.3.15") throw new RuntimeException("Expected bundled native chunkutils2 0.3.15, got " . var_export($v, true));
+            if ($v !== "0.3.15") throw new RuntimeException("Expected native chunkutils2 0.3.15, got " . var_export($v, true));
             foreach (["pocketmine\\network\\mcpe\\NativeSendBuffers", "pocketmine\\world\\light\\NativeLightPopulation"] as $name) {
-              if (!class_exists($name)) throw new RuntimeException("Native accelerator missing: " . $name);
+              if (!class_exists($name)) throw new RuntimeException("Missing native accelerator: " . $name);
             }
-            echo "Native chunkutils2 0.3.15 runtime ready\\n";'
+            echo "chunkutils2 0.3.15 available in bundled PHP binary\n";'
       - run: composer install --prefer-dist --no-interaction --no-progress
       - name: Fetch official pinned Mojang generator test data
         run: |
