@@ -34,4 +34,12 @@ class StrawBed extends Bed{
 	public function describeBlockItemState(RuntimeDataDescriber $w) : void{
 		//no colour variants
 	}
+
+	public function getFlameEncouragement() : int{
+		return 30;
+	}
+
+	public function getFlammability() : int{
+		return 60;
+	}
 }
