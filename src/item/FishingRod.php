@@ -47,6 +47,10 @@ class FishingRod extends Durable{
 	}
 
 	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
+		// Keep the existing RyzeMP fishing.enabled flag when upgrading to VanillaMine fishing.
+		if(!$player->getServer()->getConfigGroup()->getPropertyBool("fishing.enabled", true)){
+			return ItemUseResult::FAIL;
+		}
 		$world = $player->getWorld();
 		$hook = FishingHook::getActive($player);
 		if($hook !== null){

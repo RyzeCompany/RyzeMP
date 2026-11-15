@@ -2,6 +2,16 @@
 # These settings are the ones that cannot be included in server.properties
 # Some of these settings are safe, others can break your server if modified incorrectly
 # New settings/defaults won't appear automatically in this file when upgrading.
+
+# Existing pocketmine.yml files are never replaced by server upgrades.
+# Existing custom values are kept; missing new options use safe runtime defaults.
+
+fishing:
+  # Compatibility with older RyzeMP installations; the other former fishing
+  # timing/pull settings were replaced by vanilla fishing mechanics.
+  enabled: true
+  pvp-enabled: true
+  max-distance: 32
 #
 # Resource profile: performance-profile in server.properties chooses between "performance" (default: more memory and
 # CPU kept ready for a smoother server) and "economy" (as little memory and CPU as possible). Both play exactly the

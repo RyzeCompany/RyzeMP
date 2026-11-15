@@ -42,6 +42,7 @@ use pocketmine\network\mcpe\protocol\ActorEventPacket;
 use pocketmine\network\mcpe\protocol\types\ActorEvent;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\player\Player;
+use pocketmine\ServerProperties;
 use pocketmine\world\sound\WaterSplashSound;
 use function floor;
 use function mt_getrandmax;
@@ -135,6 +136,13 @@ class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
 	}
 
 	public function canCollideWith(Entity $entity) : bool{
+		// Respect the existing fishing.pvp-enabled flag and global PvP setting.
+		if($entity instanceof Player && (
+			!$this->server->getConfigGroup()->getPropertyBool("fishing.pvp-enabled", true) ||
+			!$this->server->getConfigGroup()->getConfigBool(ServerProperties::PVP, true)
+		)){
+			return false;
+		}
 		return $this->hookedEntity === null && !$this->bobbing && $entity->getId() !== $this->getOwningEntityId() && parent::canCollideWith($entity);
 	}
 
@@ -149,7 +157,9 @@ class FishingHook extends Projectile implements NeverSavedWithChunkEntity{
 		if(!$owner->getInventory()->getItemInHand() instanceof FishingRod && !$owner->getOffHandInventory()->getItem(0) instanceof FishingRod){
 			return false;
 		}
-		return $owner->getPosition()->distanceSquared($this->location) <= self::MAX_DISTANCE ** 2;
+		// Preserve previous RyzeMP's max-distance setting (bounded as before).
+		$range = max(2, min(64, $owner->getServer()->getConfigGroup()->getPropertyInt("fishing.max-distance", (int) self::MAX_DISTANCE)));
+		return $owner->getPosition()->distanceSquared($this->location) <= $range ** 2;
 	}
 
 	protected function entityBaseTick(int $tickDiff = 1) : bool{
