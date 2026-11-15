@@ -137,13 +137,13 @@ class BlockTest extends TestCase{
 			$testedBlocks[$vanillaId] = true;
 
 			$vanillaHardness = round($propertiesTable[$vanillaId]["hardness"], 5);
-			$vanillaBlastResistance = round($propertiesTable[$vanillaId]["blastResistance"], 5) * 5;
+			$vanillaBlastResistance = round($propertiesTable[$vanillaId]["blastResistance"] * 5, 5);
 
 			$breakInfo = $block->getBreakInfo();
 			if($breakInfo->getHardness() !== $vanillaHardness){
 				$hardnessErrors[] = "Hardness mismatch for $vanillaId (expected: $vanillaHardness, got " . $breakInfo->getHardness() . ")";
 			}
-			if($breakInfo->getBlastResistance() !== $vanillaBlastResistance){
+			if(round($breakInfo->getBlastResistance(), 5) !== $vanillaBlastResistance){
 				$blastResistanceErrors[] = "Blast resistance mismatch for $vanillaId (expected: $vanillaBlastResistance, got " . $breakInfo->getBlastResistance() . ")";
 			}
 		}
