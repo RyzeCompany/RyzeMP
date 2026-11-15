@@ -22,7 +22,7 @@ jobs:
     env:
       POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-vanilla-fixtures
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pmmp/setup-php-action@3.2.0
         with:
           php-version: '8.4'
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pmmp/setup-php-action@3.2.0
         with:
           php-version: '8.4'
@@ -75,7 +75,7 @@ jobs:
       MOB_BENCH: '1'
       STRUCTURE_BENCH: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pmmp/setup-php-action@3.2.0
         with:
           php-version: '8.4'
@@ -99,7 +99,7 @@ jobs:
       STRUCTURE_BENCH: '1'
       POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-native-full-vanilla
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install SHA256-verified VanillaMine PHP 8.4 v2 release (2026-10-26)
         run: |
           set -euo pipefail
@@ -147,7 +147,7 @@ jobs:
           dir="$(find "$RUNNER_TEMP/bedrock" -type d -name behavior_pack -print -quit)"
           test -n "$dir" && test -d "$dir/items"
           echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.24.x'
           cache: false

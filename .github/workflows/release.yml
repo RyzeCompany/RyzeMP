@@ -24,7 +24,7 @@ jobs:
       group: ryzemp-publish
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require exact version and green main CI on this commit
         shell: bash
         env:
