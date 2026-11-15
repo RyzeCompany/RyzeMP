@@ -4,6 +4,8 @@
 
 **Compatibility:** PocketMine-MP 5 plugin API and world data are retained; the core API version is independent from RyzeMP release tags. Target clients: Bedrock 1.26.40, 1.26.45, 1.26.52 and 1.26.60, including mixed sessions. Client compatibility has **not yet been validated end-to-end**.
 
+**Native world generation:** Go is developed and released independently in [RyzeVanillaGen](https://github.com/RyzeCompany/RyzeVanillaGen), not built from this RyzeMP tree. The Egg and CI pin the official [v0.1.0 binary](https://github.com/RyzeCompany/RyzeVanillaGen/releases/tag/v0.1.0) with SHA-256 `3cddcb4be9bd17eaa3225be5d167fb63328566c252a8c4fe7b1e3b9e7d716dc7`, protocol 7 / algorithm 4; RyzeMP retains the PHP fallback. Go lives outside `RyzeMP.phar`.
+
 **Attribution:** RyzeMP incorporates [VanillaMine](https://gitlab.com/VanillaMine/VanillaMine) and descends from [PocketMine-MP](https://github.com/pmmp/PocketMine-MP). Their original copyrights, attributions and LGPL license are retained. RyzeCompany does not claim authorship of the upstream code.
 
 **Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) installs the official RyzeRTC API 2 extension **outside** the PHAR. RyzeRTC is the only NetherNet transport; pm-nethernet is removed. With NetherNet enabled, a missing native module stops startup instead of silently falling back. RakLib and RyzeRTC share the same public server-port on TCP/UDP (typically 19132). A trusted PEM certificate enables HTTPS on that TCP port; ACME issuance still requires external certificate provisioning. RakNet-only smoke testing can explicitly disable NetherNet. Retail Bedrock clients and existing-world compatibility still require verification before production release.
@@ -57,7 +59,7 @@ behaves differently from Bedrock Dedicated Server, please [open an issue](https:
 
 ## Getting Started
 - [Integration test PHAR](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) - artifacts are published only when CI passes; production release is not yet authorized
-- [Official RyzeMP Egg](https://github.com/RyzeCompany/egg-ryzemp) - installs the PHP runtime and native transport separately from the PHAR
+- [Official RyzeMP Egg](https://github.com/RyzeCompany/egg-ryzemp) - installs PHP, native RyzeRTC and version-locked RyzeVanillaGen separately from the PHAR
 - [Building and running from source](BUILDING.md)
 - [Original documentation](https://doc.pmmp.io/) - installation and configuration are still the same as upstream
 - [Plugin repository (Poggit)](https://poggit.pmmp.io/plugins) - PocketMine-MP 5 plugins

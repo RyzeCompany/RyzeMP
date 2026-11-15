@@ -60,7 +60,7 @@ Also import a copy of an existing LevelDB world; check saving, restart, entity/c
 
 ## CI / artifact
 
-The [integration CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) builds a disposable PHAR without Go or a bridge inside it, builds the Go helper externally, then starts the PHAR **twice**: once with NetherNet explicitly disabled and once with a SHA-256-verified external RyzeRTC API 2 extension. The [extended coverage CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-extended-coverage.yml) exercises the formerly skipped native, vanilla-data and benchmark tests, including a full PHPUnit run that fails on any skipped test. Neither workflow releases to production; the normal egg continues using existing official releases.
+The [integration CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) builds a disposable PHAR without Go or a bridge inside it, downloads the immutable SHA256-pinned RyzeVanillaGen v0.1.0 helper (protocol 7 / algorithm 4) from its own official release, then starts the PHAR **twice**: once with NetherNet explicitly disabled and once with a SHA-256-verified external RyzeRTC API 2 extension. The [extended coverage CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-extended-coverage.yml) exercises the formerly skipped native, vanilla-data and benchmark tests, including a full PHPUnit run that fails on any skipped test. Neither workflow releases RyzeMP to production; the Egg continues using existing official RyzeMP releases and downloads Go independently.
 
 ## Upstream attribution
 
@@ -69,3 +69,9 @@ VanillaMine: https://gitlab.com/VanillaMine/VanillaMine
 PocketMine-MP: https://github.com/pmmp/PocketMine-MP
 
 Keep copyright notices, LGPL obligations and native third-party attribution when packaging releases.
+
+## Standalone RyzeVanillaGen distribution
+
+The 75 Go source files and their golden terrain fixtures now live in [RyzeVanillaGen](https://github.com/RyzeCompany/RyzeVanillaGen). Native Go source is **not duplicated** in RyzeMP; the PHP IPC client and PHP terrain fallback remain here. Both the integration and strict extended test workflows download official `v0.1.0` from [its verified release](https://github.com/RyzeCompany/RyzeVanillaGen/releases/tag/v0.1.0), pinned to SHA-256 `3cddcb4be9bd17eaa3225be5d167fb63328566c252a8c4fe7b1e3b9e7d716dc7` on Linux amd64. The standalone release is independent of RyzeMP PR numbers and contains no Mojang-owned world data.
+
+The Pterodactyl Egg independently installs `bin/ryzemp/vanillagen/vanillagen-linux-amd64` and verifies its version string and checksum before replacing the server. Existing RyzeMP beta.5 can ignore the binary; only a subsequent compatible RyzeMP release can enable native terrain stages. Never automatically upgrade to a generator with an incompatible protocol/algorithm.

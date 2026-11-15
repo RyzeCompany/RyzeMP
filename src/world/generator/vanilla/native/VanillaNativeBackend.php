@@ -59,7 +59,7 @@ use function usleep;
 use const PHP_OS_FAMILY;
 
 /**
- * The vanillagen helper process: native terrain core of the "vanilla" generator (Go program in native/vanillagen).
+ * The vanillagen helper process: native terrain core of the "vanilla" generator. Its Go source and releases live at https://github.com/RyzeCompany/RyzeVanillaGen.
  *
  * The server's main thread starts one process (when the first vanilla world is loaded) and publishes its loopback
  * endpoint in the process environment; every generator instance, in every async worker thread, opens its own
@@ -67,10 +67,10 @@ use const PHP_OS_FAMILY;
  * outlives the server. If it cannot be started, nothing is published and the generator uses the PHP code.
  */
 final class VanillaNativeBackend{
-	/** Wire protocol version (must match native/vanillagen/protocol.go). */
+	/** Wire protocol version (must match RyzeVanillaGen/protocol.go). */
 	public const PROTOCOL_VERSION = 7;
 	/**
-	 * Version of the generated terrain. Must match algorithmVersion in native/vanillagen/protocol.go: bump both
+	 * Version of the generated terrain. Must match algorithmVersion in RyzeVanillaGen/protocol.go: bump both
 	 * whenever the chunks produced by the PHP stages (terrain, material rules, carvers), and so by the native ones, change.
 	 */
 	public const ALGORITHM_VERSION = 4;
@@ -117,9 +117,8 @@ final class VanillaNativeBackend{
 	}
 
 	/**
-	 * Finds the program: the configured path if any, otherwise the binary shipped with the server for this platform
-	 * (native/vanillagen/bin, copied out of the phar since a program cannot run from inside it), otherwise one placed
-	 * by the server owner in <data>/bin/.
+	 * Finds a configured binary, otherwise the official SHA256-verified RyzeVanillaGen binary supplied
+	 * outside the PHAR by the Egg, then a local developer/test binary if available.
 	 */
 	public static function locateBinary(string $configured, string $dataPath) : ?string{
 		if($configured !== ""){
