@@ -430,19 +430,6 @@ anonymous-statistics:
   enabled: false #TODO: re-enable this when we have a new stats host
   host: stats.pocketmine.net
 
-auto-updater:
-  #RyzeMP publishes updates through official GitHub Releases and the Pterodactyl Egg.
-  #The inherited VanillaMine/PocketMine update API is NOT a RyzeMP update source.
-  #Do not automatically contact an unrelated update server.
-  enabled: false
-  on-update:
-    warn-console: true
-  #Can be development, alpha, beta or stable (for a custom compatible API).
-  preferred-channel: stable
-  suggest-channels: false
-  #Optional: only set if you operate a trusted RyzeMP-compatible HTTPS update API.
-  host: ""
-
 timings:
   #Choose the host to use for viewing your timings results.
   host: timings.pmmp.io
