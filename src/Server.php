@@ -1658,7 +1658,7 @@ class Server{
 			return false;
 		}
 		$nativeInstalled = extension_loaded("ryzertc");
-		$nativeValid = $nativeInstalled && class_exists(\\RyzeRTC\\Runtime::class) && \\RyzeRTC\\Runtime::apiVersion() >= 2;
+		$nativeValid = $nativeInstalled && class_exists(\RyzeRTC\Runtime::class) && \RyzeRTC\Runtime::apiVersion() >= 2;
 		if($netherNetEnabled && $transportMode === "ryzertc" && !$nativeValid){
 			$this->logger->emergency("RyzeRTC transport selected but RyzeRTC API 2 is unavailable. Load the official ryzertc.so outside RyzeMP.phar.");
 			return false;
@@ -1698,7 +1698,7 @@ class Server{
 					!$this->startupPrepareConnectableNetworkInterfaces($this->getIpV6(), $this->getPortV6(), true, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter)){
 					return false;
 				}
-			}catch(\\Throwable $e){
+			}catch(\Throwable $e){
 				$this->logger->emergency("RyzeRTC native transport initialization failed: " . $e->getMessage());
 				return false;
 			}
