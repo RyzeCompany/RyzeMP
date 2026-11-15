@@ -68,6 +68,36 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
         }
     }
 
+    public function testQuotedBooleanValuesCannotAccidentallyEnableExternalReportingOrNetworking() : void{
+        $dir = sys_get_temp_dir() . '/ryzemp-quoted-bool-' . uniqid('', true);
+        self::assertTrue(mkdir($dir));
+        $yml = $dir . '/pocketmine.yml';
+        $props = $dir . '/server.properties';
+        file_put_contents($yml,
+            "auto-report:\n  enabled: \"false\"\n"
+            . "auto-updater:\n  enabled: \"off\"\n"
+            . "network:\n  proxy:\n    enabled: \"no\"\n"
+            . "fishing:\n  enabled: \"0\"\n  pvp-enabled: \"true\"\n"
+            . "mobs:\n  enabled: \"yes\"\n");
+        file_put_contents($props, "server-port=19132\n");
+        try{
+            $group = new ServerConfigGroup(
+                new Config($yml, Config::YAML, []),
+                new Config($props, Config::PROPERTIES, [])
+            );
+            self::assertFalse($group->getPropertyBool(YmlServerProperties::AUTO_REPORT_ENABLED, true));
+            self::assertFalse($group->getPropertyBool(YmlServerProperties::AUTO_UPDATER_ENABLED, true));
+            self::assertFalse($group->getPropertyBool(YmlServerProperties::NETWORK_PROXY_ENABLED, true));
+            self::assertFalse($group->getPropertyBool("fishing.enabled", true));
+            self::assertTrue($group->getPropertyBool("fishing.pvp-enabled", false));
+            self::assertTrue($group->getPropertyBool(YmlServerProperties::MOBS_ENABLED, false));
+        }finally{
+            unlink($yml);
+            unlink($props);
+            rmdir($dir);
+        }
+    }
+
     public function testNewInstallTemplateAvoidsInheritedExternalServices() : void{
         $parsed = yaml_parse_file(__DIR__ . '/../../resources/pocketmine.yml');
         self::assertIsArray($parsed);
