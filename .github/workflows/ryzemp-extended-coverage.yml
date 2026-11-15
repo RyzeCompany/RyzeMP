@@ -99,42 +99,19 @@ jobs:
       POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-native-full-vanilla
     steps:
       - uses: actions/checkout@v4
-      - uses: pmmp/setup-php-action@3.2.0
-        with:
-          php-version: '8.4'
-          install-path: ./bin
-          pm-version-major: 5
-      - run: composer install --prefer-dist --no-interaction --no-progress
-      - name: Obtain pinned VanillaMine chunkutils2 native 0.3.15 source from GitLab
+      - name: Install VanillaMine PHP 8.4 binary with bundled native chunkutils2 0.3.15
         run: |
           set -euo pipefail
-          git clone --quiet --depth 1 --branch 0.3.15 https://gitlab.com/VanillaMine/ext-chunkutils2.git "$RUNNER_TEMP/ext-chunkutils2"
-          test "$(git -C "$RUNNER_TEMP/ext-chunkutils2" rev-parse HEAD)" = ed1da313796674970a8a0cb0637976f05c4e09be
-      - name: Compile genuine PHP 8.4 ZTS chunkutils2 extension with official headers
-        run: |
-          set -euo pipefail
-          docker run --rm --mount "type=bind,source=$RUNNER_TEMP/ext-chunkutils2,target=/work" \
-            --workdir /work php:8.4-zts bash -ec '
-              apt-get update -qq
-              apt-get install -qq -y ${PHPIZE_DEPS} g++ make autoconf > /dev/null
-              phpize
-              ./configure --enable-chunkutils2
-              make -j2
-              test -s modules/chunkutils2.so
-            '
-      - name: Replace only CI runner native module and confirm API 0.3.15
-        run: |
-          set -euo pipefail
-          ext="$(php -r 'echo ini_get("extension_dir");')/chunkutils2.so"
-          test -s "$ext"
-          cp "$ext" "$RUNNER_TEMP/chunkutils2-original.so"
-          cp "$RUNNER_TEMP/ext-chunkutils2/modules/chunkutils2.so" "$ext"
+          source build/ci/setup-php.sh 8.4
+          echo "$PWD/bin/php7/bin" >> "$GITHUB_PATH"
           php -r '
-            if (phpversion("chunkutils2") !== "0.3.15") throw new RuntimeException("Native chunkutils2 version mismatch");
+            $v = phpversion("chunkutils2");
+            if ($v !== "0.3.15") throw new RuntimeException("Expected bundled native chunkutils2 0.3.15, got " . var_export($v, true));
             foreach (["pocketmine\\network\\mcpe\\NativeSendBuffers", "pocketmine\\world\\light\\NativeLightPopulation"] as $name) {
-              if (!class_exists($name)) throw new RuntimeException("Native class missing: " . $name);
+              if (!class_exists($name)) throw new RuntimeException("Native accelerator missing: " . $name);
             }
-            echo "Native chunkutils2 0.3.15 loaded and accelerated classes available\n";'
+            echo "Native chunkutils2 0.3.15 runtime ready\\n";'
+      - run: composer install --prefer-dist --no-interaction --no-progress
       - name: Fetch official pinned Mojang generator test data
         run: |
           php -d memory_limit=2G tools/fetch-vanilla-worldgen-data.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
