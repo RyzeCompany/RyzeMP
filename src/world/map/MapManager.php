@@ -303,6 +303,7 @@ final class MapManager{
 	private function createPacket(MapData $map) : ClientboundMapItemDataPacket{
 		$packet = new ClientboundMapItemDataPacket();
 		$packet->mapId = $map->getId();
+		$packet->type = 0; //required by the protocol packet, even for the modern optional-field encoding
 		$packet->dimensionId = $map->getDimension();
 		$packet->isLocked = $map->isLocked();
 		$packet->origin = new BlockPosition($map->getCenterX(), 0, $map->getCenterZ());
