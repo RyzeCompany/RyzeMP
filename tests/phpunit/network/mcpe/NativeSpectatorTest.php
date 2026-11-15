@@ -83,7 +83,7 @@ final class NativeSpectatorTest extends TestCase{
 	public function testUpdatePlayerGameTypeMatchesBds() : void{
 		$packet = UpdatePlayerGameTypePacket::create(ProtocolGameMode::SPECTATOR, -8589934591, 123);
 		$out = new ByteBufferWriter();
-		$packet->encode($out);
+		$packet->encode($out, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 
 		$header = new ByteBufferWriter();
 		VarInt::writeUnsignedInt($header, UpdatePlayerGameTypePacket::NETWORK_ID);
@@ -92,7 +92,7 @@ final class NativeSpectatorTest extends TestCase{
 
 	public function testSpectatorLayerMatchesBds() : void{
 		$out = new ByteBufferWriter();
-		SpectatorAbilities::layer()->encode($out);
+		SpectatorAbilities::layer()->encode($out, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		//layer 2, set mask 0x20f3f, values 0x20300 (invulnerable, flying, no clip), no speeds
 		self::assertSame("02003f0f020000030200" . str_repeat("00", 12), bin2hex($out->getData()));
 
@@ -101,7 +101,7 @@ final class NativeSpectatorTest extends TestCase{
 		$header = new ByteBufferWriter();
 		VarInt::writeUnsignedInt($header, UpdateAbilitiesPacket::NETWORK_ID);
 		$packet = new UpdateAbilitiesPacket();
-		$packet->decode(new ByteBufferReader($header->getData() . $raw));
+		$packet->decode(new ByteBufferReader($header->getData() . $raw), \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$layers = $packet->getData()->getAbilityLayers();
 		self::assertCount(2, $layers);
 		self::assertSame(AbilitiesLayer::LAYER_SPECTATOR, $layers[0]->getLayerId());
