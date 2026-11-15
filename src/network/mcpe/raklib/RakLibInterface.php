@@ -95,6 +95,11 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	private WakingPthreadsChannelWriter $mainToThreadWriter;
 	private ?\Socket $wakeSocket = null;
 
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetIceCommands;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetPeerEvents;
+
 	private PacketBroadcaster $packetBroadcaster;
 	private EntityEventBroadcaster $entityEventBroadcaster;
 	private TypeConverter $typeConverter;
@@ -132,6 +137,8 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 		$mainToThreadBuffer = new ThreadSafeArray();
 		/** @phpstan-var ThreadSafeArray<int, string> $threadToMainBuffer */
 		$threadToMainBuffer = new ThreadSafeArray();
+		$this->netherNetIceCommands = new ThreadSafeArray();
+		$this->netherNetPeerEvents = new ThreadSafeArray();
 
 		$wakeEntry = $this->server->getTickSleeper()->addNotifier(function() : void{
 			$this->mainToThreadWriter->wake();
@@ -151,7 +158,9 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 			$relayToken,
 			$this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_RAKLIB_ANTI_SPOOFING_COOKIES, false),
 			$this->server->getConfigGroup()->getPropertyInt(YmlServerProperties::NETWORK_CONNECTION_LIMITS_RAKNET_PONGS_PER_SECOND, 1000),
-			self::readExemptAddresses($this->server)
+			self::readExemptAddresses($this->server),
+			$this->netherNetIceCommands,
+			$this->netherNetPeerEvents
 		);
 		$this->eventReceiver = new RakLibToUserThreadMessageReceiver(
 			new PthreadsChannelReader($threadToMainBuffer)
@@ -186,6 +195,35 @@ class RakLibInterface implements ServerEventListener, AdvancedNetworkInterface{
 	 */
 	public function getRelayPort() : int{
 		return $this->rakLib->getRelayPort();
+	}
+
+	/**
+	 * Called before start(): RyzeRTC's private ICE backend and RakLib share one public UDP port.
+	 * No other public port is added.
+	 */
+	public function configureNetherNetSharedPort(int $backendPort) : void{
+		$this->rakLib->configureNetherNetSharedPort($backendPort);
+	}
+
+	/** @return array<int, array{ufrag: string, ip: string, port: int, relayPort: int}> */
+	public function pollNetherNetPeers() : array{
+		$events = [];
+		for($i = 0; $i < 128 && ($packet = $this->netherNetPeerEvents->shift()) !== null; ++$i){
+			$decoded = json_decode($packet, true, flags: JSON_THROW_ON_ERROR);
+			if(is_array($decoded)){
+				$events[] = $decoded;
+			}
+		}
+		return $events;
+	}
+
+	public function authorizeNetherNetUfrag(string $ufrag) : void{ $this->sendNetherNetUfragCommand("+", $ufrag); }
+	public function revokeNetherNetUfrag(string $ufrag) : void{ $this->sendNetherNetUfragCommand("-", $ufrag); }
+	private function sendNetherNetUfragCommand(string $command, string $ufrag) : void{
+		if(strlen($ufrag) < 4 || strlen($ufrag) > 256 || preg_match('/\\A[A-Za-z0-9+\\/\\_=.-]+\\z/D', $ufrag) !== 1){
+			throw new \InvalidArgumentException("Invalid ICE username fragment");
+		}
+		$this->netherNetIceCommands[] = $command . $ufrag;
 	}
 
 	public function setNetwork(Network $network) : void{
