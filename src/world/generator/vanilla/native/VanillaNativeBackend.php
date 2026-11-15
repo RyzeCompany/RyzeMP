@@ -126,6 +126,11 @@ final class VanillaNativeBackend{
 			$path = Path::isAbsolute($configured) ? $configured : Path::join($dataPath, $configured);
 			return is_file($path) ? $path : null;
 		}
+		// The Egg configures this only after validating the native executable.
+		$external = getenv("RYZEMP_VANILLAGEN_BINARY");
+		if($external !== false && $external !== ""){
+			return is_file($external) ? $external : null;
+		}
 		$name = self::binaryName();
 		return BundledBinary::locate(Path::join("native", "vanillagen", "bin", $name), Path::join($dataPath, "bin", $name));
 	}
