@@ -102,6 +102,12 @@ final class NetherNetConfig{
 			return is_file($path) ? $path : null;
 		}
 
+		// The official Egg verifies SHA-256 before passing this external binary.
+		$external = \getenv("RYZEMP_NETHERNET_BINARY");
+		if($external !== false && $external !== ""){
+			return is_file($external) ? $external : null;
+		}
+
 		$name = "pm-nethernet-" . self::platformName() . (PHP_OS_FAMILY === "Windows" ? ".exe" : "");
 		return BundledBinary::locate(Path::join("native", "nethernet", "bin", $name), Path::join($dataPath, "bin", $name));
 	}
