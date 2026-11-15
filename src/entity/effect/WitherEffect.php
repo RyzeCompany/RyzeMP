@@ -35,7 +35,7 @@ class WitherEffect extends Effect{
 	}
 
 	public function applyEffect(Living $entity, EffectInstance $instance, float $potency = 1.0, ?Entity $source = null) : void{
-		$ev = new EntityDamageEvent($entity, EntityDamageEvent::CAUSE_MAGIC, 1);
+		$ev = new EntityDamageEvent($entity, EntityDamageEvent::CAUSE_WITHER, 1);
 		$entity->attack($ev);
 	}
 }

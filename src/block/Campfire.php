@@ -29,7 +29,9 @@ use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
 use pocketmine\block\utils\Lightable;
 use pocketmine\block\utils\LightableTrait;
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\block\utils\SupportType;
+use pocketmine\block\utils\WaterloggedHelper;
 use pocketmine\crafting\FurnaceRecipe;
 use pocketmine\crafting\FurnaceType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -178,18 +180,21 @@ class Campfire extends Transparent implements Lightable, HorizontalFacing{
 		if($player !== null){
 			$this->facing = $player->getHorizontalFacing();
 		}
-		$this->lit = true;
+		//like vanilla, a campfire placed into a water source keeps the water (see World::useItemOn()) and is not lit
+		$this->lit = !WaterloggedHelper::isWaterSource($blockReplace);
 		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if(!$this->lit){
-			if($item->getTypeId() === ItemTypeIds::FIRE_CHARGE){
+			//vanilla: a waterlogged campfire can't be lit
+			$canLight = !LiquidLayer::holdsWater($this);
+			if($canLight && $item->getTypeId() === ItemTypeIds::FIRE_CHARGE){
 				$item->pop();
 				$this->ignite();
 				$this->position->getWorld()->addSound($this->position, new BlazeShootSound());
 				return true;
-			}elseif($item->getTypeId() === ItemTypeIds::FLINT_AND_STEEL || $item->hasEnchantment(VanillaEnchantments::FIRE_ASPECT())){
+			}elseif($canLight && ($item->getTypeId() === ItemTypeIds::FLINT_AND_STEEL || $item->hasEnchantment(VanillaEnchantments::FIRE_ASPECT()))){
 				if($item instanceof Durable){
 					$item->applyDamage(1);
 				}
@@ -215,20 +220,20 @@ class Campfire extends Transparent implements Lightable, HorizontalFacing{
 	}
 
 	public function onNearbyBlockChange() : void{
-		if($this->lit && $this->getSide(Facing::UP)->getTypeId() === BlockTypeIds::WATER){
+		//water put into the campfire (buckets, dispensers) puts it out, like Java's CampfireBlock.placeLiquid()
+		if($this->lit && ($this->getSide(Facing::UP)->getTypeId() === BlockTypeIds::WATER || LiquidLayer::holdsWater($this))){
 			$this->extinguish();
-			//TODO: Waterlogging
 		}
 	}
 
 	public function onEntityInside(Entity $entity) : bool{
 		if(!$this->lit){
-			if($entity->isOnFire()){
+			if($entity->isOnFire() && !LiquidLayer::holdsWater($this)){
 				$this->ignite();
 				return false;
 			}
 		}elseif($entity instanceof Living){
-			$entity->attack(new EntityDamageByBlockEvent($this, $entity, EntityDamageEvent::CAUSE_FIRE, $this->getEntityCollisionDamage()));
+			$entity->attack(new EntityDamageByBlockEvent($this, $entity, EntityDamageEvent::CAUSE_CAMPFIRE, $this->getEntityCollisionDamage()));
 		}
 		return true;
 	}
@@ -236,6 +241,9 @@ class Campfire extends Transparent implements Lightable, HorizontalFacing{
 	public function onProjectileHit(Projectile $projectile, RayTraceResult $hitResult) : void{
 		if($this->lit && $projectile instanceof SplashPotion && $projectile->getPotionType() === PotionType::WATER){
 			$this->extinguish();
+		}elseif(!$this->lit && $projectile->isOnFire() && !LiquidLayer::holdsWater($this)){
+			//burning arrows light it, unless it is waterlogged (Java CampfireBlock.onProjectileHit())
+			$this->ignite();
 		}
 	}
 
@@ -283,5 +291,13 @@ class Campfire extends Transparent implements Lightable, HorizontalFacing{
 		$this->position->getWorld()->addSound($this->position, new FlintSteelSound());
 		$this->position->getWorld()->setBlock($this->position, $this->setLit(true));
 		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, self::UPDATE_INTERVAL_TICKS);
+	}
+
+	public function getFlameEncouragement() : int{
+		return 5;
+	}
+
+	public function getFlammability() : int{
+		return 20;
 	}
 }

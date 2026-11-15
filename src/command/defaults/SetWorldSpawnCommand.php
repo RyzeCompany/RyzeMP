@@ -25,16 +25,17 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\utils\CommandCoordinates;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\entity\Location;
 use pocketmine\lang\KnownTranslationFactory;
-use pocketmine\math\Vector3;
 use pocketmine\permission\DefaultPermissionNames;
-use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
-use pocketmine\world\World;
 use function count;
 
-class SetWorldSpawnCommand extends NativeCommand{
+class SetWorldSpawnCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,30 +46,30 @@ class SetWorldSpawnCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SETWORLDSPAWN);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::position("spawnPoint", true)]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		$senderOrigin = CommandCoordinates::senderOrigin($sender);
 		if(count($args) === 0){
-			if($sender instanceof Player){
-				$location = $sender->getPosition();
-				$world = $location->getWorld();
-				$pos = $location->asVector3()->floor();
+			if($senderOrigin !== null){
+				$world = $senderOrigin->getWorld();
+				$pos = $senderOrigin->asVector3()->floor();
 			}else{
 				$sender->sendMessage(KnownTranslationFactory::pocketmine_command_error_playerUserOnly()->prefix(TextFormat::RED));
 
 				return true;
 			}
 		}elseif(count($args) === 3){
-			if($sender instanceof Player){
-				$base = $sender->getPosition();
-				$world = $base->getWorld();
+			if($senderOrigin !== null){
+				$origin = $senderOrigin;
+				$world = $origin->getWorld();
 			}else{
-				$base = new Vector3(0.0, 0.0, 0.0);
 				$world = $sender->getServer()->getWorldManager()->getDefaultWorld();
+				$origin = new Location(0.0, 0.0, 0.0, $world, 0.0, 0.0);
 			}
-			$pos = (new Vector3(
-				$this->getRelativeDouble($base->x, $sender, $args[0]),
-				$this->getRelativeDouble($base->y, $sender, $args[1], World::Y_MIN, World::Y_MAX),
-				$this->getRelativeDouble($base->z, $sender, $args[2]),
-			))->floor();
+			$pos = CommandCoordinates::parsePosition($origin, $args[0], $args[1], $args[2])->floor();
 		}else{
 			throw new InvalidCommandSyntaxException();
 		}

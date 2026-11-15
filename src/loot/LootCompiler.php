@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\loot;
 
+use pocketmine\entity\utils\MobBiomeInfo;
 use pocketmine\utils\Utils;
 use pocketmine\world\generator\vanilla\math\FloatMath;
 use function array_is_list;
@@ -386,6 +387,14 @@ final class LootCompiler{
 						$time %= $period;
 					}
 					return $range[0]($c, $time);
+				};
+			case "pocketmine:biome_has_tag":
+				//Bedrock biome_has_tag (Bedrock container tables, see BedrockLootConverter): tags of the biome at the origin
+				$tag = is_string($json["tag"] ?? null) ? $json["tag"] : "";
+				$negated = in_array($json["operator"] ?? "==", ["!=", "<>", "not"], true);
+				return function(LootContext $c) use ($tag, $negated) : bool{
+					$has = $c->world !== null && $c->origin !== null && MobBiomeInfo::hasTag($c->world, $c->origin, $tag);
+					return $has !== $negated;
 				};
 			case "value_check":
 				$value = NumberProvider::parse($json["value"] ?? 0, $this);

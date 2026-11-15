@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Item;
 use pocketmine\item\ItemBlock;
@@ -30,8 +31,9 @@ use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\world\vibration\GameEvent;
 
-class Cake extends BaseCake{
+class Cake extends BaseCake implements ComparatorReadable{
 	public const MAX_BITES = 6;
 
 	protected int $bites = 0;
@@ -72,6 +74,7 @@ class Cake extends BaseCake{
 
 			if($resultBlock !== null){
 				$this->position->getWorld()->setBlock($this->position, $resultBlock);
+				$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE, $player);
 				$item->pop();
 				return true;
 			}
@@ -91,5 +94,9 @@ class Cake extends BaseCake{
 			$clone = VanillaBlocks::AIR();
 		}
 		return $clone;
+	}
+
+	public function getComparatorOutput() : int{
+		return (self::MAX_BITES + 1 - $this->bites) * 2;
 	}
 }

@@ -30,19 +30,17 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
-use function count;
 use function get_class;
-use function spl_object_id;
 
 abstract class Spawnable extends Tile{
-	/** @phpstan-var array<int, CacheableNbt<CompoundTag>|null> */
-	private array $spawnCompoundCaches = [];
+	/** @phpstan-var array<int, CacheableNbt<CompoundTag>> */
+	private array $spawnCompoundCache = [];
 
 	/**
 	 * @deprecated
 	 */
 	public function isDirty() : bool{
-		return count($this->spawnCompoundCaches) === 0;
+		return $this->spawnCompoundCache === [];
 	}
 
 	/**
@@ -53,18 +51,7 @@ abstract class Spawnable extends Tile{
 	}
 
 	public function clearSpawnCompoundCache() : void{
-		$this->spawnCompoundCaches = [];
-	}
-
-	/** @internal Whether the receiving protocol has this tile's block. */
-	final public function canSpawnTo(TypeConverter $typeConverter) : bool{
-		$requiredBlock = $this->getRequiredNetworkBlockName();
-		return $requiredBlock === null ||
-			$typeConverter->getBlockTranslator()->internalIdToNetworkStateData($this->getBlock()->getStateId())->getName() === $requiredBlock;
-	}
-
-	protected function getRequiredNetworkBlockName() : ?string{
-		return null;
+		$this->spawnCompoundCache = [];
 	}
 
 	/**
@@ -89,23 +76,30 @@ abstract class Spawnable extends Tile{
 	 *
 	 * @phpstan-return CacheableNbt<CompoundTag>
 	 */
-	final public function getSerializedSpawnCompound(TypeConverter $typeConverter) : CacheableNbt{
-		return $this->spawnCompoundCaches[spl_object_id($typeConverter)] ??= new CacheableNbt($this->getSpawnCompound($typeConverter));
+	final public function getSerializedSpawnCompound(?TypeConverter $converter = null) : CacheableNbt{
+		$converter ??= TypeConverter::getInstance();
+		$protocolId = $converter->getProtocolId();
+		return $this->spawnCompoundCache[$protocolId] ??= new CacheableNbt($this->getSpawnCompound($converter));
 	}
 
-	final public function getSpawnCompound(TypeConverter $typeConverter) : CompoundTag{
+	final public function getSpawnCompound(?TypeConverter $converter = null) : CompoundTag{
 		$nbt = CompoundTag::create()
 			->setString(self::TAG_ID, TileFactory::getInstance()->getSaveId(get_class($this))) //TODO: disassociate network ID from save ID
 			->setInt(self::TAG_X, $this->position->x)
 			->setInt(self::TAG_Y, $this->position->y)
 			->setInt(self::TAG_Z, $this->position->z);
-		$this->addAdditionalSpawnData($nbt, $typeConverter);
+		$this->addAdditionalSpawnData($nbt);
+		if($converter !== null && $converter->getProtocolId() !== \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL){
+			$this->addAdditionalSpawnDataForProtocol($nbt, $converter);
+		}
 		return $nbt;
 	}
+
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{}
 
 	/**
 	 * An extension to getSpawnCompound() for
 	 * further modifying the generic tile NBT.
 	 */
-	abstract protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void;
+	abstract protected function addAdditionalSpawnData(CompoundTag $nbt) : void;
 }

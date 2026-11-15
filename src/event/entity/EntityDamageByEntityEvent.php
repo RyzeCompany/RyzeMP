@@ -32,6 +32,8 @@ use pocketmine\entity\Living;
  */
 class EntityDamageByEntityEvent extends EntityDamageEvent{
 	private int $damagerEntityId;
+	/** Fraction (0-1) of the victim's armor effectiveness ignored by this attack (e.g. Breach). */
+	private float $armorEffectivenessReduction = 0.0;
 
 	/**
 	 * @param float[] $modifiers
@@ -51,13 +53,14 @@ class EntityDamageByEntityEvent extends EntityDamageEvent{
 	}
 
 	protected function addAttackerModifiers(Entity $damager) : void{
-		if($damager instanceof Living){ //TODO: move this to entity classes
+		//Strength and Weakness only change melee hits: not arrows, tridents, fireballs, thorns, fangs or explosions
+		if($damager instanceof Living && $this->getCause() === EntityDamageEvent::CAUSE_ENTITY_ATTACK){ //TODO: move this to entity classes
 			$effects = $damager->getEffects();
 			if(($strength = $effects->get(VanillaEffects::STRENGTH())) !== null){
 				$this->setModifier($this->getBaseDamage() * 0.3 * $strength->getEffectLevel(), self::MODIFIER_STRENGTH);
 			}
 
-			if(($weakness = $effects->get(VanillaEffects::WEAKNESS())) !== null && $this->getCause() === EntityDamageEvent::CAUSE_ENTITY_ATTACK){
+			if(($weakness = $effects->get(VanillaEffects::WEAKNESS())) !== null){
 				$this->setModifier(-($this->getBaseDamage() * 0.2 * $weakness->getEffectLevel()), self::MODIFIER_WEAKNESS);
 			}
 		}
@@ -68,6 +71,21 @@ class EntityDamageByEntityEvent extends EntityDamageEvent{
 	 */
 	public function getDamager() : ?Entity{
 		return $this->getEntity()->getWorld()->getServer()->getWorldManager()->findEntity($this->damagerEntityId);
+	}
+
+	/**
+	 * Returns the fraction of armor effectiveness the victim loses against this attack, e.g. 0.15 per level of Breach:
+	 * armor that would reduce damage by 50% only reduces it by 35% against Breach I.
+	 */
+	public function getArmorEffectivenessReduction() : float{
+		return $this->armorEffectivenessReduction;
+	}
+
+	public function setArmorEffectivenessReduction(float $reduction) : void{
+		if($reduction < 0){
+			throw new \InvalidArgumentException("Armor effectiveness reduction cannot be negative");
+		}
+		$this->armorEffectivenessReduction = $reduction;
 	}
 
 	/**

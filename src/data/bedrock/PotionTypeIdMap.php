@@ -77,6 +77,10 @@ final class PotionTypeIdMap{
 				PotionType::SLOW_FALLING => PotionTypeIds::SLOW_FALLING,
 				PotionType::LONG_SLOW_FALLING => PotionTypeIds::LONG_SLOW_FALLING,
 				PotionType::STRONG_SLOWNESS => PotionTypeIds::STRONG_SLOWNESS,
+				PotionType::WIND_CHARGED => PotionTypeIds::WIND_CHARGED,
+				PotionType::WEAVING => PotionTypeIds::WEAVING,
+				PotionType::OOZING => PotionTypeIds::OOZING,
+				PotionType::INFESTED => PotionTypeIds::INFESTED,
 			}, $case);
 		}
 	}

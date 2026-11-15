@@ -23,17 +23,31 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
+use pocketmine\block\Block;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 
-final class ItemUseOnBlockSound extends BlockSound{
+final class ItemUseOnBlockSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
+
+	public function __construct(
+		private Block $block
+	){}
+
+	public function getBlock() : Block{ return $this->block; }
+
 	public function encode(Vector3 $pos) : array{
 		return [LevelSoundEventPacket::nonActorSound(
 			LevelSoundEvent::ITEM_USE_ON,
 			$pos,
 			false,
-			$this->toRuntimeId(),
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }

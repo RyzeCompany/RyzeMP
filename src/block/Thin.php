@@ -23,34 +23,45 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\HorizontalConnections;
+use pocketmine\block\utils\HorizontalConnectionsTrait;
 use pocketmine\block\utils\SupportType;
+use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\item\Item;
 use pocketmine\math\Axis;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\BlockTransaction;
 use function count;
 
 /**
  * Thin blocks behave like glass panes. They connect to full-cube blocks horizontally adjacent to them if possible.
  */
-class Thin extends Transparent{
-	/** @var bool[] facing => dummy */
-	protected array $connections = [];
+class Thin extends Transparent implements HorizontalConnections{
+	use HorizontalConnectionsTrait;
 
-	public function readStateFromWorld() : Block{
-		parent::readStateFromWorld();
+	/**
+	 * Since 1.26.50 the connections are real block states (minecraft:connection_*), see Fence.
+	 */
+	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
+		$w->horizontalFacingFlags($this->connections);
+	}
 
-		$this->collisionBoxes = null;
+	protected function canConnectTo(Block $block, int $facing) : bool{
+		return $block instanceof Thin || $block instanceof Wall || $block->getSupportType(Facing::opposite($facing)) === SupportType::FULL;
+	}
 
-		foreach(Facing::HORIZONTAL as $facing){
-			$side = $this->getSide($facing);
-			if($side instanceof Thin || $side instanceof Wall || $side->getSupportType(Facing::opposite($facing)) === SupportType::FULL){
-				$this->connections[$facing] = true;
-			}else{
-				unset($this->connections[$facing]);
-			}
+	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
+		$this->recalculateConnections();
+		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
+	}
+
+	public function onNearbyBlockChange() : void{
+		if($this->recalculateConnections()){
+			$this->position->getWorld()->setBlock($this->position, $this);
 		}
-
-		return $this;
 	}
 
 	protected function recalculateCollisionBoxes() : array{
@@ -90,7 +101,11 @@ class Thin extends Transparent{
 		return $bbs;
 	}
 
+	/**
+	 * The post in the middle supports torches, candles and lanterns on top and hanging lanterns below (Java
+	 * canSupportCenter).
+	 */
 	public function getSupportType(int $facing) : SupportType{
-		return SupportType::NONE;
+		return Facing::axis($facing) === Axis::Y ? SupportType::CENTER : SupportType::NONE;
 	}
 }

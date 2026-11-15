@@ -32,22 +32,23 @@ use pocketmine\network\mcpe\protocol\CreativeContentPacket;
 use pocketmine\network\mcpe\protocol\types\inventory\CreativeGroupEntry;
 use pocketmine\network\mcpe\protocol\types\inventory\CreativeItemEntry;
 use pocketmine\network\mcpe\protocol\types\inventory\ItemStack;
-use pocketmine\utils\ProtocolSingletonTrait;
+use pocketmine\utils\SingletonTrait;
 use function is_string;
 use function spl_object_id;
 use const PHP_INT_MIN;
 
 final class CreativeInventoryCache{
-	use ProtocolSingletonTrait;
+	use SingletonTrait;
 
 	/**
-	 * @var CreativeInventoryCacheEntry[]
-	 * @phpstan-var array<int, CreativeInventoryCacheEntry>
+	 * @var CreativeInventoryCacheEntry[][]
+	 * @phpstan-var array<int, array<int, CreativeInventoryCacheEntry>>
 	 */
 	private array $caches = [];
 
-	private function getCacheEntry(CreativeInventory $inventory) : CreativeInventoryCacheEntry{
+	private function getCacheEntry(CreativeInventory $inventory, TypeConverter $typeConverter) : CreativeInventoryCacheEntry{
 		$id = spl_object_id($inventory);
+		$converterId = spl_object_id($typeConverter);
 		if(!isset($this->caches[$id])){
 			$inventory->getDestructorCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id]);
@@ -55,19 +56,17 @@ final class CreativeInventoryCache{
 			$inventory->getContentChangedCallbacks()->add(function() use ($id) : void{
 				unset($this->caches[$id]);
 			});
-			$this->caches[$id] = $this->buildCacheEntry($inventory);
 		}
-		return $this->caches[$id];
+		return $this->caches[$id][$converterId] ??= $this->buildCacheEntry($inventory, $typeConverter);
 	}
 
 	/**
 	 * Rebuild the cache for the given inventory.
 	 */
-	private function buildCacheEntry(CreativeInventory $inventory) : CreativeInventoryCacheEntry{
+	private function buildCacheEntry(CreativeInventory $inventory, TypeConverter $typeConverter) : CreativeInventoryCacheEntry{
 		$categories = [];
 		$groups = [];
 
-		$typeConverter = TypeConverter::getInstance($this->getProtocolId());
 
 		$nextIndex = 0;
 		$groupIndexes = [];
@@ -105,12 +104,22 @@ final class CreativeInventoryCache{
 		return new CreativeInventoryCacheEntry($categories, $groups, $items);
 	}
 
+	/**
+	 * Builds the cached data of the inventory now instead of for the first player who gets it (the server does it at
+	 * startup for the default creative inventory).
+	 *
+	 * @internal
+	 */
+	public function warmUp(CreativeInventory $inventory) : void{
+		$this->getCacheEntry($inventory, TypeConverter::getInstance());
+	}
+
 	public function buildPacket(CreativeInventory $inventory, NetworkSession $session) : CreativeContentPacket{
 		$player = $session->getPlayer() ?? throw new \LogicException("Cannot prepare creative data for a session without a player");
 		$language = $player->getLanguage();
 		$forceLanguage = $player->getServer()->isLanguageForced();
 		$typeConverter = $session->getTypeConverter();
-		$cachedEntry = $this->getCacheEntry($inventory);
+		$cachedEntry = $this->getCacheEntry($inventory, $typeConverter);
 		$translate = function(Translatable|string $translatable) use ($session, $language, $forceLanguage) : string{
 			if(is_string($translatable)){
 				$message = $translatable;

@@ -51,10 +51,15 @@ use const SORT_STRING;
  *   <root>/data/minecraft/{loot_table,predicate,enchantment,tags/item,tags/enchantment,...}
  *   <root>/java_items.json (max stack size, max damage and enchantability of every Java item)
  *   <root>/geyser/items.json (GeyserMC's Java -> Bedrock item mappings)
+ * or, without a vanilla world, in the loot-only cache prepared by {@link LootDataFetcher} (the same data files, read
+ * from Mojang's server.jar without Java): it has no java_items.json (a data generator report), so the item info
+ * comes from the matching PocketMine items instead (see {@link itemInfo()}), and is marked by {@link LOOT_STAMP_FILE}.
  */
 final class LootData{
 	public const JAVA_ITEMS_FILE = "java_items.json";
 	public const GEYSER_ITEMS_FILE = "geyser/items.json";
+	/** Written last by {@link LootDataFetcher}: the loot-only data is complete. */
+	public const LOOT_STAMP_FILE = "loot.json";
 	/** Damageable Java items without the enchantable component (an enchanting table refuses them). */
 	private const NOT_ENCHANTABLE_DURABLE = [
 		"minecraft:shears" => true,
@@ -107,7 +112,7 @@ final class LootData{
 	 * Whether $root holds the loot table data (vanilla data format 3 or later, or the loot-only data).
 	 */
 	public static function isAvailable(string $root) : bool{
-		return is_dir($root . "/data/minecraft/loot_table") && (is_file($root . "/" . self::JAVA_ITEMS_FILE));
+		return is_dir($root . "/data/minecraft/loot_table") && (is_file($root . "/" . self::JAVA_ITEMS_FILE) || is_file($root . "/" . self::LOOT_STAMP_FILE));
 	}
 
 	/**
@@ -213,7 +218,7 @@ final class LootData{
 		}
 		if($this->itemsFromPocketMine){
 			if(!isset($this->items[$id]) && !isset($this->missingItems[$id])){
-				$info = $this->pocketMineItemInfo($id);
+				$info = self::pocketMineItemInfo($id);
 				if($info !== null){
 					$this->items[$id] = $info;
 				}else{
@@ -249,8 +254,8 @@ final class LootData{
 	 * Enchantability: Java only gives it to the items an enchanting table accepts.
 	 * @phpstan-return array{int, int, int}|null
 	 */
-	private function pocketMineItemInfo(string $id) : ?array{
-		$item = LootItemConverter::toItem(new LootStack($id, 1), $this->root);
+	private static function pocketMineItemInfo(string $id) : ?array{
+		$item = LootItemConverter::toItem(new LootStack($id, 1));
 		if($item === null){
 			return null;
 		}

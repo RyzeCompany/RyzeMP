@@ -72,5 +72,6 @@ final class OceanMonumentPenthouse extends OceanMonumentPiece{
 		$this->fillBox($c, $box, 8, 0, 10, 8, 2, 10, $light);
 		$this->fillBox($c, $box, 6, -1, 7, 7, -1, 8, $black);
 		$this->generateWaterBox($c, $box, 6, -1, 3, 7, -1, 4);
+		$this->spawnElder($c, $box, 6, 1, 6);
 	}
 }

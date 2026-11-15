@@ -62,8 +62,10 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			[
 				EntityDamageEvent::CAUSE_FIRE,
 				EntityDamageEvent::CAUSE_FIRE_TICK,
-				EntityDamageEvent::CAUSE_LAVA
-				//TODO: check fireballs
+				EntityDamageEvent::CAUSE_LAVA,
+				EntityDamageEvent::CAUSE_MAGMA,
+				EntityDamageEvent::CAUSE_CAMPFIRE,
+				EntityDamageEvent::CAUSE_FIREBALL
 			],
 			fn(int $level) : int => 8 * ($level - 1) + 10,
 			12
@@ -76,7 +78,8 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			4,
 			2.5,
 			[
-				EntityDamageEvent::CAUSE_FALL
+				EntityDamageEvent::CAUSE_FALL,
+				EntityDamageEvent::CAUSE_STALAGMITE
 			],
 			fn(int $level) : int => 6 * ($level - 1) + 5,
 			10
@@ -103,7 +106,9 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			4,
 			1.5,
 			[
-				EntityDamageEvent::CAUSE_PROJECTILE
+				EntityDamageEvent::CAUSE_PROJECTILE,
+				EntityDamageEvent::CAUSE_FIREBALL,
+				EntityDamageEvent::CAUSE_WITHER_SKULL
 			],
 			fn(int $level) : int => 6 * ($level - 1) + 3,
 			15
@@ -173,7 +178,25 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			fn(int $level) : int => 20 * ($level - 1) + 10,
 			50
 		));
-		//TODO: smite, bane of arthropods, looting (these don't make sense now because their applicable mobs don't exist yet)
+		//https://minecraft.wiki/w/Smite and /Bane_of_Arthropods: max level V, weight 5, cost 5 + 8 per level, range 20
+		self::register("SMITE", new SmiteEnchantment(
+			KnownTranslationFactory::enchantment_damage_undead(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			5,
+			fn(int $level) : int => 8 * ($level - 1) + 5,
+			20
+		));
+		self::register("BANE_OF_ARTHROPODS", new BaneOfArthropodsEnchantment(
+			KnownTranslationFactory::enchantment_damage_arthropods(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			5,
+			fn(int $level) : int => 8 * ($level - 1) + 5,
+			20
+		));
 
 		self::register("EFFICIENCY", new Enchantment(
 			KnownTranslationFactory::enchantment_digging(),
@@ -277,6 +300,186 @@ final class VanillaEnchantmentsInputs extends RegistrySource{
 			3,
 			fn(int $level) : int => 10 * $level,
 			5
+		));
+
+		//treasure enchantment: only from piglin bartering and bastion chests
+		self::register("SOUL_SPEED", new Enchantment(
+			KnownTranslationFactory::enchantment_soul_speed(),
+			Rarity::MYTHIC,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 10 * $level,
+			15
+		));
+
+		self::register("QUICK_CHARGE", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowQuickCharge(),
+			Rarity::UNCOMMON, //weight 5, anvil multiplier 2 (Java Enchantments bootstrap)
+			0,
+			0,
+			3,
+			fn(int $level) : int => 20 * ($level - 1) + 12,
+			50
+		));
+
+		self::register("MULTISHOT", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowMultishot(),
+			Rarity::RARE,
+			0,
+			0,
+			1,
+			fn(int $level) : int => 20,
+			30
+		));
+
+		//Mace enchantments. Enchanting costs follow Java (Enchantment.dynamicCost values in the 1.21 data pack).
+		self::register("DENSITY", new Enchantment(
+			KnownTranslationFactory::enchantment_heavy_weapon_density(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			5,
+			fn(int $level) : int => 5 + 8 * ($level - 1),
+			20
+		));
+
+		self::register("BREACH", new Enchantment(
+			KnownTranslationFactory::enchantment_heavy_weapon_breach(),
+			Rarity::RARE,
+			0,
+			0,
+			4,
+			fn(int $level) : int => 15 + 9 * ($level - 1),
+			50
+		));
+
+		self::register("WIND_BURST", new Enchantment(
+			KnownTranslationFactory::enchantment_heavy_weapon_windburst(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 15 + 9 * ($level - 1),
+			50
+		));
+
+		//Spear enchantment (https://minecraft.wiki/w/Lunge: max level III, weight 5)
+		self::register("LUNGE", new Enchantment(
+			KnownTranslationFactory::enchantment_lunge(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 5 + 8 * ($level - 1),
+			20
+		));
+
+		//Trident enchantment (https://minecraft.wiki/w/Channeling: max level I, weight 1, cost 25-50)
+		self::register("CHANNELING", new Enchantment(
+			KnownTranslationFactory::enchantment_tridentChanneling(),
+			Rarity::MYTHIC,
+			0,
+			0,
+			1,
+			fn(int $level) : int => 25,
+			25
+		));
+
+		//Boots (https://minecraft.wiki/w/Depth_Strider: max level III, weight 2, cost 10 per level, range 15). The client
+		//moves players faster in water by itself.
+		self::register("DEPTH_STRIDER", new Enchantment(
+			KnownTranslationFactory::enchantment_waterWalker(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 10 * $level,
+			15
+		));
+
+		//Fishing rods (Luck of the Sea, Lure: max level III, weight 2, cost 15 + 9 per level, range 50)
+		self::register("LUCK_OF_THE_SEA", new Enchantment(
+			KnownTranslationFactory::enchantment_lootBonusFishing(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 9 * ($level - 1) + 15,
+			50
+		));
+		self::register("LURE", new Enchantment(
+			KnownTranslationFactory::enchantment_fishingSpeed(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 9 * ($level - 1) + 15,
+			50
+		));
+
+		//Tridents (Impaling: V, weight 2, cost 1 + 8 per level, range 20; Riptide: III, weight 2, cost 10 + 7 per level,
+		//up to 50; Loyalty: III, weight 5, cost 12 + 7 per level, up to 50)
+		self::register("IMPALING", new ImpalingEnchantment(
+			KnownTranslationFactory::enchantment_tridentImpaling(),
+			Rarity::RARE,
+			0,
+			0,
+			5,
+			fn(int $level) : int => 8 * ($level - 1) + 1,
+			20
+		));
+		self::register("RIPTIDE", new Enchantment(
+			KnownTranslationFactory::enchantment_tridentRiptide(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 7 * ($level - 1) + 10,
+			25
+		));
+		self::register("LOYALTY", new Enchantment(
+			KnownTranslationFactory::enchantment_tridentLoyalty(),
+			Rarity::UNCOMMON,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 7 * ($level - 1) + 12,
+			25
+		));
+
+		//Crossbows (https://minecraft.wiki/w/Piercing: max level IV, weight 10, cost 1 + 10 per level, up to 50)
+		self::register("PIERCING", new Enchantment(
+			KnownTranslationFactory::enchantment_crossbowPiercing(),
+			Rarity::COMMON,
+			0,
+			0,
+			4,
+			fn(int $level) : int => 10 * ($level - 1) + 1,
+			30
+		));
+
+		//Treasure curse (https://minecraft.wiki/w/Curse_of_Binding: max level I, weight 1, cost 25-50): worn items can't
+		//be taken off outside creative
+		self::register("BINDING", new Enchantment(
+			KnownTranslationFactory::enchantment_curse_binding(),
+			Rarity::MYTHIC,
+			0,
+			0,
+			1,
+			fn(int $level) : int => 25,
+			25
+		));
+
+		//Extra loot from mobs (https://minecraft.wiki/w/Looting: max level III, weight 2)
+		self::register("LOOTING", new Enchantment(
+			KnownTranslationFactory::enchantment_lootBonus(),
+			Rarity::RARE,
+			0,
+			0,
+			3,
+			fn(int $level) : int => 9 * ($level - 1) + 15,
+			50
 		));
 	}
 

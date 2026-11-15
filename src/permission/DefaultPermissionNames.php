@@ -24,7 +24,6 @@ declare(strict_types=1);
 namespace pocketmine\permission;
 
 final class DefaultPermissionNames{
-	public const ANTICHEAT_LOG = "log.anticheat";
 	public const BROADCAST_ADMIN = "pocketmine.broadcast.admin";
 	public const BROADCAST_USER = "pocketmine.broadcast.user";
 	public const COMMAND_BAN_IP = "pocketmine.command.ban.ip";
@@ -32,6 +31,7 @@ final class DefaultPermissionNames{
 	public const COMMAND_BAN_PLAYER = "pocketmine.command.ban.player";
 	public const COMMAND_CLEAR_OTHER = "pocketmine.command.clear.other";
 	public const COMMAND_CLEAR_SELF = "pocketmine.command.clear.self";
+	public const COMMAND_DAMAGE = "pocketmine.command.damage";
 	public const COMMAND_DEFAULTGAMEMODE = "pocketmine.command.defaultgamemode";
 	public const COMMAND_DIFFICULTY = "pocketmine.command.difficulty";
 	public const COMMAND_DUMPMEMORY = "pocketmine.command.dumpmemory";
@@ -39,8 +39,11 @@ final class DefaultPermissionNames{
 	public const COMMAND_EFFECT_SELF = "pocketmine.command.effect.self";
 	public const COMMAND_ENCHANT_OTHER = "pocketmine.command.enchant.other";
 	public const COMMAND_ENCHANT_SELF = "pocketmine.command.enchant.self";
+	public const COMMAND_EXECUTE = "pocketmine.command.execute";
+	public const COMMAND_FILL = "pocketmine.command.fill";
 	public const COMMAND_GAMEMODE_OTHER = "pocketmine.command.gamemode.other";
 	public const COMMAND_GAMEMODE_SELF = "pocketmine.command.gamemode.self";
+	public const COMMAND_GAMERULE = "pocketmine.command.gamerule";
 	public const COMMAND_GC = "pocketmine.command.gc";
 	public const COMMAND_GIVE_OTHER = "pocketmine.command.give.other";
 	public const COMMAND_GIVE_SELF = "pocketmine.command.give.self";
@@ -49,26 +52,30 @@ final class DefaultPermissionNames{
 	public const COMMAND_KILL_OTHER = "pocketmine.command.kill.other";
 	public const COMMAND_KILL_SELF = "pocketmine.command.kill.self";
 	public const COMMAND_LIST = "pocketmine.command.list";
+	public const COMMAND_LOCATE = "pocketmine.command.locate";
 	public const COMMAND_ME = "pocketmine.command.me";
 	public const COMMAND_OP_GIVE = "pocketmine.command.op.give";
 	public const COMMAND_OP_TAKE = "pocketmine.command.op.take";
 	public const COMMAND_PARTICLE = "pocketmine.command.particle";
 	public const COMMAND_PLUGINS = "pocketmine.command.plugins";
+	public const COMMAND_REPLACEITEM = "pocketmine.command.replaceitem";
+	public const COMMAND_RIDE = "pocketmine.command.ride";
 	public const COMMAND_SAVE_DISABLE = "pocketmine.command.save.disable";
 	public const COMMAND_SAVE_ENABLE = "pocketmine.command.save.enable";
 	public const COMMAND_SAVE_PERFORM = "pocketmine.command.save.perform";
 	public const COMMAND_SAY = "pocketmine.command.say";
 	public const COMMAND_SEED = "pocketmine.command.seed";
+	public const COMMAND_SETBLOCK = "pocketmine.command.setblock";
 	public const COMMAND_SETWORLDSPAWN = "pocketmine.command.setworldspawn";
 	public const COMMAND_SPAWNPOINT_OTHER = "pocketmine.command.spawnpoint.other";
 	public const COMMAND_SPAWNPOINT_SELF = "pocketmine.command.spawnpoint.self";
 	public const COMMAND_STATUS = "pocketmine.command.status";
 	public const COMMAND_STOP = "pocketmine.command.stop";
+	public const COMMAND_SUMMON = "pocketmine.command.summon";
+	public const COMMAND_TAG = "pocketmine.command.tag";
 	public const COMMAND_TELEPORT_OTHER = "pocketmine.command.teleport.other";
 	public const COMMAND_TELEPORT_SELF = "pocketmine.command.teleport.self";
 	public const COMMAND_TELL = "pocketmine.command.tell";
-	public const COMMAND_GAMERULE = "pocketmine.command.gamerule";
-	public const COMMAND_WEATHER = "pocketmine.command.weather";
 	public const COMMAND_TIME_ADD = "pocketmine.command.time.add";
 	public const COMMAND_TIME_QUERY = "pocketmine.command.time.query";
 	public const COMMAND_TIME_SET = "pocketmine.command.time.set";
@@ -81,6 +88,7 @@ final class DefaultPermissionNames{
 	public const COMMAND_UNBAN_IP = "pocketmine.command.unban.ip";
 	public const COMMAND_UNBAN_PLAYER = "pocketmine.command.unban.player";
 	public const COMMAND_VERSION = "pocketmine.command.version";
+	public const COMMAND_WEATHER = "pocketmine.command.weather";
 	public const COMMAND_WHITELIST_ADD = "pocketmine.command.whitelist.add";
 	public const COMMAND_WHITELIST_DISABLE = "pocketmine.command.whitelist.disable";
 	public const COMMAND_WHITELIST_ENABLE = "pocketmine.command.whitelist.enable";

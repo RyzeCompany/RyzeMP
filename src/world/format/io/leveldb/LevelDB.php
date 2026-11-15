@@ -26,12 +26,18 @@ namespace pocketmine\world\format\io\leveldb;
 use pocketmine\block\Block;
 use pocketmine\data\bedrock\BiomeIds;
 use pocketmine\data\bedrock\block\BlockStateDeserializeException;
+use pocketmine\data\bedrock\block\BlockStateSerializeException;
+use pocketmine\data\bedrock\block\BlockStateSerializer;
+use pocketmine\data\bedrock\block\convert\BlockObjectToStateSerializer;
 use pocketmine\data\bedrock\block\convert\UnsupportedBlockStateException;
 use pocketmine\data\bedrock\WorldDataVersions;
 use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\NbtDataException;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\IntTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\utils\Binary;
 use pocketmine\utils\BinaryDataException;
@@ -48,13 +54,16 @@ use pocketmine\world\format\io\exception\CorruptedWorldException;
 use pocketmine\world\format\io\exception\UnsupportedWorldFormatException;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\format\io\LoadedChunkData;
+use pocketmine\world\format\io\ScheduledBlockUpdatesWorldProvider;
 use pocketmine\world\format\io\WorldData;
 use pocketmine\world\format\io\WritableWorldProvider;
+use pocketmine\world\format\io\WriteBatchWorldProvider;
 use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
 use pocketmine\world\WorldCreationOptions;
 use Symfony\Component\Filesystem\Path;
 use function array_map;
+use function array_slice;
 use function array_values;
 use function chr;
 use function count;
@@ -63,6 +72,7 @@ use function extension_loaded;
 use function file_exists;
 use function implode;
 use function is_dir;
+use function max;
 use function mkdir;
 use function ord;
 use function str_repeat;
@@ -72,7 +82,7 @@ use function trim;
 use function unpack;
 use const LEVELDB_ZLIB_RAW_COMPRESSION;
 
-class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
+class LevelDB extends BaseWorldProvider implements WritableWorldProvider, WriteBatchWorldProvider, ScheduledBlockUpdatesWorldProvider{
 
 	protected const FINALISATION_NEEDS_INSTATICKING = 0;
 	protected const FINALISATION_NEEDS_POPULATION = 1;
@@ -85,30 +95,50 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 
 	private const CAVES_CLIFFS_EXPERIMENTAL_SUBCHUNK_KEY_OFFSET = 4;
 
+	private const TAG_PENDING_TICKS_CURRENT_TICK = "currentTick";
+	private const TAG_PENDING_TICKS_LIST = "tickList";
+	private const TAG_PENDING_TICK_BLOCK_STATE = "blockState";
+	private const TAG_PENDING_TICK_TIME = "time";
+	private const TAG_PENDING_TICK_X = "x";
+	private const TAG_PENDING_TICK_Y = "y";
+	private const TAG_PENDING_TICK_Z = "z";
+
+	/**
+	 * Most palette entries kept in {@link LevelDB::$paletteEntryCache} (about 175 bytes each, so about 250 KB with the
+	 * array); the older half is forgotten when it is full.
+	 */
+	private const PALETTE_ENTRY_CACHE_SIZE = 1024;
+
+	/**
+	 * Serialized NBT (one root, as writeMultiple() writes it) of block state IDs found in saved palettes, for the
+	 * serializer in {@link LevelDB::$paletteEntrySerializer}. Saving a chunk otherwise builds and writes the NBT of every
+	 * palette entry of every subchunk again.
+	 * @var string[]
+	 * @phpstan-var array<int, string>
+	 */
+	private static array $paletteEntryCache = [];
+	private static ?BlockStateSerializer $paletteEntrySerializer = null;
+
 	protected \LevelDB $db;
 
-	private int $storageDimension = 0;
-	private bool $storageInUse = false;
-	private bool $dimensionConfigured = false;
-	private bool $blockStatesUpgraded = false;
+	/** LevelDB memtable size (write_buffer_size) of the worlds opened from now on. */
+	private static int $writeBufferSize = 16 * 1024 * 1024;
 
-	/** @internal Call before constructing World or accessing its chunks. */
-	public function configureDimension(int $target, ?int $source = null) : void{
-		if($this->storageInUse || $this->dimensionConfigured){
-			throw new \LogicException("LevelDB dimension must be selected once, before accessing chunks");
-		}
-		$available = [];
-		foreach($this->db->getIterator() as $key => $_){
-			$dimension = DimensionStorage::versionKeyDimension($key);
-			if($dimension !== null){ $available[$dimension] = true; }
-		}
-		$this->storageDimension = DimensionStorage::select($available, $target, $source);
-		$this->dimensionConfigured = true;
-	}
+	/**
+	 * Writes kept by an open write batch (see {@link LevelDB::beginWriteBatch()}), or by a write that failed, until
+	 * {@link LevelDB::flushPendingWrites()} writes them. Each chunk's data is added whole, so this never holds part of
+	 * a chunk.
+	 */
+	private ?\LevelDBWriteBatch $pendingWrites = null;
+	/** Approximate size of {@link LevelDB::$pendingWrites} in bytes. */
+	private int $pendingWriteBytes = 0;
+	private int $writeBatchDepth = 0;
 
-	public function getStorageDimension() : int{
-		return $this->storageDimension;
-	}
+	/**
+	 * Size of the kept writes at which they are written even though the batch is still open, to bound the memory used
+	 * by a batch of many chunks.
+	 */
+	private const MAX_PENDING_WRITE_BYTES = 4 * 1024 * 1024;
 
 	private static function checkForLevelDBExtension() : void{
 		if(!extension_loaded('leveldb')){
@@ -126,8 +156,30 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	private static function createDB(string $path) : \LevelDB{
 		return new \LevelDB(Path::join($path, "db"), [
 			"compression" => LEVELDB_ZLIB_RAW_COMPRESSION,
-			"block_size" => 64 * 1024 //64KB, big enough for most chunks
+			"block_size" => 64 * 1024, //64KB, big enough for most chunks
+			//16MB instead of the default 4MB: a quarter of the level-0 tables for the same writes, so compaction keeps
+			//up with bursts of chunk saves. With 4MB, a few thousand chunk saves pile up level-0 tables and LevelDB
+			//throttles each write (a 1 ms sleep, about 15 ms on Windows) or blocks writes until compaction catches up
+			//(hundreds of ms to seconds). Same data on disk and same crash recovery (the memtable is backed by the log
+			//file); costs up to 16MB of memory per world (32MB while a full memtable is being written).
+			//The economy resource profile uses 4MB (see setWriteBufferSize()).
+			"write_buffer_size" => self::$writeBufferSize
 		]);
+	}
+
+	/**
+	 * Sets the memtable size of the worlds opened from now on (the server sets it from its resource profile, see
+	 * {@link \pocketmine\ResourceProfile::getLevelDBWriteBufferSize()}).
+	 *
+	 * @internal
+	 */
+	public static function setWriteBufferSize(int $bytes) : void{
+		self::$writeBufferSize = max(1024 * 1024, $bytes);
+	}
+
+	/** @internal */
+	public static function getWriteBufferSize() : int{
+		return self::$writeBufferSize;
 	}
 
 	public function __construct(string $path, \Logger $logger){
@@ -234,9 +286,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 				continue;
 			}
 			try{
-				$normalized = ImportedBlockStateNormalizer::normalize($blockStateData);
-				$palette[] = $this->blockStateDeserializer->deserialize($normalized);
-				$this->blockStatesUpgraded = $this->blockStatesUpgraded || $normalized !== $blockStateData;
+				$palette[] = $this->blockStateDeserializer->deserialize($blockStateData);
 			}catch(UnsupportedBlockStateException $e){
 				$blockDecodeErrors[$e->getMessage()][] = $i;
 				$palette[] = $this->blockStateDeserializer->deserialize(GlobalBlockStateHandlers::getUnknownBlockStateData());
@@ -267,12 +317,38 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 		if($blocks->getBitsPerBlock() !== 0){
 			$stream->putLInt(count($palette));
 		}
-		$tags = [];
-		foreach($palette as $p){
-			$tags[] = new TreeRoot($this->blockStateSerializer->serialize($p)->toNbt());
+		$serializer = $this->blockStateSerializer;
+		if(!$serializer instanceof BlockObjectToStateSerializer){
+			$tags = [];
+			foreach($palette as $p){
+				$tags[] = new TreeRoot($serializer->serialize($p)->toNbt());
+			}
+
+			$stream->put((new LittleEndianNbtSerializer())->writeMultiple($tags));
+			return;
 		}
 
-		$stream->put((new LittleEndianNbtSerializer())->writeMultiple($tags));
+		//writeMultiple() is the concatenation of each root's write(), and this serializer keeps the BlockStateData of
+		//each state ID for good, so the bytes of each palette entry never change: they are cached (same bytes on disk)
+		if(self::$paletteEntrySerializer !== $serializer){
+			self::$paletteEntrySerializer = $serializer;
+			self::$paletteEntryCache = [];
+		}
+		$parts = [];
+		foreach($palette as $p){
+			$bytes = self::$paletteEntryCache[$p] ?? null;
+			if($bytes === null){
+				$bytes = (new LittleEndianNbtSerializer())->write(new TreeRoot($serializer->serialize($p)->toNbt()));
+				if(count(self::$paletteEntryCache) >= self::PALETTE_ENTRY_CACHE_SIZE){
+					//forget the older half (insertion order)
+					self::$paletteEntryCache = array_slice(self::$paletteEntryCache, self::PALETTE_ENTRY_CACHE_SIZE >> 1, null, true);
+				}
+				self::$paletteEntryCache[$p] = $bytes;
+			}
+			$parts[] = $bytes;
+		}
+
+		$stream->put(implode("", $parts));
 	}
 
 	/**
@@ -327,12 +403,12 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	 * @return PalettedBlockArray[]
 	 * @phpstan-return array<int, PalettedBlockArray>
 	 */
-	private function deserialize3dBiomes(BinaryStream $stream, int $chunkVersion, \Logger $logger) : array{
+	private static function deserialize3dBiomes(BinaryStream $stream, int $chunkVersion, \Logger $logger) : array{
 		$previous = null;
 		$result = [];
-		$nextIndex = $this->storageDimension === 0 ? Chunk::MIN_SUBCHUNK_INDEX : 0;
-		$lastIndex = $this->storageDimension === 0 ? Chunk::MAX_SUBCHUNK_INDEX : ($this->storageDimension === 1 ? 7 : 15);
-		$expectedCount = $this->storageDimension === 0 ? self::getExpected3dBiomesCount($chunkVersion) : $lastIndex + 1;
+		$nextIndex = Chunk::MIN_SUBCHUNK_INDEX;
+
+		$expectedCount = self::getExpected3dBiomesCount($chunkVersion);
 		for($i = 0; $i < $expectedCount; ++$i){
 			try{
 				$bitsPerBlock = $stream->getByte() >> 1;
@@ -345,7 +421,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 					$decoded = self::deserializeBiomePalette($stream, $bitsPerBlock);
 				}
 				$previous = $decoded;
-				if($nextIndex <= $lastIndex){ //older versions wrote additional superfluous biome palettes
+				if($nextIndex <= Chunk::MAX_SUBCHUNK_INDEX){ //older versions wrote additional superfluous biome palettes
 					$result[$nextIndex++] = $decoded;
 				}elseif($stream->feof()){
 					//not enough padding biome arrays for the given version - this is non-critical since we discard the excess anyway, but this should be logged
@@ -361,22 +437,15 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 			$logger->error("Unexpected trailing data after 3D biomes data");
 		}
 
-		// Chunk has a fixed server-side height even when native storage has only 8/16 palettes.
-		if($this->storageDimension !== 0){
-			for($y = Chunk::MIN_SUBCHUNK_INDEX; $y <= Chunk::MAX_SUBCHUNK_INDEX; ++$y){
-				if(!isset($result[$y])){ $result[$y] = clone $result[$y < 0 ? 0 : $lastIndex]; }
-			}
-		}
 		return $result;
 	}
 
 	/**
 	 * @param SubChunk[] $subChunks
 	 */
-	private function serialize3dBiomes(BinaryStream $stream, array $subChunks) : void{
-		$min = $this->storageDimension === 0 ? Chunk::MIN_SUBCHUNK_INDEX : 0;
-		$max = $this->storageDimension === 0 ? Chunk::MAX_SUBCHUNK_INDEX : ($this->storageDimension === 1 ? 7 : 15);
-		for($y = $min; $y <= $max; $y++){
+	private static function serialize3dBiomes(BinaryStream $stream, array $subChunks) : void{
+		//TODO: the server-side min/max may not coincide with the world storage min/max - we may need additional logic to handle this
+		for($y = Chunk::MIN_SUBCHUNK_INDEX; $y <= Chunk::MAX_SUBCHUNK_INDEX; $y++){
 			//TODO: is it worth trying to use the previous palette if it's the same as the current one? vanilla supports
 			//this, but it's not clear if it's worth the effort to implement.
 			self::serializeBiomePalette($stream, $subChunks[$y]->getBiomeArray());
@@ -445,7 +514,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	}
 
 	private function readVersion(int $chunkX, int $chunkZ) : ?int{
-		$index = self::chunkIndex($chunkX, $chunkZ, $this->storageDimension);
+		$index = self::chunkIndex($chunkX, $chunkZ);
 		$chunkVersionRaw = $this->db->get($index . ChunkDataKey::NEW_VERSION);
 		if($chunkVersionRaw === false){
 			$chunkVersionRaw = $this->db->get($index . ChunkDataKey::OLD_VERSION);
@@ -604,7 +673,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	private function deserializeAllSubChunkData(string $index, int $chunkVersion, bool &$hasBeenUpgraded, array $convertedLegacyExtraData, array $biomeArrays, \Logger $logger) : array{
 		$subChunks = [];
 
-		$subChunkKeyOffset = $this->storageDimension === 0 && self::hasOffsetCavesAndCliffsSubChunks($chunkVersion) ? self::CAVES_CLIFFS_EXPERIMENTAL_SUBCHUNK_KEY_OFFSET : 0;
+		$subChunkKeyOffset = self::hasOffsetCavesAndCliffsSubChunks($chunkVersion) ? self::CAVES_CLIFFS_EXPERIMENTAL_SUBCHUNK_KEY_OFFSET : 0;
 		for($y = Chunk::MIN_SUBCHUNK_INDEX; $y <= Chunk::MAX_SUBCHUNK_INDEX; ++$y){
 			if(($data = $this->db->get($index . ChunkDataKey::SUBCHUNK . chr(($y + $subChunkKeyOffset) & 0xff))) === false){
 				$subChunks[$y] = new SubChunk(Block::EMPTY_STATE_ID, [], $biomeArrays[$y]);
@@ -661,7 +730,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 
 			try{
 				$binaryStream->get(512);
-				$biomeArrays = $this->deserialize3dBiomes($binaryStream, $chunkVersion, $logger);
+				$biomeArrays = self::deserialize3dBiomes($binaryStream, $chunkVersion, $logger);
 			}catch(BinaryDataException $e){
 				throw new CorruptedChunkException($e->getMessage(), 0, $e);
 			}
@@ -679,9 +748,8 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	 * @throws CorruptedChunkException
 	 */
 	public function loadChunk(int $chunkX, int $chunkZ) : ?LoadedChunkData{
-		$this->storageInUse = true;
-		$this->blockStatesUpgraded = false;
-		$index = self::chunkIndex($chunkX, $chunkZ, $this->storageDimension);
+		$this->flushPendingWrites();
+		$index = LevelDB::chunkIndex($chunkX, $chunkZ);
 
 		$chunkVersion = $this->readVersion($chunkX, $chunkZ);
 		if($chunkVersion === null){
@@ -780,20 +848,26 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 			$terrainPopulated = true;
 		}
 
-		//TODO: tile ticks, biome states (?)
+		$scheduledBlockUpdates = [];
+		if(($pendingTicksData = $this->db->get($index . ChunkDataKey::PENDING_SCHEDULED_TICKS)) !== false && $pendingTicksData !== ""){
+			$scheduledBlockUpdates = $this->deserializePendingTicks($pendingTicksData, $subChunks, $logger);
+		}
+
+		//TODO: biome states (?)
 
 		return new LoadedChunkData(
-			data: new ChunkData($subChunks, $terrainPopulated, $entities, $tiles),
-			upgraded: $hasBeenUpgraded || $this->blockStatesUpgraded,
+			data: new ChunkData($subChunks, $terrainPopulated, $entities, $tiles, $scheduledBlockUpdates),
+			upgraded: $hasBeenUpgraded,
 			fixerFlags: LoadedChunkData::FIXER_FLAG_ALL //TODO: fill this by version rather than just setting all flags
 		);
 	}
 
 	public function saveChunk(int $chunkX, int $chunkZ, ChunkData $chunkData, int $dirtyFlags) : void{
-		$this->storageInUse = true;
-		$index = self::chunkIndex($chunkX, $chunkZ, $this->storageDimension);
+		$index = LevelDB::chunkIndex($chunkX, $chunkZ);
 
-		$write = new \LevelDBWriteBatch();
+		//the whole chunk is serialized before anything is added to a write batch, so that a failure (exception) never
+		//leaves part of a chunk behind, whether the chunk is written at once or kept for a batched write
+		$write = new ChunkWriteOps();
 
 		$write->put($index . ChunkDataKey::NEW_VERSION, chr(self::CURRENT_LEVEL_CHUNK_VERSION));
 		$write->put($index . ChunkDataKey::PM_DATA_VERSION, Binary::writeLLong(VersionInfo::WORLD_DATA_VERSION));
@@ -825,7 +899,7 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 			$write->delete($index . ChunkDataKey::HEIGHTMAP_AND_2D_BIOMES);
 			$stream = new BinaryStream();
 			$stream->put(str_repeat("\x00", 512)); //fake heightmap
-			$this->serialize3dBiomes($stream, $subChunks);
+			self::serialize3dBiomes($stream, $subChunks);
 			$write->put($index . ChunkDataKey::HEIGHTMAP_AND_3D_BIOMES, $stream->getBuffer());
 		}
 
@@ -835,16 +909,164 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 		$this->writeTags($chunkData->getTileNBT(), $index . ChunkDataKey::BLOCK_ENTITIES, $write);
 		$this->writeTags($chunkData->getEntityNBT(), $index . ChunkDataKey::ENTITIES, $write);
 
+		$pendingTicks = $this->serializePendingTicks($chunkData->getScheduledBlockUpdates(), $subChunks);
+		if($pendingTicks !== null){
+			$write->put($index . ChunkDataKey::PENDING_SCHEDULED_TICKS, $pendingTicks);
+		}else{
+			$write->delete($index . ChunkDataKey::PENDING_SCHEDULED_TICKS);
+		}
+
 		$write->delete($index . ChunkDataKey::HEIGHTMAP_AND_2D_BIOME_COLORS);
 		$write->delete($index . ChunkDataKey::LEGACY_TERRAIN);
 
-		$this->db->write($write);
+		if($this->writeBatchDepth === 0 && $this->pendingWrites === null){
+			$batch = new \LevelDBWriteBatch();
+			$write->addTo($batch);
+			$this->db->write($batch);
+			return;
+		}
+
+		//kept for the open batch, or queued behind the writes of a failed write so that they are written in order
+		$this->pendingWrites ??= new \LevelDBWriteBatch();
+		$this->pendingWriteBytes += $write->addTo($this->pendingWrites);
+		if($this->writeBatchDepth === 0 || $this->pendingWriteBytes >= self::MAX_PENDING_WRITE_BYTES){
+			$this->flushPendingWrites();
+		}
+	}
+
+	public function beginWriteBatch() : void{
+		++$this->writeBatchDepth;
+	}
+
+	public function commitWriteBatch() : void{
+		if($this->writeBatchDepth <= 0){
+			throw new \LogicException("No write batch to commit");
+		}
+		if(--$this->writeBatchDepth === 0){
+			$this->flushPendingWrites();
+		}
+	}
+
+	/**
+	 * Writes the kept writes, if any. If the write fails, they stay kept (the next flush writes them again) and the
+	 * exception is thrown.
+	 *
+	 * @throws \LevelDBException
+	 */
+	private function flushPendingWrites() : void{
+		if($this->pendingWrites !== null){
+			$this->db->write($this->pendingWrites);
+			$this->pendingWrites = null;
+			$this->pendingWriteBytes = 0;
+		}
+	}
+
+	/**
+	 * Writes the pending scheduled block updates like Bedrock: a compound with the current tick and a list of ticks with
+	 * the block state they were scheduled for, their position and the tick they run at. The current tick is always 0
+	 * here, so the times are the ticks left.
+	 *
+	 * @param int[][]    $updates
+	 * @param SubChunk[] $subChunks
+	 * @phpstan-param list<array{int, int, int, int}> $updates
+	 * @phpstan-param array<int, SubChunk> $subChunks
+	 */
+	private function serializePendingTicks(array $updates, array $subChunks) : ?string{
+		$tickList = [];
+		foreach($updates as [$x, $y, $z, $delay]){
+			$subChunk = $subChunks[$y >> SubChunk::COORD_BIT_SIZE] ?? null;
+			if($subChunk === null){
+				continue;
+			}
+			try{
+				$blockState = $this->blockStateSerializer->serialize($subChunk->getBlockStateId($x & SubChunk::COORD_MASK, $y & SubChunk::COORD_MASK, $z & SubChunk::COORD_MASK))->toNbt();
+			}catch(BlockStateSerializeException){
+				continue;
+			}
+			$tickList[] = CompoundTag::create()
+				->setTag(self::TAG_PENDING_TICK_BLOCK_STATE, $blockState)
+				->setLong(self::TAG_PENDING_TICK_TIME, $delay)
+				->setInt(self::TAG_PENDING_TICK_X, $x)
+				->setInt(self::TAG_PENDING_TICK_Y, $y)
+				->setInt(self::TAG_PENDING_TICK_Z, $z);
+		}
+		if(count($tickList) === 0){
+			return null;
+		}
+		return (new LittleEndianNbtSerializer())->write(new TreeRoot(CompoundTag::create()
+			->setInt(self::TAG_PENDING_TICKS_CURRENT_TICK, 0)
+			->setTag(self::TAG_PENDING_TICKS_LIST, new ListTag($tickList, NBT::TAG_Compound))
+		));
+	}
+
+	/**
+	 * Reads the pending scheduled block updates of a chunk. Ticks whose block state doesn't match the block at their
+	 * position any more (or is unknown) are dropped.
+	 *
+	 * @param SubChunk[] $subChunks
+	 * @phpstan-param array<int, SubChunk> $subChunks
+	 *
+	 * @return int[][]
+	 * @phpstan-return list<array{int, int, int, int}>
+	 */
+	private function deserializePendingTicks(string $data, array $subChunks, \Logger $logger) : array{
+		try{
+			$root = (new LittleEndianNbtSerializer())->read($data)->mustGetCompoundTag();
+		}catch(NbtDataException $e){
+			$logger->error("Bad pending ticks data: " . $e->getMessage());
+			return [];
+		}
+		$currentTick = $root->getTag(self::TAG_PENDING_TICKS_CURRENT_TICK);
+		$currentTick = $currentTick instanceof IntTag || $currentTick instanceof LongTag ? $currentTick->getValue() : 0;
+		$tickList = $root->getListTag(self::TAG_PENDING_TICKS_LIST, CompoundTag::class);
+		if($tickList === null){
+			return [];
+		}
+		$result = [];
+		$dropped = 0;
+		foreach($tickList as $tick){
+			$blockState = $tick->getCompoundTag(self::TAG_PENDING_TICK_BLOCK_STATE);
+			$time = $tick->getTag(self::TAG_PENDING_TICK_TIME);
+			$x = $tick->getTag(self::TAG_PENDING_TICK_X);
+			$y = $tick->getTag(self::TAG_PENDING_TICK_Y);
+			$z = $tick->getTag(self::TAG_PENDING_TICK_Z);
+			if($blockState === null || !($time instanceof LongTag || $time instanceof IntTag) || !$x instanceof IntTag || !$y instanceof IntTag || !$z instanceof IntTag){
+				$dropped++;
+				continue;
+			}
+			$x = $x->getValue();
+			$y = $y->getValue();
+			$z = $z->getValue();
+			$subChunk = $subChunks[$y >> SubChunk::COORD_BIT_SIZE] ?? null;
+			if($subChunk === null){
+				$dropped++;
+				continue;
+			}
+			try{
+				$stateId = $this->blockStateDeserializer->deserialize($this->blockDataUpgrader->upgradeBlockStateNbt($blockState));
+			}catch(BlockStateDeserializeException){
+				$dropped++;
+				continue;
+			}
+			$localX = $x & SubChunk::COORD_MASK;
+			$localY = $y & SubChunk::COORD_MASK;
+			$localZ = $z & SubChunk::COORD_MASK;
+			if($subChunk->getBlockStateId($localX, $localY, $localZ) !== $stateId && $subChunk->getLiquidLayerStateId($localX, $localY, $localZ) !== $stateId){
+				$dropped++;
+				continue;
+			}
+			$result[] = [$x, $y, $z, max(0, $time->getValue() - $currentTick)];
+		}
+		if($dropped > 0){
+			$logger->debug("Dropped $dropped pending ticks of unknown or changed blocks");
+		}
+		return $result;
 	}
 
 	/**
 	 * @param CompoundTag[] $targets
 	 */
-	private function writeTags(array $targets, string $index, \LevelDBWriteBatch $write) : void{
+	private function writeTags(array $targets, string $index, ChunkWriteOps $write) : void{
 		if(count($targets) > 0){
 			$nbt = new LittleEndianNbtSerializer();
 			$write->put($index, $nbt->writeMultiple(array_map(fn(CompoundTag $tag) => new TreeRoot($tag), $targets)));
@@ -853,12 +1075,16 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 		}
 	}
 
+	/**
+	 * Writes kept for a batched write are written first, so that the database holds the latest saved data.
+	 */
 	public function getDatabase() : \LevelDB{
+		$this->flushPendingWrites();
 		return $this->db;
 	}
 
-	public static function chunkIndex(int $chunkX, int $chunkZ, int $dimension = 0) : string{
-		return DimensionStorage::chunkIndex($chunkX, $chunkZ, $dimension);
+	public static function chunkIndex(int $chunkX, int $chunkZ) : string{
+		return Binary::writeLInt($chunkX) . Binary::writeLInt($chunkZ);
 	}
 
 	public function doGarbageCollection() : void{
@@ -866,16 +1092,22 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	}
 
 	public function close() : void{
-		unset($this->db);
+		try{
+			$this->flushPendingWrites();
+		}catch(\LevelDBException $e){
+			$this->logger->critical("Failed to write chunk data kept for a batched write: " . $e->getMessage());
+		}finally{
+			$this->pendingWrites = null;
+			$this->pendingWriteBytes = 0;
+			$this->writeBatchDepth = 0;
+			unset($this->db);
+		}
 	}
 
 	public function getAllChunks(bool $skipCorrupted = false, ?\Logger $logger = null) : \Generator{
-		$this->storageInUse = true;
-		$seen = [];
+		$this->flushPendingWrites();
 		foreach($this->db->getIterator() as $key => $_){
-			$coordinates = substr($key, 0, 8);
-			if(DimensionStorage::versionKeyDimension($key) === $this->storageDimension && !isset($seen[$coordinates])){
-				$seen[$coordinates] = true;
+			if(strlen($key) === 9 && ($key[8] === ChunkDataKey::NEW_VERSION || $key[8] === ChunkDataKey::OLD_VERSION)){
 				$chunkX = Binary::readLInt(substr($key, 0, 4));
 				$chunkZ = Binary::readLInt(substr($key, 4, 4));
 				try{
@@ -895,17 +1127,13 @@ class LevelDB extends BaseWorldProvider implements WritableWorldProvider{
 	}
 
 	public function calculateChunkCount() : int{
+		$this->flushPendingWrites();
 		$count = 0;
-		$this->storageInUse = true;
-		$seen = [];
 		foreach($this->db->getIterator() as $key => $_){
-			$coordinates = substr($key, 0, 8);
-			if(DimensionStorage::versionKeyDimension($key) === $this->storageDimension && !isset($seen[$coordinates])){
-				$seen[$coordinates] = true;
+			if(strlen($key) === 9 && ($key[8] === ChunkDataKey::NEW_VERSION || $key[8] === ChunkDataKey::OLD_VERSION)){
 				$count++;
 			}
 		}
 		return $count;
 	}
 }
-

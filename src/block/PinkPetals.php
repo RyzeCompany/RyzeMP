@@ -64,18 +64,17 @@ class PinkPetals extends Flowable implements HorizontalFacing{
 		return $this;
 	}
 
-	private function canBeSupportedAt(Block $block) : bool{
+	protected function canBeSupportedAt(Block $block) : bool{
 		$supportBlock = $block->getSide(Facing::DOWN);
-		//TODO: Moss block
 		return $supportBlock->hasTypeTag(BlockTypeTags::DIRT) || $supportBlock->hasTypeTag(BlockTypeTags::MUD);
 	}
 
 	public function canBePlacedAt(Block $blockReplace, Vector3 $clickVector, int $face, bool $isClickedBlock) : bool{
-		return ($blockReplace instanceof PinkPetals && $blockReplace->count < self::MAX_COUNT) || $this->supportedWhenPlacedAt($blockReplace, $clickVector, $face, $isClickedBlock);
+		return ($blockReplace instanceof PinkPetals && $blockReplace->hasSameTypeId($this) && $blockReplace->count < self::MAX_COUNT) || $this->supportedWhenPlacedAt($blockReplace, $clickVector, $face, $isClickedBlock);
 	}
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
-		if($blockReplace instanceof PinkPetals && $blockReplace->count < self::MAX_COUNT){
+		if($blockReplace instanceof PinkPetals && $blockReplace->hasSameTypeId($this) && $blockReplace->count < self::MAX_COUNT){
 			$this->count = $blockReplace->count + 1;
 			$this->facing = $blockReplace->facing;
 		}elseif($player !== null){
@@ -107,6 +106,10 @@ class PinkPetals extends Flowable implements HorizontalFacing{
 
 	public function getFlammability() : int{
 		return 100;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 
 	public function getDropsForCompatibleTool(Item $item) : array{

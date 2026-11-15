@@ -1,7 +1,0 @@
-name: PublicCommandApiFixture
-main: RyzeTests\CommandApi\Main
-version: 1.0.0
-api: [5.0.0]
-permissions:
-  ryzemp.smoke.command:
-    default: op

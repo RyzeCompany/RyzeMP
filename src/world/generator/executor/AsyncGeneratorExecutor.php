@@ -27,9 +27,23 @@ use pocketmine\scheduler\AsyncPool;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\PopulationTask;
 use function array_key_exists;
+use function max;
 
 final class AsyncGeneratorExecutor implements GeneratorExecutor{
 	private static int $nextAsyncContextId = 1;
+	/**
+	 * Number of async workers (the first ones of the pool) that generate chunks, 0 = all. Every worker that generates
+	 * holds its own generator instances (~135 MB for a vanilla world), so a few busy workers use much less memory
+	 * than all of them.
+	 */
+	private static int $maxWorkers = 0;
+
+	/**
+	 * Sets how many async workers generate chunks (chunk-generation.max-workers), 0 = all of them.
+	 */
+	public static function setMaxWorkers(int $count) : void{
+		self::$maxWorkers = max(0, $count);
+	}
 
 	private readonly \Logger $logger;
 
@@ -79,19 +93,20 @@ final class AsyncGeneratorExecutor implements GeneratorExecutor{
 		$this->generatorRegisteredWorkers = [];
 	}
 
-	/** @phpstan-param (\Closure(string) : void)|null $onDataFailure */
-	public function populate(int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks, \Closure $onCompletion, ?\Closure $onDataFailure = null) : void{
+	public function populate(int $chunkX, int $chunkZ, ?Chunk $centerChunk, array $adjacentChunks, \Closure $onCompletion) : void{
 		$task = new PopulationTask(
 			$this->asyncContextId,
 			$chunkX,
 			$chunkZ,
 			$centerChunk,
 			$adjacentChunks,
-			$onCompletion,
-			$onDataFailure
+			$onCompletion
 		);
-		$workerId = $this->workerPool->selectWorker();
-		if(!isset($this->workerPool->getRunningWorkers()[$workerId]) && isset($this->generatorRegisteredWorkers[$workerId])){
+		$workerId = self::$maxWorkers > 0 ? $this->workerPool->selectWorkerAmong(self::$maxWorkers) : $this->workerPool->selectWorkerAmong($this->workerPool->getSize());
+		//A worker that was shut down (e.g. after being idle) lost its generator, and submitting a task to it starts it
+		//again, so it must get AsyncGeneratorRegisterTask before the PopulationTask. The worker start hook only clears
+		//the flag once the worker has started, which is too late for this decision.
+		if(!$this->workerPool->isWorkerRunning($workerId) && isset($this->generatorRegisteredWorkers[$workerId])){
 			$this->logger->debug("Selected worker $workerId previously had generator registered, but is now offline");
 			unset($this->generatorRegisteredWorkers[$workerId]);
 		}

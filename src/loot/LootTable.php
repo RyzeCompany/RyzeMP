@@ -38,7 +38,7 @@ use function min;
  * {@link LootItemConverter} for what PocketMine can represent).
  *
  * Typical use:
- *   $table = (new LootTables($cachePath))->get("minecraft:chests/simple_dungeon");
+ *   $table = LootTables::get("minecraft:chests/simple_dungeon");
  *   $items = $table->generate(LootContext::create());          //PocketMine items
  *   $table->fillInventory($inventory, LootContext::seeded($seed)); //a container, like an unpacked vanilla chest
  */
@@ -207,7 +207,7 @@ final class LootTable{
 	public function generate(LootContext $context) : array{
 		$items = [];
 		foreach($this->getRandomItems($context) as $stack){
-			if(!$stack->isEmpty() && ($item = LootItemConverter::toItem($stack, $this->data->getRoot())) !== null){
+			if(!$stack->isEmpty() && ($item = LootItemConverter::toItem($stack)) !== null){
 				$items[] = $item;
 			}
 		}
@@ -219,22 +219,15 @@ final class LootTable{
 	 * represent leave their slot empty.
 	 */
 	public function fillInventory(Inventory $inventory, LootContext $context) : void{
-		$inventory->setContents($this->rollInventory($inventory, $context));
-	}
-
-	/** @return array<int, Item> */
-	public function rollInventory(Inventory $inventory, LootContext $context) : array{
-		$items = $inventory->getContents();
 		$occupied = [];
-		foreach($items as $slot => $_){
+		foreach($inventory->getContents() as $slot => $_){
 			$occupied[$slot] = true;
 		}
 		foreach($this->fill($inventory->getSize(), $occupied, $context) as $slot => $stack){
-			$item = LootItemConverter::toItem($stack, $this->data->getRoot());
+			$item = LootItemConverter::toItem($stack);
 			if($item !== null){
-				$items[$slot] = $item;
+				$inventory->setItem($slot, $item);
 			}
 		}
-		return $items;
 	}
 }

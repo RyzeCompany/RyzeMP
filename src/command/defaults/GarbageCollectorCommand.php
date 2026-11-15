@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\utils\TextFormat;
@@ -32,7 +33,7 @@ use function memory_get_usage;
 use function number_format;
 use function round;
 
-class GarbageCollectorCommand extends NativeCommand{
+class GarbageCollectorCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +43,11 @@ class GarbageCollectorCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_GC);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		$chunksCollected = 0;
 		$entitiesCollected = 0;
 

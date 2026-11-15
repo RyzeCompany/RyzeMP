@@ -30,6 +30,7 @@ use pmmp\encoding\BE;
 use pmmp\encoding\LE;
 use pocketmine\block\tile\Spawnable;
 use pocketmine\block\tile\Tile;
+use pocketmine\block\utils\PistonPushReaction;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\InvalidSerializedRuntimeDataException;
 use pocketmine\data\runtime\RuntimeDataDescriber;
@@ -514,7 +515,10 @@ class Block{
 
 	}
 
-	/** Called for an exposed block by the world weather random tick. */
+	/**
+	 * Called now and then while rain or snow falls on this block (it is the top block of its column). Used by
+	 * cauldrons to fill up. Like random ticks, this follows the chunk ticking budget.
+	 */
 	public function onPrecipitation(Precipitation $precipitation) : void{
 
 	}
@@ -526,14 +530,14 @@ class Block{
 
 	}
 
-	/** Minimal native redstone power API; other blocks may override the defaults. */
-	public function isRedstoneSource() : bool{ return false; }
-
-	/** @return int 0..15 */
-	public function getWeakPower(int $face) : int{ return 0; }
-
-	/** @return int 0..15 */
-	public function getStrongPower(int $face) : int{ return 0; }
+	/**
+	 * Whether a due scheduled update of this block waits while its chunk is not ticked (outside the chunk ticking
+	 * radius of every player), like vanilla block ticks, instead of running in any loaded chunk. It runs as soon as
+	 * the chunk is ticked again; if the chunk unloads first, it is saved with the chunk and runs after it loads again.
+	 */
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return false;
+	}
 
 	/**
 	 * Do actions when interacted by Item. Returns if it has done anything
@@ -762,6 +766,20 @@ class Block{
 	}
 
 	/**
+	 * Returns the chance that this block will fill one layer of a composter.
+	 */
+	public function getCompostabilityChance() : int{
+		return 0;
+	}
+
+	/**
+	 * Returns whether this block can be used in a composter.
+	 */
+	public function isCompostable() : bool{
+		return $this->getCompostabilityChance() > 0;
+	}
+
+	/**
 	 * Returns whether fire lit on this block will burn indefinitely.
 	 */
 	public function burnsForever() : bool{
@@ -866,6 +884,14 @@ class Block{
 		}
 
 		return false;
+	}
+
+	/**
+	 * Returns whether entities in the way stop the block from being placed, which is the case when its collision boxes
+	 * would intersect them. Blocks that entities can stand inside, like scaffolding, return false.
+	 */
+	public function isPlacementObstructedByEntities() : bool{
+		return true;
 	}
 
 	/**
@@ -977,6 +1003,61 @@ class Block{
 	}
 
 	/**
+	 * Returns whether this block can emit redstone power at all, regardless of its current state. Redstone wire
+	 * connects to blocks that are power sources (see also {@link Block::connectsToRedstoneWire()}).
+	 */
+	public function isRedstoneSource() : bool{
+		return false;
+	}
+
+	/**
+	 * Returns the redstone power (0-15) that this block emits out of the given face, into the block on that side.
+	 *
+	 * Weak power activates redstone components directly on that side (lamps, doors, wire...), but does not make a
+	 * solid block on that side powered for its own neighbours.
+	 *
+	 * @param int $face one of the {@link Facing} constants, pointing from this block towards the receiving block
+	 */
+	public function getWeakPower(int $face) : int{
+		return 0;
+	}
+
+	/**
+	 * Returns the redstone power (0-15) that this block strongly delivers into the block on the given side. A
+	 * redstone conductor (see {@link Block::isRedstoneConductor()}) receiving strong power acts as a power source for
+	 * all of its own neighbours.
+	 *
+	 * @param int $face one of the {@link Facing} constants, pointing from this block towards the receiving block
+	 */
+	public function getStrongPower(int $face) : int{
+		return 0;
+	}
+
+	/**
+	 * Returns whether this block relays strong power to its neighbours (like stone or planks). Transparent and
+	 * non-full blocks (glass, slabs, leaves...) do not.
+	 */
+	public function isRedstoneConductor() : bool{
+		return $this->isSolid() && !$this->isTransparent() && $this->isFullCube();
+	}
+
+	/**
+	 * Returns whether redstone wire on the given side of this block points into this block.
+	 *
+	 * @param int $face the face of this block that the wire is next to
+	 */
+	public function connectsToRedstoneWire(int $face) : bool{
+		return $this->isRedstoneSource();
+	}
+
+	/**
+	 * Returns how this block reacts to being moved by a piston.
+	 */
+	public function getPistonPushReaction() : PistonPushReaction{
+		return PistonPushReaction::defaultFor($this);
+	}
+
+	/**
 	 * Performs a ray trace along the line between the two positions using the block's collision boxes.
 	 * Returns the intersection point closest to pos1, or null if no intersection occurred.
 	 */
@@ -1005,5 +1086,13 @@ class Block{
 		}
 
 		return $currentHit;
+	}
+
+	/**
+	 * Return items dropped by the block when it is broken by a player in gamemode creative
+	 * @return Item[]
+	 */
+	public function getCreativeDrops() : array{
+		return [];
 	}
 }

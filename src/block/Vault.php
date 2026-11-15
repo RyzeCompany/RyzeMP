@@ -40,7 +40,7 @@ use pocketmine\player\Player;
  * the items it may give; using its key item on it (a trial key, or an ominous trial key for the vaults of ominous trial
  * chambers) takes the key and ejects a reward rolled for the player, who is remembered for good (see
  * {@link VaultLogic}). Its block entity ({@link TileVault}) keeps the config and the rewarded players. It only runs in
- * loaded chunks. Never drops, like vanilla.
+ * ticked chunks. Never drops, like vanilla.
  */
 class Vault extends Transparent implements HorizontalFacing{
 	use FacesOppositePlacingPlayerTrait;
@@ -118,6 +118,10 @@ class Vault extends Transparent implements HorizontalFacing{
 			$item->pop($taken);
 		}
 		$this->applyChanges($tile, $oldState);
+		return true;
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
 		return true;
 	}
 

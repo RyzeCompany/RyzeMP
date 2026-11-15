@@ -25,19 +25,21 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\utils\CommandItemParser;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
-use pocketmine\item\LegacyStringToItemParser;
 use pocketmine\item\LegacyStringToItemParserException;
-use pocketmine\item\StringToItemParser;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
+use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function count;
 use function min;
 
-class ClearCommand extends NativeCommand{
+class ClearCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -48,13 +50,26 @@ class ClearCommand extends NativeCommand{
 		$this->setPermissions([DefaultPermissionNames::COMMAND_CLEAR_SELF, DefaultPermissionNames::COMMAND_CLEAR_OTHER]);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) > 3){
+	public function getOverloads() : array{
+		return [[
+			CommandParameter::target("player", true),
+			CommandParameter::item("itemName", true),
+			CommandParameter::int("data", true),
+			CommandParameter::int("maxCount", true)
+		]];
+	}
+
+	/**
+	 * /clear [player: target] [item] [maxCount], or Bedrock's /clear [player] [item] [data] [maxCount] (data -1 or 0
+	 * matches the item's default variant; other values select a variant, e.g. a potion type).
+	 */
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		if(count($args) > 4){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$target = $this->fetchPermittedPlayerTarget($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_CLEAR_SELF, DefaultPermissionNames::COMMAND_CLEAR_OTHER);
-		if($target === null){
+		$targets = $this->fetchPermittedPlayerTargets($sender, $args[0] ?? null, DefaultPermissionNames::COMMAND_CLEAR_SELF, DefaultPermissionNames::COMMAND_CLEAR_OTHER);
+		if(count($targets) === 0){
 			return true;
 		}
 
@@ -62,10 +77,15 @@ class ClearCommand extends NativeCommand{
 		$maxCount = -1;
 		if(isset($args[1])){
 			try{
-				$targetItem = StringToItemParser::getInstance()->parse($args[1]) ?? LegacyStringToItemParser::getInstance()->parse($args[1]);
+				$targetItem = CommandItemParser::parse($args[1]);
+				if(isset($args[3])){
+					$data = $this->getInteger($sender, $args[2], -1, 32767);
+					$targetItem = $data <= 0 ? $targetItem : (CommandItemParser::withData($targetItem, $data) ?? throw new LegacyStringToItemParserException());
+				}
 
-				if(isset($args[2])){
-					$targetItem->setCount($maxCount = $this->getInteger($sender, $args[2], -1));
+				$maxCountArg = $args[3] ?? $args[2] ?? null;
+				if($maxCountArg !== null){
+					$targetItem->setCount($maxCount = $this->getInteger($sender, $maxCountArg, -1));
 				}
 			}catch(LegacyStringToItemParserException $e){
 				//vanilla checks this at argument parsing layer, can't come up with a better alternative
@@ -74,6 +94,13 @@ class ClearCommand extends NativeCommand{
 			}
 		}
 
+		foreach($targets as $target){
+			$this->clearTarget($sender, $target, $targetItem !== null ? clone $targetItem : null, $maxCount);
+		}
+		return true;
+	}
+
+	private function clearTarget(CommandSender $sender, Player $target, ?Item $targetItem, int $maxCount) : void{
 		/**
 		 * @var Inventory[] $inventories - This is the order that vanilla would clear items in.
 		 */
@@ -93,7 +120,7 @@ class ClearCommand extends NativeCommand{
 				$sender->sendMessage(KnownTranslationFactory::commands_clear_failure_no_items($target->getName())->prefix(TextFormat::RED));
 			}
 
-			return true;
+			return;
 		}
 
 		$clearedCount = 0;
@@ -134,8 +161,6 @@ class ClearCommand extends NativeCommand{
 		}else{
 			$sender->sendMessage(KnownTranslationFactory::commands_clear_failure_no_items($target->getName())->prefix(TextFormat::RED));
 		}
-
-		return true;
 	}
 
 	/**

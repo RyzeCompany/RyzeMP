@@ -32,6 +32,8 @@ use pocketmine\utils\Filesystem;
 use pocketmine\utils\Utils;
 use pocketmine\VersionInfo;
 use pocketmine\world\format\io\exception\CorruptedWorldException;
+use pocketmine\world\format\io\MobSpawningWorldData;
+use pocketmine\world\format\io\WeatherCycleWorldData;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\World;
 use pocketmine\world\WorldCreationOptions;
@@ -43,12 +45,14 @@ use function zlib_decode;
 use function zlib_encode;
 use const ZLIB_ENCODING_GZIP;
 
-class JavaWorldData extends BaseNbtWorldData{
+class JavaWorldData extends BaseNbtWorldData implements WeatherCycleWorldData, MobSpawningWorldData{
 
 	private const TAG_DAY_TIME = "DayTime";
 	private const TAG_DIFFICULTY = "Difficulty";
 	private const TAG_FORMAT_VERSION = "version";
 	private const TAG_GAME_RULES = "GameRules";
+	private const GAME_RULE_DO_WEATHER_CYCLE = "doWeatherCycle"; //TAG_String "true"/"false" in GameRules
+	private const GAME_RULE_DO_MOB_SPAWNING = "doMobSpawning";
 	private const TAG_GAME_TYPE = "GameType";
 	private const TAG_GENERATOR_VERSION = "generatorVersion";
 	private const TAG_HARDCORE = "hardcore";
@@ -172,5 +176,27 @@ class JavaWorldData extends BaseNbtWorldData{
 
 	public function setLightningLevel(float $level) : void{
 		$this->compoundTag->setByte(self::TAG_THUNDERING, (int) ceil($level));
+	}
+
+	public function isWeatherCycleEnabled() : bool{
+		$rules = $this->compoundTag->getCompoundTag(self::TAG_GAME_RULES);
+		return $rules === null || $rules->getString(self::GAME_RULE_DO_WEATHER_CYCLE, "true") !== "false";
+	}
+
+	public function setWeatherCycleEnabled(bool $enabled) : void{
+		$rules = $this->compoundTag->getCompoundTag(self::TAG_GAME_RULES) ?? new CompoundTag();
+		$rules->setString(self::GAME_RULE_DO_WEATHER_CYCLE, $enabled ? "true" : "false");
+		$this->compoundTag->setTag(self::TAG_GAME_RULES, $rules);
+	}
+
+	public function isMobSpawningEnabled() : bool{
+		$rules = $this->compoundTag->getCompoundTag(self::TAG_GAME_RULES);
+		return $rules === null || $rules->getString(self::GAME_RULE_DO_MOB_SPAWNING, "true") !== "false";
+	}
+
+	public function setMobSpawningEnabled(bool $enabled) : void{
+		$rules = $this->compoundTag->getCompoundTag(self::TAG_GAME_RULES) ?? new CompoundTag();
+		$rules->setString(self::GAME_RULE_DO_MOB_SPAWNING, $enabled ? "true" : "false");
+		$this->compoundTag->setTag(self::TAG_GAME_RULES, $rules);
 	}
 }

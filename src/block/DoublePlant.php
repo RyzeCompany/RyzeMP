@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\item\Fertilizer;
 use pocketmine\item\Item;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
@@ -47,7 +48,8 @@ class DoublePlant extends Flowable{
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
 		$down = $blockReplace->getSide(Facing::DOWN);
-		if($down->hasTypeTag(BlockTypeTags::DIRT) && $blockReplace->getSide(Facing::UP)->canBeReplaced()){
+		//same ground as the survival check in onNearbyBlockChange(): dirt-like blocks, mud and muddy mangrove roots
+		if(($down->hasTypeTag(BlockTypeTags::DIRT) || $down->hasTypeTag(BlockTypeTags::MUD)) && $blockReplace->getSide(Facing::UP)->canBeReplaced()){
 			$top = clone $this;
 			$top->top = true;
 			$tx->addBlock($blockReplace->position, $this)->addBlock($blockReplace->position->getSide(Facing::UP), $top);
@@ -55,6 +57,23 @@ class DoublePlant extends Flowable{
 		}
 
 		return false;
+	}
+
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		//tall flowers drop a copy of themselves (vanilla TallFlowerBlock.performBonemeal())
+		if($item instanceof Fertilizer && $this->isTallFlower()){
+			$item->pop();
+			$this->position->getWorld()->dropItem($this->position->add(0.5, 0.5, 0.5), $this->asItem());
+			return true;
+		}
+		return false;
+	}
+
+	private function isTallFlower() : bool{
+		return match($this->getTypeId()){
+			BlockTypeIds::SUNFLOWER, BlockTypeIds::LILAC, BlockTypeIds::ROSE_BUSH, BlockTypeIds::PEONY => true,
+			default => false
+		};
 	}
 
 	/**

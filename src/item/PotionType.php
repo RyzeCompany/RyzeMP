@@ -36,6 +36,7 @@ use function spl_object_id;
  * @method static PotionType FIRE_RESISTANCE()
  * @method static PotionType HARMING()
  * @method static PotionType HEALING()
+ * @method static PotionType INFESTED()
  * @method static PotionType INVISIBILITY()
  * @method static PotionType LEAPING()
  * @method static PotionType LONG_FIRE_RESISTANCE()
@@ -53,6 +54,7 @@ use function spl_object_id;
  * @method static PotionType LONG_WATER_BREATHING()
  * @method static PotionType LONG_WEAKNESS()
  * @method static PotionType MUNDANE()
+ * @method static PotionType OOZING()
  * @method static PotionType NIGHT_VISION()
  * @method static PotionType POISON()
  * @method static PotionType REGENERATION()
@@ -74,6 +76,8 @@ use function spl_object_id;
  * @method static PotionType WATER()
  * @method static PotionType WATER_BREATHING()
  * @method static PotionType WEAKNESS()
+ * @method static PotionType WEAVING()
+ * @method static PotionType WIND_CHARGED()
  * @method static PotionType WITHER()
  *
  * @phpstan-type TMetadata array{0: string, 1: \Closure() : list<EffectInstance>}
@@ -124,6 +128,10 @@ enum PotionType{
 	case SLOW_FALLING;
 	case LONG_SLOW_FALLING;
 	case STRONG_SLOWNESS;
+	case WIND_CHARGED;
+	case WEAVING;
+	case OOZING;
+	case INFESTED;
 
 	/**
 	 * @phpstan-return TMetadata
@@ -247,13 +255,25 @@ enum PotionType{
 				new EffectInstance(VanillaEffects::RESISTANCE(), 20 * 20, 3),
 			]],
 			self::SLOW_FALLING => ["Slow Falling", fn() => [
-				//TODO
+				new EffectInstance(VanillaEffects::SLOW_FALLING(), 90 * 20)
 			]],
 			self::LONG_SLOW_FALLING => ["Long Slow Falling", fn() => [
-				//TODO
+				new EffectInstance(VanillaEffects::SLOW_FALLING(), 4 * 60 * 20)
 			]],
 			self::STRONG_SLOWNESS => ["Strong Slowness", fn() => [
 				new EffectInstance(VanillaEffects::SLOWNESS(), 20 * 20, 3)
+			]],
+			self::WIND_CHARGED => ["Wind Charging", fn() => [
+				new EffectInstance(VanillaEffects::WIND_CHARGED(), 3 * 60 * 20)
+			]],
+			self::WEAVING => ["Weaving", fn() => [
+				new EffectInstance(VanillaEffects::WEAVING(), 3 * 60 * 20)
+			]],
+			self::OOZING => ["Oozing", fn() => [
+				new EffectInstance(VanillaEffects::OOZING(), 3 * 60 * 20)
+			]],
+			self::INFESTED => ["Infestation", fn() => [
+				new EffectInstance(VanillaEffects::INFESTED(), 3 * 60 * 20)
 			]]
 		};
 	}

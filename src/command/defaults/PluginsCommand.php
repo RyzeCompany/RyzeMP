@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\plugin\Plugin;
@@ -34,7 +35,7 @@ use function implode;
 use function sort;
 use const SORT_STRING;
 
-class PluginsCommand extends NativeCommand{
+class PluginsCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -46,7 +47,11 @@ class PluginsCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_PLUGINS);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		$list = array_map(function(Plugin $plugin) : string{
 			return ($plugin->isEnabled() ? TextFormat::GREEN : TextFormat::RED) . $plugin->getDescription()->getFullName();
 		}, $sender->getServer()->getPluginManager()->getPlugins());

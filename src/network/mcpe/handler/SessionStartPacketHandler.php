@@ -27,7 +27,6 @@ use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\NetworkSettingsPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestNetworkSettingsPacket;
-use function in_array;
 
 final class SessionStartPacketHandler extends PacketHandler{
 
@@ -62,6 +61,11 @@ final class SessionStartPacketHandler extends PacketHandler{
 	}
 
 	protected function isCompatibleProtocol(int $protocolVersion) : bool{
-		return in_array($protocolVersion, ProtocolInfo::ACCEPTED_PROTOCOL, true);
+		return in_array($protocolVersion, [
+			ProtocolInfo::PROTOCOL_1_26_40,
+			ProtocolInfo::PROTOCOL_1_26_45,
+			ProtocolInfo::PROTOCOL_1_26_52,
+			ProtocolInfo::CURRENT_PROTOCOL
+		], true);
 	}
 }

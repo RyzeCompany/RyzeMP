@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\DirtPathHelper;
 use pocketmine\block\utils\DirtType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Fertilizer;
@@ -30,6 +31,7 @@ use pocketmine\item\Hoe;
 use pocketmine\item\Item;
 use pocketmine\item\Potion;
 use pocketmine\item\PotionType;
+use pocketmine\item\Shovel;
 use pocketmine\item\SplashPotion;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
@@ -54,6 +56,9 @@ class Dirt extends Opaque{
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		$world = $this->position->getWorld();
+		if($item instanceof Shovel){
+			return DirtPathHelper::flatten($this, $item, $face);
+		}
 		if($face !== Facing::DOWN && $item instanceof Hoe){
 			$up = $this->getSide(Facing::UP);
 			if($up->getTypeId() !== BlockTypeIds::AIR){
@@ -79,7 +84,7 @@ class Dirt extends Opaque{
 
 			$item->pop();
 			$world->setBlock($down->position, VanillaBlocks::HANGING_ROOTS());
-			//TODO: bonemeal particles, growth sounds
+			return true;
 		}elseif(($item instanceof Potion || $item instanceof SplashPotion) && $item->getType() === PotionType::WATER){
 			$item->pop();
 			$world->setBlock($this->position, VanillaBlocks::MUD());

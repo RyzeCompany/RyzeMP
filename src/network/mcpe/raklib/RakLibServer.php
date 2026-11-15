@@ -25,8 +25,8 @@ namespace pocketmine\network\mcpe\raklib;
 
 use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
+use pocketmine\network\AddressSet;
 use pocketmine\snooze\SleeperHandlerEntry;
-use pocketmine\network\mcpe\nethernet\NetherNetSharedPortSocket;
 use pocketmine\thread\log\ThreadSafeLogger;
 use pocketmine\thread\NonThreadSafeValue;
 use pocketmine\thread\Thread;
@@ -36,20 +36,34 @@ use raklib\server\ipc\RakLibToUserThreadMessageSender;
 use raklib\server\ipc\UserToRakLibThreadMessageReceiver;
 use raklib\server\Server;
 use raklib\server\ServerSocket;
+use pocketmine\network\mcpe\ryzertc\NetherNetSharedPortSocket;
 use raklib\server\SimpleProtocolAcceptor;
 use raklib\utils\ExceptionTraceCleaner;
 use raklib\utils\InternetAddress;
+use function explode;
 use function gc_disable;
 use function ini_set;
+use function method_exists;
+use function socket_bind;
+use function socket_create;
+use function socket_getsockname;
+use function socket_set_nonblock;
+use const AF_INET;
+use const SOCK_DGRAM;
+use const SOL_UDP;
 
 class RakLibServer extends Thread{
 	protected bool $ready = false;
+	protected int $relayPort = 0;
+	protected int $wakePort = 0;
 	protected string $mainPath;
-	/** @phpstan-var NonThreadSafeValue<InternetAddress> */
-	protected NonThreadSafeValue $address;
 	private ?int $netherNetIceBackendPort = null;
 	/** @phpstan-var ThreadSafeArray<int, string> */
 	private ThreadSafeArray $netherNetIceCommands;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetPeerEvents;
+	/** @phpstan-var NonThreadSafeValue<InternetAddress> */
+	protected NonThreadSafeValue $address;
 
 	/**
 	 * @phpstan-param ThreadSafeArray<int, string> $mainToThreadBuffer
@@ -64,21 +78,24 @@ class RakLibServer extends Thread{
 		protected int $maxMtuSize,
 		protected int $protocolVersion,
 		protected SleeperHandlerEntry $sleeperEntry,
-		ThreadSafeArray $netherNetIceCommands,
-		private ThreadSafeArray $netherNetPeerEvents
+		protected string $relayToken = "",
+		protected bool $antiSpoofingCookies = false,
+		/** Maximum replies to unconnected pings (server list) per second, 0 = no limit */
+		protected int $maxPongsPerSecond = 0,
+		/** Comma-separated addresses and networks never blocked automatically, e.g. proxies (loopback always is) */
+		protected string $autoBlockExemptAddresses = "",
+		ThreadSafeArray $netherNetIceCommands = new ThreadSafeArray(),
+		ThreadSafeArray $netherNetPeerEvents = new ThreadSafeArray()
 	){
 		$this->netherNetIceCommands = $netherNetIceCommands;
+		$this->netherNetPeerEvents = $netherNetPeerEvents;
 		$this->mainPath = \pocketmine\PATH;
 		$this->address = new NonThreadSafeValue($address);
 	}
 
-	/** Enable only after a private native ICE UDP backend is ready. */
 	public function configureNetherNetSharedPort(int $backendPort) : void{
-		if($backendPort < 1 || $backendPort > 65535){
-			throw new \InvalidArgumentException("Invalid private ICE port");
-		}
-		if($this->isRunning()){
-			throw new \LogicException("Configure shared UDP before starting RakLib");
+		if($backendPort < 1 || $backendPort > 65535 || $this->isRunning()){
+			throw new \InvalidArgumentException("RyzeRTC ICE backend must be a private port configured before RakLib starts");
 		}
 		$this->netherNetIceBackendPort = $backendPort;
 	}
@@ -108,9 +125,17 @@ class RakLibServer extends Thread{
 		ini_set("display_startup_errors", '1');
 		\GlobalLogger::set($this->logger);
 
-		$socket = $this->netherNetIceBackendPort !== null
-			? new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands, $this->netherNetPeerEvents)
-			: new ServerSocket($this->address->deserialize());
+		if($this->netherNetIceBackendPort !== null){
+			if($this->relayToken !== ""){
+				throw new \LogicException("Cannot run the RyzeRTC UDP owner and pm-nethernet relay together");
+			}
+			$socket = new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands, $this->netherNetPeerEvents);
+		}elseif($this->relayToken !== ""){
+			$socket = new RelayedServerSocket($this->address->deserialize(), $this->relayToken);
+			$this->relayPort = $socket->getRelayPort();
+		}else{
+			$socket = new ServerSocket($this->address->deserialize());
+		}
 		$manager = new Server(
 			$this->serverId,
 			$this->logger,
@@ -122,6 +147,37 @@ class RakLibServer extends Thread{
 			new ExceptionTraceCleaner($this->mainPath),
 			recvMaxSplitParts: 512
 		);
+		//against reflection attacks with spoofed pings (needs a RakLib with the pong limit)
+		/** @phpstan-ignore function.impossibleType (older RakLib versions lack it) */
+		if($this->maxPongsPerSecond > 0 && method_exists($manager, "setPongRateLimit")){
+			/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
+			$manager->setPongRateLimit($this->maxPongsPerSecond);
+		}
+		//proxies send all their players from one address: a flood block would disconnect all of them
+		/** @phpstan-ignore function.impossibleType (older RakLib versions lack it) */
+		if($this->autoBlockExemptAddresses !== "" && method_exists($manager, "setAutoBlockExemption")){
+			try{
+				$exempt = new AddressSet(explode(",", $this->autoBlockExemptAddresses, 256));
+				/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
+				$manager->setAutoBlockExemption(static fn(string $address) : bool => $exempt->contains($address));
+			}catch(\InvalidArgumentException){
+				//already reported by the server when it read network.connection-limits.exempt-addresses
+			}
+		}
+		//the main thread sends a datagram here when it queued packets, so they leave at once (see WakingPthreadsChannelWriter)
+		//Received datagrams are still read on RakLib's tick schedule (wakeOnReceive false): waking up for each one would
+		//also wake the main thread up for each one, which costs more CPU than it saves latency once several players are
+		//online. Without the socket, packets wait for RakLib's next tick, as before.
+		/** @phpstan-ignore function.impossibleType (available in newer RakLib versions) */
+		if(method_exists($manager, "setWakeSocket")){
+			$wakeSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+			if($wakeSocket !== false && @socket_bind($wakeSocket, "127.0.0.1", 0) && @socket_getsockname($wakeSocket, $wakeAddress, $wakePort)){
+				socket_set_nonblock($wakeSocket);
+				/** @phpstan-ignore method.notFound (available in newer RakLib versions) */
+				$manager->setWakeSocket($wakeSocket, false);
+				$this->wakePort = $wakePort;
+			}
+		}
 		$this->synchronized(function() : void{
 			$this->ready = true;
 			$this->notify();
@@ -130,6 +186,20 @@ class RakLibServer extends Thread{
 			$manager->tickProcessor();
 		}
 		$manager->waitShutdown();
+	}
+
+	/**
+	 * Loopback port of the relay socket when the UDP port is shared with the NetherNet bridge, 0 otherwise.
+	 */
+	public function getRelayPort() : int{
+		return $this->relayPort;
+	}
+
+	/**
+	 * Loopback UDP port of the socket that wakes the RakLib thread up when packets were queued, 0 if there is none.
+	 */
+	public function getWakePort() : int{
+		return $this->wakePort;
 	}
 
 	public function getThreadName() : string{

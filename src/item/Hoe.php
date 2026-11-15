@@ -33,6 +33,14 @@ class Hoe extends TieredTool{
 		return BlockToolType::HOE;
 	}
 
+	/**
+	 * Bedrock hoes hit like shovels of the same tier (wood/gold 2, stone 3, iron 4, diamond 5, netherite 6); Java hoes
+	 * deal 1.
+	 */
+	public function getAttackPoints() : int{
+		return $this->tier->getBaseAttackPoints() - 3;
+	}
+
 	public function onAttackEntity(Entity $victim, array &$returnedItems) : bool{
 		return $this->applyDamage(1);
 	}

@@ -33,7 +33,6 @@ use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\ContainerSetDataPacket;
 use pocketmine\player\Player;
 use pocketmine\world\sound\PotionFinishBrewingSound;
@@ -41,10 +40,11 @@ use pocketmine\world\World;
 use function array_map;
 use function count;
 
-class BrewingStand extends Spawnable implements Container, Nameable{
+class BrewingStand extends Spawnable implements ComparatorReadableContainer, Nameable{
 	use NameableTrait {
 		addAdditionalSpawnData as addNameSpawnData;
 	}
+	use ComparatorReadableContainerTrait;
 	use ContainerTrait;
 
 	public const BREW_TIME_TICKS = 400; // Brew time in ticks
@@ -64,6 +64,7 @@ class BrewingStand extends Spawnable implements Container, Nameable{
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new BrewingStandInventory($this->position);
+		$this->addComparatorInventoryListener();
 		$this->inventory->getListeners()->add(CallbackInventoryListener::onAnyChange(static function(Inventory $unused) use ($world, $pos) : void{
 			$world->scheduleDelayedBlockUpdate($pos, 1);
 		}));
@@ -93,8 +94,8 @@ class BrewingStand extends Spawnable implements Container, Nameable{
 		$nbt->setShort(self::TAG_REMAINING_FUEL_TIME_PE, $this->remainingFuelTime);
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
-		$this->addNameSpawnData($nbt, $typeConverter);
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
+		$this->addNameSpawnData($nbt);
 
 		$nbt->setShort(self::TAG_BREW_TIME_PE, $this->brewTime);
 		$nbt->setShort(self::TAG_MAX_FUEL_TIME, $this->maxFuelTime);
@@ -111,11 +112,6 @@ class BrewingStand extends Spawnable implements Container, Nameable{
 
 			parent::close();
 		}
-	}
-
-	/** True while an existing potion recipe is actively being processed. */
-	public function isBrewing() : bool{
-		return $this->brewTime > 0;
 	}
 
 	public function getInventory() : BrewingStandInventory{
@@ -188,7 +184,9 @@ class BrewingStand extends Spawnable implements Container, Nameable{
 		$recipes = $this->getBrewableRecipes();
 		$canBrew = count($recipes) !== 0;
 
-		if($this->remainingFuelTime <= 0 && $canBrew){
+		//vanilla takes blaze powder as fuel as soon as it is in the slot (the fuel bar fills before anything can be
+		//brewed); other items only go through the event (which plugins may allow) when something is waiting to brew
+		if($this->remainingFuelTime <= 0 && ($canBrew || $fuel->equals(VanillaItems::BLAZE_POWDER(), true, false))){
 			$this->checkFuel($fuel);
 		}
 

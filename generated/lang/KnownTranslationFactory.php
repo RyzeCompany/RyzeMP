@@ -145,6 +145,31 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::COMMANDS_BANLIST_USAGE, []);
 	}
 
+	public static function commands_blockstate_invalidState(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_BLOCKSTATE_INVALIDSTATE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_blockstate_stateError(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_BLOCKSTATE_STATEERROR, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_blockstate_typeError(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_BLOCKSTATE_TYPEERROR, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_blockstate_valueError(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_BLOCKSTATE_VALUEERROR, [
+			0 => $param0,
+		]);
+	}
+
 	public static function commands_clear_failure_no_items(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_CLEAR_FAILURE_NO_ITEMS, [
 			0 => $param0,
@@ -163,6 +188,26 @@ final class KnownTranslationFactory{
 			0 => $param0,
 			1 => $param1,
 		]);
+	}
+
+	public static function commands_damage_failed(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_DAMAGE_FAILED, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_damage_specify_damage() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_DAMAGE_SPECIFY_DAMAGE, []);
+	}
+
+	public static function commands_damage_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_DAMAGE_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_damage_tooManySources() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_DAMAGE_TOOMANYSOURCES, []);
 	}
 
 	public static function commands_defaultgamemode_success(Translatable|string $param0) : Translatable{
@@ -272,6 +317,84 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::COMMANDS_ENCHANT_USAGE, []);
 	}
 
+	public static function commands_execute_align_invalidInput() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_ALIGN_INVALIDINPUT, []);
+	}
+
+	public static function commands_execute_allInvocationsFailed(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_ALLINVOCATIONSFAILED, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_execute_failed(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_FAILED, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_execute_falseCondition(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_FALSECONDITION, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_execute_falseConditionWithCount(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_FALSECONDITIONWITHCOUNT, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_execute_ifUnlessBlocks_tooManyBlocks(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_IFUNLESSBLOCKS_TOOMANYBLOCKS, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_execute_outRangedDetectPosition(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_OUTRANGEDDETECTPOSITION, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_execute_trueCondition() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_TRUECONDITION, []);
+	}
+
+	public static function commands_execute_trueConditionWithCount(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_EXECUTE_TRUECONDITIONWITHCOUNT, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_fill_failed() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_FILL_FAILED, []);
+	}
+
+	public static function commands_fill_outOfWorld() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_FILL_OUTOFWORLD, []);
+	}
+
+	public static function commands_fill_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_FILL_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_fill_tooManyBlocks(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_FILL_TOOMANYBLOCKS, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
 	public static function commands_gamemode_success_other(Translatable|string $param0, Translatable|string $param1) : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_GAMEMODE_SUCCESS_OTHER, [
 			0 => $param0,
@@ -289,6 +412,44 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::COMMANDS_GAMEMODE_USAGE, []);
 	}
 
+	public static function commands_generic_dimension_notFound() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_DIMENSION_NOTFOUND, []);
+	}
+
+	public static function commands_generic_duplicateSelectorArgument(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_DUPLICATESELECTORARGUMENT, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_generic_duplicateType() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_DUPLICATETYPE, []);
+	}
+
+	public static function commands_generic_entity_invalidType(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_ENTITY_INVALIDTYPE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_generic_invalidPlayerType() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_INVALIDPLAYERTYPE, []);
+	}
+
+	public static function commands_generic_levelError() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_LEVELERROR, []);
+	}
+
+	public static function commands_generic_noTargetMatch() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_NOTARGETMATCH, []);
+	}
+
+	public static function commands_generic_num_invalid(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_NUM_INVALID, [
+			0 => $param0,
+		]);
+	}
+
 	public static function commands_generic_num_tooBig(Translatable|string $param0, Translatable|string $param1) : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_NUM_TOOBIG, [
 			0 => $param0,
@@ -303,8 +464,46 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function commands_generic_parameter_invalid(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_PARAMETER_INVALID, [
+			0 => $param0,
+		]);
+	}
+
 	public static function commands_generic_player_notFound() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_PLAYER_NOTFOUND, []);
+	}
+
+	public static function commands_generic_radiusError() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_RADIUSERROR, []);
+	}
+
+	public static function commands_generic_radiusNegative() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_RADIUSNEGATIVE, []);
+	}
+
+	public static function commands_generic_syntax(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_SYNTAX, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_generic_targetNotPlayer() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_TARGETNOTPLAYER, []);
+	}
+
+	public static function commands_generic_too_many_requests() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_TOO_MANY_REQUESTS, []);
+	}
+
+	public static function commands_generic_tooManyNames() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_TOOMANYNAMES, []);
+	}
+
+	public static function commands_generic_tooManyTargets() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_GENERIC_TOOMANYTARGETS, []);
 	}
 
 	public static function commands_generic_usage(Translatable|string $param0) : Translatable{
@@ -367,6 +566,39 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function commands_locate_biome_fail(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_LOCATE_BIOME_FAIL, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_locate_biome_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3, Translatable|string $param4) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_LOCATE_BIOME_SUCCESS, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+			4 => $param4,
+		]);
+	}
+
+	public static function commands_locate_structure_fail_nostructurefound() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_LOCATE_STRUCTURE_FAIL_NOSTRUCTUREFOUND, []);
+	}
+
+	public static function commands_locate_structure_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_LOCATE_STRUCTURE_SUCCESS, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+		]);
+	}
+
+	public static function commands_locate_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_LOCATE_USAGE, []);
+	}
+
 	public static function commands_me_usage() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_ME_USAGE, []);
 	}
@@ -427,6 +659,155 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function commands_replaceitem_badSlotNumber(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_BADSLOTNUMBER, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_replaceitem_failed(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_FAILED, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+		]);
+	}
+
+	public static function commands_replaceitem_keepFailed(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_KEEPFAILED, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_replaceitem_noContainer(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_NOCONTAINER, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_replaceitem_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_SUCCESS, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+		]);
+	}
+
+	public static function commands_replaceitem_success_entity(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3, Translatable|string $param4) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_SUCCESS_ENTITY, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+			4 => $param4,
+		]);
+	}
+
+	public static function commands_replaceitem_tagError(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_REPLACEITEM_TAGERROR, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_evictRiders_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_EVICTRIDERS_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_startRiding_failure(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_FAILURE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_startRiding_groupDoesntFit() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_GROUPDOESNTFIT, []);
+	}
+
+	public static function commands_ride_startRiding_notRideable() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_NOTRIDEABLE, []);
+	}
+
+	public static function commands_ride_startRiding_rideFull() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_RIDEFULL, []);
+	}
+
+	public static function commands_ride_startRiding_rideFullRidersLeft() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_RIDEFULLRIDERSLEFT, []);
+	}
+
+	public static function commands_ride_startRiding_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_startRiding_tooManyRiders() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_TOOMANYRIDERS, []);
+	}
+
+	public static function commands_ride_startRiding_tooManyRides() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STARTRIDING_TOOMANYRIDES, []);
+	}
+
+	public static function commands_ride_stopRiding_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_STOPRIDING_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRide_failed(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDE_FAILED, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRide_notRideable() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDE_NOTRIDEABLE, []);
+	}
+
+	public static function commands_ride_summonRide_skipped(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDE_SKIPPED, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRide_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDE_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRider_failed(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDER_FAILED, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRider_fullRides(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDER_FULLRIDES, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRider_ridesWithNoRideableComp(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDER_RIDESWITHNORIDEABLECOMP, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_ride_summonRider_success(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_RIDE_SUMMONRIDER_SUCCESS, [
+			0 => $param0,
+		]);
+	}
+
 	public static function commands_save_disabled() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_SAVE_DISABLED, []);
 	}
@@ -445,6 +826,28 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function commands_setblock_failed() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SETBLOCK_FAILED, []);
+	}
+
+	public static function commands_setblock_noChange() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SETBLOCK_NOCHANGE, []);
+	}
+
+	public static function commands_setblock_notFound(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SETBLOCK_NOTFOUND, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_setblock_outOfWorld() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SETBLOCK_OUTOFWORLD, []);
+	}
+
+	public static function commands_setblock_success() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SETBLOCK_SUCCESS, []);
+	}
+
 	public static function commands_setworldspawn_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_SETWORLDSPAWN_SUCCESS, [
 			0 => $param0,
@@ -457,12 +860,101 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::COMMANDS_SETWORLDSPAWN_USAGE, []);
 	}
 
+	public static function commands_spawnpoint_success_single(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2, Translatable|string $param3) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SPAWNPOINT_SUCCESS_SINGLE, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+			3 => $param3,
+		]);
+	}
+
 	public static function commands_spawnpoint_usage() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_SPAWNPOINT_USAGE, []);
 	}
 
 	public static function commands_stop_start() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_STOP_START, []);
+	}
+
+	public static function commands_summon_failed() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SUMMON_FAILED, []);
+	}
+
+	public static function commands_summon_outOfWorld() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SUMMON_OUTOFWORLD, []);
+	}
+
+	public static function commands_summon_success() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_SUMMON_SUCCESS, []);
+	}
+
+	public static function commands_tag_add_failed() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_ADD_FAILED, []);
+	}
+
+	public static function commands_tag_add_success_multiple(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_ADD_SUCCESS_MULTIPLE, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_tag_add_success_single(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_ADD_SUCCESS_SINGLE, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_tag_list_multiple_empty(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_LIST_MULTIPLE_EMPTY, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_tag_list_multiple_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_LIST_MULTIPLE_SUCCESS, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_tag_list_single_empty(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_LIST_SINGLE_EMPTY, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_tag_list_single_success(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_LIST_SINGLE_SUCCESS, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function commands_tag_remove_failed() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_REMOVE_FAILED, []);
+	}
+
+	public static function commands_tag_remove_success_multiple(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_REMOVE_SUCCESS_MULTIPLE, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_tag_remove_success_single(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_REMOVE_SUCCESS_SINGLE, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function commands_tag_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_TAG_USAGE, []);
 	}
 
 	public static function commands_time_added(Translatable|string $param0) : Translatable{
@@ -533,6 +1025,36 @@ final class KnownTranslationFactory{
 
 	public static function commands_unbanip_usage() : Translatable{
 		return new Translatable(KnownTranslationKeys::COMMANDS_UNBANIP_USAGE, []);
+	}
+
+	public static function commands_weather_clear() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_CLEAR, []);
+	}
+
+	public static function commands_weather_query(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_QUERY, [
+			0 => $param0,
+		]);
+	}
+
+	public static function commands_weather_query_clear() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_QUERY_CLEAR, []);
+	}
+
+	public static function commands_weather_query_rain() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_QUERY_RAIN, []);
+	}
+
+	public static function commands_weather_query_thunder() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_QUERY_THUNDER, []);
+	}
+
+	public static function commands_weather_rain() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_RAIN, []);
+	}
+
+	public static function commands_weather_thunder() : Translatable{
+		return new Translatable(KnownTranslationKeys::COMMANDS_WEATHER_THUNDER, []);
 	}
 
 	public static function commands_whitelist_add_success(Translatable|string $param0) : Translatable{
@@ -630,14 +1152,34 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function death_attack_cactus_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_CACTUS_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
 	public static function death_attack_drown(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_DROWN, [
 			0 => $param0,
 		]);
 	}
 
+	public static function death_attack_drown_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_DROWN_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
 	public static function death_attack_explosion(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_EXPLOSION, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_explosion_by_bed(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_EXPLOSION_BY_BED, [
 			0 => $param0,
 		]);
 	}
@@ -661,6 +1203,21 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function death_attack_fireball(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_FIREBALL, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_fireball_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_FIREBALL_ITEM, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
 	public static function death_attack_fireworks(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_FIREWORKS, [
 			0 => $param0,
@@ -669,6 +1226,12 @@ final class KnownTranslationFactory{
 
 	public static function death_attack_flyIntoWall(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_FLYINTOWALL, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_freeze(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_FREEZE, [
 			0 => $param0,
 		]);
 	}
@@ -685,9 +1248,31 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function death_attack_inFire_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_INFIRE_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
 	public static function death_attack_inWall(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_INWALL, [
 			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_indirectMagic(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_INDIRECTMAGIC, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_indirectMagic_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_INDIRECTMAGIC_ITEM, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
 		]);
 	}
 
@@ -697,9 +1282,50 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function death_attack_lava_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_LAVA_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_lightningBolt(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_LIGHTNINGBOLT, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_maceSmash_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MACESMASH_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_maceSmash_player_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MACESMASH_PLAYER_ITEM, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
 	public static function death_attack_magic(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MAGIC, [
 			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_magma(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MAGMA, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_magma_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MAGMA_PLAYER, [
+			0 => $param0,
+			1 => $param1,
 		]);
 	}
 
@@ -710,9 +1336,24 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function death_attack_mob_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_MOB_ITEM, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
 	public static function death_attack_onFire(Translatable|string $param0) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_ONFIRE, [
 			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_onFire_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_ONFIRE_PLAYER, [
+			0 => $param0,
+			1 => $param1,
 		]);
 	}
 
@@ -731,6 +1372,78 @@ final class KnownTranslationFactory{
 
 	public static function death_attack_player_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
 		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_PLAYER_ITEM, [
+			0 => $param0,
+			1 => $param1,
+			2 => $param2,
+		]);
+	}
+
+	public static function death_attack_sonicBoom(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_SONICBOOM, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_sonicBoom_player(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_SONICBOOM_PLAYER, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_spit(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_SPIT, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_stalactite(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_STALACTITE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_stalagmite(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_STALAGMITE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_starve(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_STARVE, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_sulfurCube_hot(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_SULFURCUBE_HOT, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_sweetBerry(Translatable|string $param0) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_SWEETBERRY, [
+			0 => $param0,
+		]);
+	}
+
+	public static function death_attack_thorns(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_THORNS, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_thrown(Translatable|string $param0, Translatable|string $param1) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_THROWN, [
+			0 => $param0,
+			1 => $param1,
+		]);
+	}
+
+	public static function death_attack_thrown_item(Translatable|string $param0, Translatable|string $param1, Translatable|string $param2) : Translatable{
+		return new Translatable(KnownTranslationKeys::DEATH_ATTACK_THROWN_ITEM, [
 			0 => $param0,
 			1 => $param1,
 			2 => $param2,
@@ -800,8 +1513,44 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::DISCONNECTIONSCREEN_SERVERFULL, []);
 	}
 
+	public static function effect_badOmen() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_BADOMEN, []);
+	}
+
+	public static function effect_customNautilus() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_CUSTOMNAUTILUS, []);
+	}
+
 	public static function effect_darkness() : Translatable{
 		return new Translatable(KnownTranslationKeys::EFFECT_DARKNESS, []);
+	}
+
+	public static function effect_infested() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_INFESTED, []);
+	}
+
+	public static function effect_oozing() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_OOZING, []);
+	}
+
+	public static function effect_raid_omen() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_RAID_OMEN, []);
+	}
+
+	public static function effect_trial_omen() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_TRIAL_OMEN, []);
+	}
+
+	public static function effect_villageHero() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_VILLAGEHERO, []);
+	}
+
+	public static function effect_weaving() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_WEAVING, []);
+	}
+
+	public static function effect_wind_charged() : Translatable{
+		return new Translatable(KnownTranslationKeys::EFFECT_WIND_CHARGED, []);
 	}
 
 	public static function enchantment_arrowDamage() : Translatable{
@@ -900,6 +1649,10 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::ENCHANTMENT_LOOTBONUSFISHING, []);
 	}
 
+	public static function enchantment_lunge() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENCHANTMENT_LUNGE, []);
+	}
+
 	public static function enchantment_mending() : Translatable{
 		return new Translatable(KnownTranslationKeys::ENCHANTMENT_MENDING, []);
 	}
@@ -966,6 +1719,518 @@ final class KnownTranslationFactory{
 
 	public static function enchantment_waterWorker() : Translatable{
 		return new Translatable(KnownTranslationKeys::ENCHANTMENT_WATERWORKER, []);
+	}
+
+	public static function entity_allay_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ALLAY_NAME, []);
+	}
+
+	public static function entity_area_effect_cloud_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_AREA_EFFECT_CLOUD_NAME, []);
+	}
+
+	public static function entity_armadillo_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ARMADILLO_NAME, []);
+	}
+
+	public static function entity_armor_stand_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ARMOR_STAND_NAME, []);
+	}
+
+	public static function entity_arrow_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ARROW_NAME, []);
+	}
+
+	public static function entity_axolotl_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_AXOLOTL_NAME, []);
+	}
+
+	public static function entity_bat_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BAT_NAME, []);
+	}
+
+	public static function entity_bee_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BEE_NAME, []);
+	}
+
+	public static function entity_blaze_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BLAZE_NAME, []);
+	}
+
+	public static function entity_boat_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BOAT_NAME, []);
+	}
+
+	public static function entity_bogged_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BOGGED_NAME, []);
+	}
+
+	public static function entity_breeze_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BREEZE_NAME, []);
+	}
+
+	public static function entity_breeze_wind_charge_projectile_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_BREEZE_WIND_CHARGE_PROJECTILE_NAME, []);
+	}
+
+	public static function entity_camel_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CAMEL_NAME, []);
+	}
+
+	public static function entity_camel_husk_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CAMEL_HUSK_NAME, []);
+	}
+
+	public static function entity_cat_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CAT_NAME, []);
+	}
+
+	public static function entity_cave_spider_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CAVE_SPIDER_NAME, []);
+	}
+
+	public static function entity_chest_boat_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CHEST_BOAT_NAME, []);
+	}
+
+	public static function entity_chest_minecart_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CHEST_MINECART_NAME, []);
+	}
+
+	public static function entity_chicken_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CHICKEN_NAME, []);
+	}
+
+	public static function entity_cod_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_COD_NAME, []);
+	}
+
+	public static function entity_command_block_minecart_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_COMMAND_BLOCK_MINECART_NAME, []);
+	}
+
+	public static function entity_copper_golem_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_COPPER_GOLEM_NAME, []);
+	}
+
+	public static function entity_cow_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_COW_NAME, []);
+	}
+
+	public static function entity_creaking_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CREAKING_NAME, []);
+	}
+
+	public static function entity_creeper_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_CREEPER_NAME, []);
+	}
+
+	public static function entity_dolphin_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_DOLPHIN_NAME, []);
+	}
+
+	public static function entity_donkey_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_DONKEY_NAME, []);
+	}
+
+	public static function entity_dragon_fireball_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_DRAGON_FIREBALL_NAME, []);
+	}
+
+	public static function entity_drowned_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_DROWNED_NAME, []);
+	}
+
+	public static function entity_egg_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_EGG_NAME, []);
+	}
+
+	public static function entity_elder_guardian_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ELDER_GUARDIAN_NAME, []);
+	}
+
+	public static function entity_ender_crystal_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ENDER_CRYSTAL_NAME, []);
+	}
+
+	public static function entity_ender_dragon_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ENDER_DRAGON_NAME, []);
+	}
+
+	public static function entity_ender_pearl_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ENDER_PEARL_NAME, []);
+	}
+
+	public static function entity_enderman_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ENDERMAN_NAME, []);
+	}
+
+	public static function entity_endermite_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ENDERMITE_NAME, []);
+	}
+
+	public static function entity_evocation_fang_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_EVOCATION_FANG_NAME, []);
+	}
+
+	public static function entity_evocation_illager_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_EVOCATION_ILLAGER_NAME, []);
+	}
+
+	public static function entity_eye_of_ender_signal_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_EYE_OF_ENDER_SIGNAL_NAME, []);
+	}
+
+	public static function entity_falling_block_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FALLING_BLOCK_NAME, []);
+	}
+
+	public static function entity_fireball_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FIREBALL_NAME, []);
+	}
+
+	public static function entity_fireworks_rocket_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FIREWORKS_ROCKET_NAME, []);
+	}
+
+	public static function entity_fishing_hook_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FISHING_HOOK_NAME, []);
+	}
+
+	public static function entity_fox_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FOX_NAME, []);
+	}
+
+	public static function entity_frog_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_FROG_NAME, []);
+	}
+
+	public static function entity_ghast_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_GHAST_NAME, []);
+	}
+
+	public static function entity_glow_squid_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_GLOW_SQUID_NAME, []);
+	}
+
+	public static function entity_goat_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_GOAT_NAME, []);
+	}
+
+	public static function entity_guardian_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_GUARDIAN_NAME, []);
+	}
+
+	public static function entity_happy_ghast_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_HAPPY_GHAST_NAME, []);
+	}
+
+	public static function entity_hoglin_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_HOGLIN_NAME, []);
+	}
+
+	public static function entity_hopper_minecart_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_HOPPER_MINECART_NAME, []);
+	}
+
+	public static function entity_horse_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_HORSE_NAME, []);
+	}
+
+	public static function entity_husk_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_HUSK_NAME, []);
+	}
+
+	public static function entity_iron_golem_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_IRON_GOLEM_NAME, []);
+	}
+
+	public static function entity_item_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ITEM_NAME, []);
+	}
+
+	public static function entity_leash_knot_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_LEASH_KNOT_NAME, []);
+	}
+
+	public static function entity_lightning_bolt_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_LIGHTNING_BOLT_NAME, []);
+	}
+
+	public static function entity_llama_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_LLAMA_NAME, []);
+	}
+
+	public static function entity_llama_spit_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_LLAMA_SPIT_NAME, []);
+	}
+
+	public static function entity_magma_cube_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_MAGMA_CUBE_NAME, []);
+	}
+
+	public static function entity_minecart_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_MINECART_NAME, []);
+	}
+
+	public static function entity_mooshroom_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_MOOSHROOM_NAME, []);
+	}
+
+	public static function entity_mule_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_MULE_NAME, []);
+	}
+
+	public static function entity_nautilus_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_NAUTILUS_NAME, []);
+	}
+
+	public static function entity_ocelot_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_OCELOT_NAME, []);
+	}
+
+	public static function entity_ominous_item_spawner_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_OMINOUS_ITEM_SPAWNER_NAME, []);
+	}
+
+	public static function entity_painting_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PAINTING_NAME, []);
+	}
+
+	public static function entity_panda_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PANDA_NAME, []);
+	}
+
+	public static function entity_parched_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PARCHED_NAME, []);
+	}
+
+	public static function entity_parrot_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PARROT_NAME, []);
+	}
+
+	public static function entity_phantom_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PHANTOM_NAME, []);
+	}
+
+	public static function entity_pig_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PIG_NAME, []);
+	}
+
+	public static function entity_piglin_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PIGLIN_NAME, []);
+	}
+
+	public static function entity_piglin_brute_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PIGLIN_BRUTE_NAME, []);
+	}
+
+	public static function entity_pillager_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PILLAGER_NAME, []);
+	}
+
+	public static function entity_player_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PLAYER_NAME, []);
+	}
+
+	public static function entity_polar_bear_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_POLAR_BEAR_NAME, []);
+	}
+
+	public static function entity_pufferfish_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_PUFFERFISH_NAME, []);
+	}
+
+	public static function entity_rabbit_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_RABBIT_NAME, []);
+	}
+
+	public static function entity_ravager_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_RAVAGER_NAME, []);
+	}
+
+	public static function entity_salmon_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SALMON_NAME, []);
+	}
+
+	public static function entity_sheep_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SHEEP_NAME, []);
+	}
+
+	public static function entity_shulker_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SHULKER_NAME, []);
+	}
+
+	public static function entity_shulker_bullet_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SHULKER_BULLET_NAME, []);
+	}
+
+	public static function entity_silverfish_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SILVERFISH_NAME, []);
+	}
+
+	public static function entity_skeleton_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SKELETON_NAME, []);
+	}
+
+	public static function entity_skeleton_horse_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SKELETON_HORSE_NAME, []);
+	}
+
+	public static function entity_slime_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SLIME_NAME, []);
+	}
+
+	public static function entity_small_fireball_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SMALL_FIREBALL_NAME, []);
+	}
+
+	public static function entity_sniffer_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SNIFFER_NAME, []);
+	}
+
+	public static function entity_snow_golem_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SNOW_GOLEM_NAME, []);
+	}
+
+	public static function entity_snowball_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SNOWBALL_NAME, []);
+	}
+
+	public static function entity_spider_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SPIDER_NAME, []);
+	}
+
+	public static function entity_splash_potion_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SPLASH_POTION_NAME, []);
+	}
+
+	public static function entity_squid_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SQUID_NAME, []);
+	}
+
+	public static function entity_stray_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_STRAY_NAME, []);
+	}
+
+	public static function entity_strider_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_STRIDER_NAME, []);
+	}
+
+	public static function entity_sulfur_cube_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_SULFUR_CUBE_NAME, []);
+	}
+
+	public static function entity_tadpole_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TADPOLE_NAME, []);
+	}
+
+	public static function entity_thrown_trident_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_THROWN_TRIDENT_NAME, []);
+	}
+
+	public static function entity_tnt_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TNT_NAME, []);
+	}
+
+	public static function entity_tnt_minecart_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TNT_MINECART_NAME, []);
+	}
+
+	public static function entity_trader_llama_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TRADER_LLAMA_NAME, []);
+	}
+
+	public static function entity_tropicalfish_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TROPICALFISH_NAME, []);
+	}
+
+	public static function entity_turtle_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_TURTLE_NAME, []);
+	}
+
+	public static function entity_vex_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_VEX_NAME, []);
+	}
+
+	public static function entity_villager_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_VILLAGER_NAME, []);
+	}
+
+	public static function entity_villager_v2_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_VILLAGER_V2_NAME, []);
+	}
+
+	public static function entity_vindicator_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_VINDICATOR_NAME, []);
+	}
+
+	public static function entity_wandering_trader_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WANDERING_TRADER_NAME, []);
+	}
+
+	public static function entity_warden_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WARDEN_NAME, []);
+	}
+
+	public static function entity_wind_charge_projectile_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WIND_CHARGE_PROJECTILE_NAME, []);
+	}
+
+	public static function entity_witch_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WITCH_NAME, []);
+	}
+
+	public static function entity_wither_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WITHER_NAME, []);
+	}
+
+	public static function entity_wither_skeleton_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WITHER_SKELETON_NAME, []);
+	}
+
+	public static function entity_wither_skull_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WITHER_SKULL_NAME, []);
+	}
+
+	public static function entity_wither_skull_dangerous_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WITHER_SKULL_DANGEROUS_NAME, []);
+	}
+
+	public static function entity_wolf_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_WOLF_NAME, []);
+	}
+
+	public static function entity_xp_bottle_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_XP_BOTTLE_NAME, []);
+	}
+
+	public static function entity_xp_orb_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_XP_ORB_NAME, []);
+	}
+
+	public static function entity_zoglin_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOGLIN_NAME, []);
+	}
+
+	public static function entity_zombie_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOMBIE_NAME, []);
+	}
+
+	public static function entity_zombie_horse_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOMBIE_HORSE_NAME, []);
+	}
+
+	public static function entity_zombie_nautilus_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOMBIE_NAUTILUS_NAME, []);
+	}
+
+	public static function entity_zombie_pigman_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOMBIE_PIGMAN_NAME, []);
+	}
+
+	public static function entity_zombie_villager_v2_name() : Translatable{
+		return new Translatable(KnownTranslationKeys::ENTITY_ZOMBIE_VILLAGER_V2_NAME, []);
 	}
 
 	public static function gameMode_adventure() : Translatable{
@@ -1035,6 +2300,10 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::ITEM_RECORD_BLOCKS_DESC, []);
 	}
 
+	public static function item_record_bounce_desc() : Translatable{
+		return new Translatable(KnownTranslationKeys::ITEM_RECORD_BOUNCE_DESC, []);
+	}
+
 	public static function item_record_cat_desc() : Translatable{
 		return new Translatable(KnownTranslationKeys::ITEM_RECORD_CAT_DESC, []);
 	}
@@ -1089,6 +2358,10 @@ final class KnownTranslationFactory{
 
 	public static function item_record_strad_desc() : Translatable{
 		return new Translatable(KnownTranslationKeys::ITEM_RECORD_STRAD_DESC, []);
+	}
+
+	public static function item_record_tears_desc() : Translatable{
+		return new Translatable(KnownTranslationKeys::ITEM_RECORD_TEARS_DESC, []);
 	}
 
 	public static function item_record_wait_desc() : Translatable{
@@ -1502,6 +2775,14 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_CLEAR_USAGE, []);
 	}
 
+	public static function pocketmine_command_damage_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_DAMAGE_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_damage_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_DAMAGE_USAGE, []);
+	}
+
 	public static function pocketmine_command_defaultgamemode_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_DEFAULTGAMEMODE_DESCRIPTION, []);
 	}
@@ -1542,6 +2823,22 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_ERROR_PLAYERUSERONLY, []);
 	}
 
+	public static function pocketmine_command_execute_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_EXECUTE_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_execute_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_EXECUTE_USAGE, []);
+	}
+
+	public static function pocketmine_command_fill_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_FILL_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_fill_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_FILL_USAGE, []);
+	}
+
 	public static function pocketmine_command_gamemode_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMEMODE_DESCRIPTION, []);
 	}
@@ -1556,6 +2853,57 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMEMODE_UNKNOWN, [
 			"gameModeName" => $gameModeName,
 		]);
+	}
+
+	public static function pocketmine_command_gamerule_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_gamerule_invalidValue(Translatable|string $value, Translatable|string $rule, Translatable|string $expected) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_INVALIDVALUE, [
+			"value" => $value,
+			"rule" => $rule,
+			"expected" => $expected,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_list(Translatable|string $world, Translatable|string $rules) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_LIST, [
+			"world" => $world,
+			"rules" => $rules,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_query(Translatable|string $rule, Translatable|string $world, Translatable|string $value) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_QUERY, [
+			"rule" => $rule,
+			"world" => $world,
+			"value" => $value,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_success(Translatable|string $rule, Translatable|string $world, Translatable|string $value) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_SUCCESS, [
+			"rule" => $rule,
+			"world" => $world,
+			"value" => $value,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_unknownRule(Translatable|string $rule) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_UNKNOWNRULE, [
+			"rule" => $rule,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_unknownWorld(Translatable|string $world) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_UNKNOWNWORLD, [
+			"world" => $world,
+		]);
+	}
+
+	public static function pocketmine_command_gamerule_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_GAMERULE_USAGE, []);
 	}
 
 	public static function pocketmine_command_gc_chunks(Translatable|string $chunksCollected) : Translatable{
@@ -1642,6 +2990,72 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LIST_DESCRIPTION, []);
 	}
 
+	public static function pocketmine_command_locate_biome_fail(Translatable|string $biome) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_BIOME_FAIL, [
+			"biome" => $biome,
+		]);
+	}
+
+	public static function pocketmine_command_locate_biome_success(Translatable|string $biome, Translatable|string $x, Translatable|string $y, Translatable|string $z, Translatable|string $distance) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_BIOME_SUCCESS, [
+			"biome" => $biome,
+			"x" => $x,
+			"y" => $y,
+			"z" => $z,
+			"distance" => $distance,
+		]);
+	}
+
+	public static function pocketmine_command_locate_biome_unknown(Translatable|string $biome) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_BIOME_UNKNOWN, [
+			"biome" => $biome,
+		]);
+	}
+
+	public static function pocketmine_command_locate_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_locate_structure_fail(Translatable|string $structure) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_STRUCTURE_FAIL, [
+			"structure" => $structure,
+		]);
+	}
+
+	public static function pocketmine_command_locate_structure_otherDimension(Translatable|string $structure, Translatable|string $dimension) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_STRUCTURE_OTHERDIMENSION, [
+			"structure" => $structure,
+			"dimension" => $dimension,
+		]);
+	}
+
+	public static function pocketmine_command_locate_structure_success(Translatable|string $structure, Translatable|string $x, Translatable|string $z, Translatable|string $distance) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_STRUCTURE_SUCCESS, [
+			"structure" => $structure,
+			"x" => $x,
+			"z" => $z,
+			"distance" => $distance,
+		]);
+	}
+
+	public static function pocketmine_command_locate_structure_unknown(Translatable|string $structure) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_STRUCTURE_UNKNOWN, [
+			"structure" => $structure,
+		]);
+	}
+
+	public static function pocketmine_command_locate_suggestions(Translatable|string $names) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_SUGGESTIONS, [
+			"names" => $names,
+		]);
+	}
+
+	public static function pocketmine_command_locate_timeout(Translatable|string $seconds) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_LOCATE_TIMEOUT, [
+			"seconds" => $seconds,
+		]);
+	}
+
 	public static function pocketmine_command_me_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_ME_DESCRIPTION, []);
 	}
@@ -1676,6 +3090,22 @@ final class KnownTranslationFactory{
 		]);
 	}
 
+	public static function pocketmine_command_replaceitem_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_REPLACEITEM_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_replaceitem_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_REPLACEITEM_USAGE, []);
+	}
+
+	public static function pocketmine_command_ride_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_RIDE_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_ride_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_RIDE_USAGE, []);
+	}
+
 	public static function pocketmine_command_save_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SAVE_DESCRIPTION, []);
 	}
@@ -1694,6 +3124,57 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_command_seed_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SEED_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_selector_duplicateArgument(Translatable|string $argument) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_DUPLICATEARGUMENT, [
+			"argument" => $argument,
+		]);
+	}
+
+	public static function pocketmine_command_selector_invalidValue(Translatable|string $value, Translatable|string $argument) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_INVALIDVALUE, [
+			"value" => $value,
+			"argument" => $argument,
+		]);
+	}
+
+	public static function pocketmine_command_selector_malformed(Translatable|string $selector) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_MALFORMED, [
+			"selector" => $selector,
+		]);
+	}
+
+	public static function pocketmine_command_selector_unknownArgument(Translatable|string $argument) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_UNKNOWNARGUMENT, [
+			"argument" => $argument,
+		]);
+	}
+
+	public static function pocketmine_command_selector_unknownEntityType(Translatable|string $type) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_UNKNOWNENTITYTYPE, [
+			"type" => $type,
+		]);
+	}
+
+	public static function pocketmine_command_selector_unknownType(Translatable|string $selector) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_UNKNOWNTYPE, [
+			"selector" => $selector,
+		]);
+	}
+
+	public static function pocketmine_command_selector_unsupportedArgument(Translatable|string $argument) : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SELECTOR_UNSUPPORTEDARGUMENT, [
+			"argument" => $argument,
+		]);
+	}
+
+	public static function pocketmine_command_setblock_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SETBLOCK_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_setblock_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SETBLOCK_USAGE, []);
 	}
 
 	public static function pocketmine_command_setworldspawn_description() : Translatable{
@@ -1848,6 +3329,18 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_command_stop_description() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_STOP_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_summon_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SUMMON_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_summon_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_SUMMON_USAGE, []);
+	}
+
+	public static function pocketmine_command_tag_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_TAG_DESCRIPTION, []);
 	}
 
 	public static function pocketmine_command_tell_description() : Translatable{
@@ -2025,6 +3518,18 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_command_version_usage() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_VERSION_USAGE, []);
+	}
+
+	public static function pocketmine_command_weather_description() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_WEATHER_DESCRIPTION, []);
+	}
+
+	public static function pocketmine_command_weather_noWeather() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_WEATHER_NOWEATHER, []);
+	}
+
+	public static function pocketmine_command_weather_usage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_COMMAND_WEATHER_USAGE, []);
 	}
 
 	public static function pocketmine_command_whitelist_description() : Translatable{
@@ -2325,6 +3830,10 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_CLEAR_SELF, []);
 	}
 
+	public static function pocketmine_permission_command_damage() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_DAMAGE, []);
+	}
+
 	public static function pocketmine_permission_command_defaultgamemode() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_DEFAULTGAMEMODE, []);
 	}
@@ -2353,12 +3862,24 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_ENCHANT_SELF, []);
 	}
 
+	public static function pocketmine_permission_command_execute() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_EXECUTE, []);
+	}
+
+	public static function pocketmine_permission_command_fill() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_FILL, []);
+	}
+
 	public static function pocketmine_permission_command_gamemode_other() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_GAMEMODE_OTHER, []);
 	}
 
 	public static function pocketmine_permission_command_gamemode_self() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_GAMEMODE_SELF, []);
+	}
+
+	public static function pocketmine_permission_command_gamerule() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_GAMERULE, []);
 	}
 
 	public static function pocketmine_permission_command_gc() : Translatable{
@@ -2393,6 +3914,10 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_LIST, []);
 	}
 
+	public static function pocketmine_permission_command_locate() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_LOCATE, []);
+	}
+
 	public static function pocketmine_permission_command_me() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_ME, []);
 	}
@@ -2411,6 +3936,14 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_permission_command_plugins() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_PLUGINS, []);
+	}
+
+	public static function pocketmine_permission_command_replaceitem() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_REPLACEITEM, []);
+	}
+
+	public static function pocketmine_permission_command_ride() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_RIDE, []);
 	}
 
 	public static function pocketmine_permission_command_save_disable() : Translatable{
@@ -2433,6 +3966,10 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_SEED, []);
 	}
 
+	public static function pocketmine_permission_command_setblock() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_SETBLOCK, []);
+	}
+
 	public static function pocketmine_permission_command_setworldspawn() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_SETWORLDSPAWN, []);
 	}
@@ -2451,6 +3988,14 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_permission_command_stop() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_STOP, []);
+	}
+
+	public static function pocketmine_permission_command_summon() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_SUMMON, []);
+	}
+
+	public static function pocketmine_permission_command_tag() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_TAG, []);
 	}
 
 	public static function pocketmine_permission_command_teleport_other() : Translatable{
@@ -2511,6 +4056,10 @@ final class KnownTranslationFactory{
 
 	public static function pocketmine_permission_command_version() : Translatable{
 		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_VERSION, []);
+	}
+
+	public static function pocketmine_permission_command_weather() : Translatable{
+		return new Translatable(KnownTranslationKeys::POCKETMINE_PERMISSION_COMMAND_WEATHER, []);
 	}
 
 	public static function pocketmine_permission_command_whitelist_add() : Translatable{
@@ -3113,8 +4662,20 @@ final class KnownTranslationFactory{
 		return new Translatable(KnownTranslationKeys::TILE_BED_NOSLEEP, []);
 	}
 
+	public static function tile_bed_notSafe() : Translatable{
+		return new Translatable(KnownTranslationKeys::TILE_BED_NOTSAFE, []);
+	}
+
+	public static function tile_bed_notValid() : Translatable{
+		return new Translatable(KnownTranslationKeys::TILE_BED_NOTVALID, []);
+	}
+
 	public static function tile_bed_occupied() : Translatable{
 		return new Translatable(KnownTranslationKeys::TILE_BED_OCCUPIED, []);
+	}
+
+	public static function tile_bed_respawnSet() : Translatable{
+		return new Translatable(KnownTranslationKeys::TILE_BED_RESPAWNSET, []);
 	}
 
 	public static function tile_bed_tooFar() : Translatable{

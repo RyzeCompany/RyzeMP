@@ -35,11 +35,11 @@ use pocketmine\thread\ThreadCrashInfoFrame;
 use Ramsey\Uuid\Uuid;
 use Ramsey\Uuid\UuidInterface;
 use function array_combine;
-use function array_keys;
 use function array_map;
 use function array_reverse;
 use function array_values;
 use function bin2hex;
+use function ceil;
 use function chunk_split;
 use function class_exists;
 use function count;
@@ -65,9 +65,12 @@ use function is_float;
 use function is_infinite;
 use function is_int;
 use function is_nan;
+use function is_numeric;
 use function is_object;
 use function is_string;
+use function max;
 use function mb_check_encoding;
+use function min;
 use function mt_getrandmax;
 use function mt_rand;
 use function ob_end_clean;
@@ -81,6 +84,8 @@ use function preg_grep;
 use function preg_match;
 use function preg_match_all;
 use function preg_replace;
+use function preg_split;
+use function rtrim;
 use function shell_exec;
 use function spl_object_id;
 use function str_contains;
@@ -292,6 +297,114 @@ final class Utils{
 		}
 
 		return self::$os;
+	}
+
+	/**
+	 * Number of cores this process may actually use: {@link Utils::getCoreCount()} limited by the CPU quota and the
+	 * CPU set of its Linux control group (a Docker/Pterodactyl container sees every core of the host, but its CPU
+	 * limit, e.g. 200%, lets it use only 2 of them, and CPU pinning only the listed ones).
+	 */
+	public static function getUsableCoreCount() : int{
+		$cores = self::getCoreCount();
+		if(self::getOS() === self::OS_LINUX){
+			$ownCgroup = null;
+			if(($procSelfCgroup = @file_get_contents("/proc/self/cgroup")) !== false && ($path = self::parseCgroupV2Path($procSelfCgroup)) !== null){
+				$ownCgroup = "/sys/fs/cgroup" . rtrim($path, "/");
+			}
+
+			$quota = null;
+			if(($cpuMax = @file_get_contents("/sys/fs/cgroup/cpu.max")) !== false){
+				$quota = self::parseCgroupCpuLimit($cpuMax);
+			}elseif(($v1Quota = @file_get_contents("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")) !== false && ($v1Period = @file_get_contents("/sys/fs/cgroup/cpu/cpu.cfs_period_us")) !== false){
+				$quota = self::parseCgroupCpuLimit(trim($v1Quota) . " " . trim($v1Period));
+			}elseif($ownCgroup !== null && ($cpuMax = @file_get_contents("$ownCgroup/cpu.max")) !== false){
+				//cgroup v2 without a cgroup namespace of its own (e.g. Docker with default-cgroupns-mode=host): the
+				//cgroup mounted at /sys/fs/cgroup is the host's root cgroup, which has no cpu.max
+				$quota = self::parseCgroupCpuLimit($cpuMax);
+			}
+
+			$cpuSet = null;
+			foreach([
+				$ownCgroup !== null ? "$ownCgroup/cpuset.cpus.effective" : null, //cgroup v2
+				"/sys/fs/cgroup/cpuset.cpus.effective",
+				"/sys/fs/cgroup/cpuset/cpuset.effective_cpus" //cgroup v1
+			] as $file){
+				if($file !== null && ($cpuList = @file_get_contents($file)) !== false){
+					$cpuSet = self::parseCgroupCpuList($cpuList);
+					break;
+				}
+			}
+
+			foreach([$quota, $cpuSet] as $limit){
+				if($limit !== null){
+					$cores = $cores > 0 ? min($cores, $limit) : $limit;
+				}
+			}
+		}
+		return $cores;
+	}
+
+	/**
+	 * Returns the path of the process's cgroup v2 (relative to the cgroup2 mount, e.g. "/" or
+	 * "/system.slice/docker-<id>.scope") from the contents of /proc/self/cgroup ("0::<path>" line), or null if there
+	 * is none or it is outside the process's cgroup namespace.
+	 * @internal
+	 */
+	public static function parseCgroupV2Path(string $procSelfCgroup) : ?string{
+		foreach(explode("\n", $procSelfCgroup, 1000) as $line){
+			$line = trim($line);
+			if(str_starts_with($line, "0::")){
+				$path = substr($line, 3);
+				if(!str_starts_with($path, "/") || str_contains($path . "/", "/../") || str_contains($path, "\0")){
+					return null;
+				}
+				return $path;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Counts the CPUs of a cgroup CPU list (cpuset.cpus.effective, e.g. "0-1,4" = 3 CPUs). Returns null for an empty
+	 * or malformed list.
+	 * @internal
+	 */
+	public static function parseCgroupCpuList(string $list) : ?int{
+		$list = trim($list);
+		if($list === ""){
+			return null;
+		}
+		$count = 0;
+		foreach(explode(",", $list, 100000) as $range){
+			if(preg_match('/^(\d+)(?:-(\d+))?$/', trim($range), $matches) !== 1){
+				return null;
+			}
+			$first = (int) $matches[1];
+			$last = isset($matches[2]) ? (int) $matches[2] : $first;
+			if($last < $first){
+				return null;
+			}
+			$count += $last - $first + 1;
+		}
+		return $count;
+	}
+
+	/**
+	 * Parses a cgroup CPU limit ("<quota> <period>" as in cgroup v2 cpu.max; "max" or a negative quota = no limit)
+	 * into a whole number of cores, rounded up. Returns null when there is no limit.
+	 * @internal
+	 */
+	public static function parseCgroupCpuLimit(string $limit) : ?int{
+		$parts = preg_split('/\s+/', trim($limit));
+		if($parts === false || count($parts) !== 2 || !is_numeric($parts[0]) || !is_numeric($parts[1])){
+			return null;
+		}
+		$quota = (int) $parts[0];
+		$period = (int) $parts[1];
+		if($quota <= 0 || $period <= 0){
+			return null;
+		}
+		return max(1, (int) ceil($quota / $period));
 	}
 
 	public static function getCoreCount(bool $recalculate = false) : int{
@@ -699,19 +812,5 @@ final class Utils{
 	 */
 	public static function getRandomFloat() : float{
 		return mt_rand() / mt_getrandmax();
-	}
-
-	/**
-	 *  Array map implementation that preserves keys.
-	 *
-	 *  @phpstan-template TKeyType
-	 *  @phpstan-template TValueType
-	 *  @phpstan-template TResultType
-	 *  @phpstan-param callable(TValueType) : TResultType $callback
-	 *  @phpstan-param array<TKeyType, TValueType> $array
-	 *  @phpstan-return array<TKeyType, TResultType>
-	 */
-	public static function arrayMapPreserveKeys(callable $callback, array $array) : array {
-		return array_combine(array_keys($array), array_map($callback, $array));
 	}
 }

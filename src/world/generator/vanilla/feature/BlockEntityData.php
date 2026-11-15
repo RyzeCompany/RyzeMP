@@ -23,8 +23,12 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\feature;
 
+use pocketmine\block\tile\Beehive;
+use pocketmine\block\tile\BrushableBlock;
 use pocketmine\block\tile\Container;
+use pocketmine\block\tile\DecoratedPot;
 use pocketmine\block\tile\Tile;
+use pocketmine\loot\LootTables;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
@@ -32,11 +36,8 @@ use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\world\generator\vanilla\WorldgenData;
 use function count;
-use function array_search;
 use function in_array;
 use function str_ends_with;
-use function str_starts_with;
-use function substr;
 
 /**
  * Saved data of the tiles that features give to their blocks (Bedrock tile format, see the tiles in
@@ -44,24 +45,6 @@ use function substr;
  */
 final class BlockEntityData{
 	/** Java blocks whose block entity is a RandomizableContainer (lazy loot table), with the Bedrock tile id. */
-	/**
-	 * Bedrock path differences, from VanillaMine's original LootTables map.
-	 * These are NBT format identifiers, not PocketMine runtime loot engines.
-	 */
-	private const BEDROCK_LOOT_NAMES = [
-		"minecraft:chests/buried_treasure" => "loot_tables/chests/buriedtreasure.json",
-		"minecraft:chests/shipwreck_map" => "loot_tables/chests/shipwreck.json",
-		"minecraft:chests/shipwreck_supply" => "loot_tables/chests/shipwrecksupply.json",
-		"minecraft:chests/shipwreck_treasure" => "loot_tables/chests/shipwrecktreasure.json",
-		"minecraft:chests/jungle_temple_dispenser" => "loot_tables/chests/dispenser_trap.json",
-		"minecraft:archaeology/desert_pyramid" => "loot_tables/entities/desert_pyramid_brushable_block.json",
-		"minecraft:archaeology/desert_well" => "loot_tables/entities/desert_well_brushable_block.json",
-		"minecraft:archaeology/ocean_ruin_cold" => "loot_tables/entities/cold_ocean_ruins_brushable_block.json",
-		"minecraft:archaeology/ocean_ruin_warm" => "loot_tables/entities/warm_ocean_ruins_brushable_block.json",
-		"minecraft:archaeology/trail_ruins_common" => "loot_tables/entities/trail_ruins_brushable_block_common.json",
-		"minecraft:archaeology/trail_ruins_rare" => "loot_tables/entities/trail_ruins_brushable_block_rare.json"
-	];
-
 	private const CONTAINERS = [
 		"chest" => "Chest",
 		"trapped_chest" => "Chest",
@@ -69,26 +52,6 @@ final class BlockEntityData{
 		"dispenser" => "Dispenser",
 		"dropper" => "Dropper",
 	];
-
-
-	public static function toBedrockPath(string $javaId) : string{
-		$id = "minecraft:" . WorldgenData::stripNamespace($javaId);
-		return self::BEDROCK_LOOT_NAMES[$id] ?? "loot_tables/" . WorldgenData::stripNamespace($id) . ".json";
-	}
-
-	public static function toJavaLootId(string $name) : string{
-		if(str_starts_with($name, "minecraft:")){
-			return $name;
-		}
-		$javaId = array_search($name, self::BEDROCK_LOOT_NAMES, true);
-		if($javaId !== false){
-			return $javaId;
-		}
-		if(str_starts_with($name, "loot_tables/") && str_ends_with($name, ".json")){
-			$name = substr($name, 12, -5);
-		}
-		return "minecraft:" . $name;
-	}
 
 	private function __construct(){
 		//NOOP
@@ -107,7 +70,7 @@ final class BlockEntityData{
 	public static function lootContainer(string $tileId, string $javaLootTable, int $seed) : CompoundTag{
 		return CompoundTag::create()
 			->setString(Tile::TAG_ID, $tileId)
-			->setString(Container::TAG_LOOT_TABLE, self::toBedrockPath($javaLootTable))
+			->setString(Container::TAG_LOOT_TABLE, LootTables::toBedrockPath($javaLootTable))
 			->setInt(Container::TAG_LOOT_TABLE_SEED, self::int32($seed))
 			->setLong(Container::TAG_LOOT_TABLE_SEED_LONG, $seed);
 	}
@@ -132,14 +95,14 @@ final class BlockEntityData{
 		$occupants = [];
 		foreach($ticksInHive as $ticks){
 			$occupants[] = CompoundTag::create()
-				->setString("ActorIdentifier", "minecraft:bee")
-				->setTag("SaveData", CompoundTag::create()->setString("identifier", "minecraft:bee"))
-				->setInt("TicksLeftToStay", 600 - $ticks + 1);
+				->setString(Beehive::TAG_ACTOR_IDENTIFIER, "minecraft:bee")
+				->setTag(Beehive::TAG_SAVE_DATA, CompoundTag::create()->setString("identifier", "minecraft:bee"))
+				->setInt(Beehive::TAG_TICKS_LEFT, 600 - $ticks + 1);
 		}
 		return CompoundTag::create()
 			->setString(Tile::TAG_ID, "Beehive")
-			->setTag("Occupants", new ListTag($occupants, NBT::TAG_Compound))
-			->setByte("ShouldSpawnBees", 0);
+			->setTag(Beehive::TAG_OCCUPANTS, new ListTag($occupants, NBT::TAG_Compound))
+			->setByte(Beehive::TAG_SHOULD_SPAWN_BEES, 0);
 	}
 
 	/**
@@ -148,9 +111,9 @@ final class BlockEntityData{
 	public static function brushable(string $javaLootTable, int $seed) : CompoundTag{
 		return CompoundTag::create()
 			->setString(Tile::TAG_ID, "BrushableBlock")
-			->setString("LootTable", self::toBedrockPath($javaLootTable))
-			->setInt("LootTableSeed", self::int32($seed))
-			->setLong("LootTableSeedLong", $seed);
+			->setString(BrushableBlock::TAG_LOOT_TABLE, LootTables::toBedrockPath($javaLootTable))
+			->setInt(BrushableBlock::TAG_LOOT_TABLE_SEED, self::int32($seed))
+			->setLong(BrushableBlock::TAG_LOOT_TABLE_SEED_LONG, $seed);
 	}
 
 	/**
@@ -176,12 +139,12 @@ final class BlockEntityData{
 			foreach($sherds as $sherd){
 				$list[] = new StringTag($sherd);
 			}
-			$nbt->setTag("sherds", new ListTag($list, NBT::TAG_String));
+			$nbt->setTag(DecoratedPot::TAG_SHERDS, new ListTag($list, NBT::TAG_String));
 		}
 		if($javaLootTable !== null){
-			$nbt->setString("LootTable", self::toBedrockPath($javaLootTable))
-				->setInt("LootTableSeed", self::int32($seed))
-				->setLong("LootTableSeedLong", $seed);
+			$nbt->setString(Container::TAG_LOOT_TABLE, LootTables::toBedrockPath($javaLootTable))
+				->setInt(Container::TAG_LOOT_TABLE_SEED, self::int32($seed))
+				->setLong(Container::TAG_LOOT_TABLE_SEED_LONG, $seed);
 		}
 		return $nbt;
 	}
@@ -194,7 +157,7 @@ final class BlockEntityData{
 	 * @phpstan-return list<string>
 	 */
 	private static function potSherds(CompoundTag $nbt) : array{
-		$tag = $nbt->getTag("sherds");
+		$tag = $nbt->getTag(DecoratedPot::TAG_SHERDS);
 		$sherds = [];
 		if($tag instanceof CompoundTag){
 			foreach(["back", "left", "right", "front"] as $side){
@@ -230,7 +193,7 @@ final class BlockEntityData{
 			return self::lootContainer(self::CONTAINERS[$name], $table->getValue(), $seed);
 		}
 		if(in_array($name, ["suspicious_sand", "suspicious_gravel"], true)){
-			return self::brushable($table->getValue(), $seed)->setString("type", "minecraft:" . $name);
+			return self::brushable($table->getValue(), $seed)->setString(BrushableBlock::TAG_TYPE, "minecraft:" . $name);
 		}
 		return null;
 	}

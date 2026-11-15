@@ -25,6 +25,9 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandEnums;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
@@ -32,7 +35,7 @@ use pocketmine\ServerProperties;
 use pocketmine\world\World;
 use function count;
 
-class DifficultyCommand extends NativeCommand{
+class DifficultyCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -43,7 +46,14 @@ class DifficultyCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_DIFFICULTY);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::enum("difficulty", CommandEnums::DIFFICULTY, CommandEnums::difficulties())],
+			[CommandParameter::int("difficulty")],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) !== 1){
 			throw new InvalidCommandSyntaxException();
 		}

@@ -24,15 +24,13 @@ declare(strict_types=1);
 namespace pocketmine\block\tile;
 
 use pocketmine\data\bedrock\item\ItemTypeDeserializeException;
-use pocketmine\data\bedrock\block\BlockTypeNames;
 use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\item\Item;
 use pocketmine\item\PotterySherd;
-use pocketmine\item\ItemIdentifier;
-use pocketmine\item\ItemTypeIds;
 use pocketmine\item\PotterySherdType;
 use pocketmine\item\VanillaItems;
 use pocketmine\loot\LootContext;
+use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootTables;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\NBT;
@@ -41,7 +39,6 @@ use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
@@ -113,25 +110,28 @@ class DecoratedPot extends Spawnable{
 	 * changed, e.g. when it breaks). Trial chamber corridor pots use pots/trial_chambers/corridor.
 	 */
 	private function unpackLootTable() : void{
-		if($this->lootTable === null || $this->item !== null){
+		if($this->lootTable === null){
 			return;
 		}
-		$world = $this->position->getWorld();
 		$name = $this->lootTable;
-		try{
-			$table = LootTables::forWorld($world)?->get($name);
-			if($table === null){
-				return; //do not destroy unopened loot when a pinned worldgen cache is missing
-			}
-			$context = LootContext::seeded($this->lootTableSeed);
-			$context->world = $world;
-			$context->origin = new Vector3($this->position->getFloorX() + 0.5, $this->position->getFloorY() + 0.5, $this->position->getFloorZ() + 0.5);
-			$this->item = $table->generate($context)[0] ?? null;
-			$this->lootTable = null;
-			$this->lootTableSeed = 0;
-			$this->clearSpawnCompoundCache();
-		}catch(\RuntimeException|\UnexpectedValueException|\JsonException $e){
-			$world->getLogger()->warning("Unable to roll decorated pot loot at " . $this->position . ": " . $e->getMessage());
+		$seed = $this->lootTableSeed;
+		$this->lootTable = null;
+		$this->lootTableSeed = 0;
+		if($this->item !== null){
+			return; //vanilla only fills empty slots
+		}
+		$table = LootTables::get($name);
+		if($table === null){
+			\GlobalLogger::get()->debug("Loot table $name of the decorated pot at " . $this->position . " is not available, the pot stays empty");
+			return;
+		}
+		$context = LootContext::seeded($seed);
+		$context->world = $this->position->getWorld();
+		$context->origin = new Vector3($this->position->getFloorX() + 0.5, $this->position->getFloorY() + 0.5, $this->position->getFloorZ() + 0.5);
+		$stack = $table->fill(1, [], $context)[0] ?? null;
+		$item = $stack !== null ? LootItemConverter::toItem($stack) : null;
+		if($item !== null && !$item->isNull()){
+			$this->item = $item;
 		}
 	}
 
@@ -139,7 +139,7 @@ class DecoratedPot extends Spawnable{
 		if($type === null){
 			return self::BRICK_ID;
 		}
-		return GlobalItemDataHandlers::getSerializer()->serializeType((new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd"))->setSherdType($type))->getName();
+		return GlobalItemDataHandlers::getSerializer()->serializeType(VanillaItems::POTTERY_SHERD()->setSherdType($type))->getName();
 	}
 
 	public static function idToSherd(string $id) : ?PotterySherdType{
@@ -233,22 +233,18 @@ class DecoratedPot extends Spawnable{
 		return $nbt;
 	}
 
-	protected function getRequiredNetworkBlockName() : string{
-		return BlockTypeNames::DECORATED_POT;
-	}
-
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		self::writeSherds($nbt, $this->sherds);
-		if($this->item !== null && $typeConverter->getItemTranslator()->toNetworkIdQuiet($this->item) !== null){
-			$nbt->setTag(self::TAG_ITEM, $typeConverter->getItemTranslator()->toNetworkNbt($this->item));
+		if($this->item !== null){
+			$nbt->setTag(self::TAG_ITEM, $this->item->nbtSerialize());
 		}
 	}
 
 	/**
 	 * Creates the packet that makes clients play the wobble animation of the pot.
 	 */
-	public function createAnimationPacket(TypeConverter $typeConverter, int $animation) : BlockActorDataPacket{
-		$nbt = $this->getSpawnCompound($typeConverter);
+	public function createAnimationPacket(int $animation) : BlockActorDataPacket{
+		$nbt = $this->getSpawnCompound();
 		$nbt->setByte(self::TAG_ANIMATION, $animation);
 		return BlockActorDataPacket::create(BlockPosition::fromVector3($this->position), new CacheableNbt($nbt));
 	}

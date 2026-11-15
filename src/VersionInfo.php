@@ -31,13 +31,14 @@ use function str_repeat;
 
 final class VersionInfo{
 	public const NAME = "RyzeMP";
-	public const BASE_VERSION = "1.0.0-beta.5";
-	/** PocketMine-MP 5 plugin API compatibility version; independent of the RyzeMP release. */
+	public const BASE_VERSION = "1.0.0-beta.6";
+	/** PocketMine-MP plugin API compatibility is independent of the RyzeMP release. */
 	public const PLUGIN_API_VERSION = "5.44.2";
-	/** Immutable Composer artifact revision; plugin compatibility uses PLUGIN_API_VERSION. */
+	/** Composer API revision, independent of the user's Bedrock client version. */
 	public const COMPOSER_API_VERSION = "5.44.2-p1";
 	public const IS_DEVELOPMENT_BUILD = false;
 	public const BUILD_CHANNEL = "beta";
+	/** Public source repository of RyzeMP; PocketMine namespaces and core API versions stay compatible. */
 	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";
 
 	/**
@@ -109,4 +110,3 @@ final class VersionInfo{
 		return self::$fullVersion;
 	}
 }
-

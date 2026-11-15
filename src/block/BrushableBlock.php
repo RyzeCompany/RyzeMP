@@ -139,10 +139,6 @@ class BrushableBlock extends Opaque implements Fallable{
 		$tile->brushCountResetsAtTick = $tick + self::BRUSH_RESET_TICKS;
 		$tile->setBrushDirection($face);
 		$uncovered = $tile->unpackLootTable($player, $item);
-		if($tile->getLootTable() !== null){
-			// The pinned data could not be read. Leave the undisclosed loot intact.
-			return true;
-		}
 
 		$count = $tile->getBrushCount() + 1;
 		$world->addSound($this->position->add(0.5, 0.5, 0.5), new BrushSound($this, $count >= self::BRUSHES_TO_COMPLETE));

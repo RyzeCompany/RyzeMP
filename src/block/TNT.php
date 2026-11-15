@@ -36,7 +36,9 @@ use pocketmine\math\RayTraceResult;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\Random;
+use pocketmine\world\GameRules;
 use pocketmine\world\sound\IgniteSound;
+use pocketmine\world\vibration\GameEvent;
 use function cos;
 use function sin;
 use const M_PI;
@@ -70,7 +72,7 @@ class TNT extends Opaque{
 	}
 
 	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
-		if($this->unstable){
+		if($this->unstable && $this->position->getWorld()->getGameRule(GameRules::TNT_EXPLODES) !== false){
 			$this->ignite();
 			return true;
 		}
@@ -96,6 +98,10 @@ class TNT extends Opaque{
 
 	public function ignite(int $fuse = 80) : void{
 		$world = $this->position->getWorld();
+		if($world->getGameRule(GameRules::TNT_EXPLODES) === false){
+			//vanilla (BDS 1.26.52): with tntexplodes off, lit TNT stays a block
+			return;
+		}
 		$world->setBlock($this->position, VanillaBlocks::AIR());
 
 		$mot = (new Random())->nextSignedFloat() * M_PI * 2;
@@ -107,6 +113,13 @@ class TNT extends Opaque{
 
 		$tnt->spawnToAll();
 		$tnt->broadcastSound(new IgniteSound());
+		$world->addGameEvent($this->position, GameEvent::PRIME_FUSE);
+	}
+
+	public function onNearbyBlockChange() : void{
+		if($this->position->getWorld()->isBlockPowered($this->position)){
+			$this->ignite();
+		}
 	}
 
 	public function getFlameEncouragement() : int{

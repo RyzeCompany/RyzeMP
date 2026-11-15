@@ -34,7 +34,13 @@ class ExperienceBottle extends ProjectileItem{
 		return new ExperienceBottleEntity($location, $thrower);
 	}
 
+	/** Bedrock xp_bottle.json power (Java uses 0.7). */
 	public function getThrowForce() : float{
-		return 0.7;
+		return 0.5;
+	}
+
+	/** Bedrock xp_bottle.json angle_offset: thrown 20 degrees above the look direction. */
+	protected function getThrowAngleOffset() : float{
+		return -20.0;
 	}
 }

@@ -25,4 +25,15 @@ namespace pocketmine\block;
 
 class Redstone extends Opaque{
 
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return 15;
+	}
+
+	public function isRedstoneConductor() : bool{
+		return false;
+	}
 }

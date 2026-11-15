@@ -35,6 +35,8 @@ use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\weather\BiomeClimate;
+use pocketmine\world\weather\Precipitation;
 use function floor;
 use function max;
 
@@ -77,7 +79,8 @@ class SnowLayer extends Flowable implements Fallable{
 	}
 
 	private function canBeSupportedAt(Block $block) : bool{
-		return $block->getAdjacentSupportType(Facing::DOWN) === SupportType::FULL;
+		//Bedrock: snow layers can also lie on leaves
+		return $block->getAdjacentSupportType(Facing::DOWN) === SupportType::FULL || $block->getSide(Facing::DOWN) instanceof Leaves;
 	}
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
@@ -98,10 +101,17 @@ class SnowLayer extends Flowable implements Fallable{
 		return true;
 	}
 
+	/**
+	 * Bedrock: the layers melt one at a time, at block light 12 or more, or at any light where it doesn't snow (warm
+	 * biomes, dry biomes, the Nether).
+	 */
 	public function onRandomTick() : void{
 		$world = $this->position->getWorld();
-		if($world->getBlockLightAt($this->position->x, $this->position->y, $this->position->z) >= 12){
-			BlockEventHelper::melt($this, VanillaBlocks::AIR());
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		if($world->getBlockLightAt($x, $y, $z) >= 12 || BiomeClimate::getPrecipitation($world->getBiomeId($x, $y, $z), $y) !== Precipitation::SNOW){
+			BlockEventHelper::melt($this, $this->layers > self::MIN_LAYERS ? (clone $this)->setLayers($this->layers - 1) : VanillaBlocks::AIR());
 		}
 	}
 

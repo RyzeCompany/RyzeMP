@@ -1,9 +1,22 @@
 <?php
 
 /*
- * Adapted from VanillaMine's pocketmine\world\weather\Weather.
- * Copyright (c) PocketMine Team and VanillaMine contributors.
- * SPDX-License-Identifier: LGPL-3.0-or-later
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
  */
 
 declare(strict_types=1);
@@ -13,29 +26,29 @@ namespace pocketmine\world\weather;
 use pocketmine\block\Block;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\block\Leaves;
-use pocketmine\block\LightningRod;
 use pocketmine\block\Liquid;
+use pocketmine\block\RuntimeBlockStateRegistry;
 use pocketmine\block\SnowLayer;
 use pocketmine\block\utils\BlockEventHelper;
 use pocketmine\block\utils\SupportType;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\block\Water;
-use pocketmine\math\Facing;
-use pocketmine\world\format\Chunk;
-use pocketmine\world\format\SubChunk;
-use pocketmine\block\RuntimeBlockStateRegistry;
-use pocketmine\event\world\LightningStrikeEvent;
-use pocketmine\event\world\WeatherChangeEvent;
+use pocketmine\entity\animal\SkeletonHorse;
 use pocketmine\entity\Living;
 use pocketmine\entity\Location;
 use pocketmine\entity\object\LightningBolt;
+use pocketmine\event\world\LightningStrikeEvent;
+use pocketmine\event\world\WeatherChangeEvent;
 use pocketmine\math\AxisAlignedBB;
+use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
 use pocketmine\utils\Utils;
+use pocketmine\world\dimension\Dimension;
+use pocketmine\world\format\Chunk;
+use pocketmine\world\format\io\WeatherCycleWorldData;
 use pocketmine\world\format\io\WorldData;
-use pocketmine\world\GameRules;
+use pocketmine\world\format\SubChunk;
 use pocketmine\world\World;
 use function array_keys;
 use function count;
@@ -45,10 +58,21 @@ use function mt_rand;
 use const PHP_INT_MAX;
 
 /**
- * Vanilla-style weather timers, biome-aware precipitation and snow/ice.
- * Lightning actor mechanics require separate multiversion validation.
+ * Weather of a world (Overworld only): clear, rain (snow in cold biomes) and thunderstorms, with the vanilla cycle.
+ *
+ * State (level.dat, Bedrock tags): rainLevel and lightningLevel are the current intensities (0 = off; the intensity
+ * is what clients get in the START_RAIN/START_THUNDER level events), rainTime and lightningTime the ticks left until
+ * the rain and the thunder toggle. Like vanilla, the timers run independently and thunder only happens while it
+ * rains. A timer at 0 first draws the duration of the current state: clear 12000-180000 ticks, rain 12000-24000,
+ * no thunder 12000-180000, thunder 3600-15600. The cycle can be turned off (doweathercycle).
+ *
+ * Effects handled here, per ticked chunk (so they follow the random tick budget): 1/16 chance per tick to pick a
+ * random column, where water freezes and snow settles in cold biomes and the top block gets the precipitation
+ * ({@link Block::onPrecipitation()}: cauldrons fill); and in a thunderstorm a 1/100000 chance per tick of a lightning
+ * strike, aimed at a lightning rod (within {@link Weather::LIGHTNING_ROD_RANGE} blocks, top of its column) or at a
+ * living entity under the open sky near the column, with a chance of a skeleton trap horse instead.
  */
-class Weather{
+final class Weather{
 	public const CLEAR_MIN_TICKS = 12000;
 	public const CLEAR_MAX_TICKS = 180000;
 	public const RAIN_MIN_TICKS = 12000;
@@ -57,38 +81,52 @@ class Weather{
 	public const NO_THUNDER_MAX_TICKS = 180000;
 	public const THUNDER_MIN_TICKS = 3600;
 	public const THUNDER_MAX_TICKS = 15600;
+	/** Default duration of /weather without one (Bedrock: 300-900 seconds). */
 	public const COMMAND_MIN_TICKS = 6000;
 	public const COMMAND_MAX_TICKS = 18000;
 
-	/** One column in 16 per simulated chunk tick; never loads chunks. */
-	public const PRECIPITATION_CHANCE = 16;
-	/** Hard cap for precipitation work on a world tick, regardless of simulation distance. */
-	public const MAX_PRECIPITATION_SAMPLES_PER_TICK = 32;
-	/** One natural lightning selection per world tick, with an independent 1/N chance per nearby loaded chunk. */
-	public const LIGHTNING_CHANCE = 100000;
-	/** Vanilla's horizontal radius for natural lightning near a player. */
-	public const LIGHTNING_RANGE = 128;
-	/** Vanilla rod attraction radius in horizontal blocks. */
-	public const LIGHTNING_ROD_RANGE = 64;
-
+	/** Intensity range of a new rain or thunderstorm (as a fraction of the 65535 sent to clients). */
 	private const MIN_INTENSITY = 10000 / 65535;
 	private const MAX_INTENSITY = 60000 / 65535;
 
-	/** @var array<int, true>|null Cached internal lightning rod states. */
-	private static ?array $lightningRodStates = null;
-
-	private int $precipitationSamplesThisTick = 0;
+	/** One strike per this many ticks per loaded chunk near a player in a thunderstorm (vanilla). */
+	public const LIGHTNING_CHANCE = 100000;
+	/** Distance in blocks from a player within which loaded chunks get natural lightning (~200 chunks, vanilla). */
+	public const LIGHTNING_RANGE = 128;
+	/** Chance per ticked chunk per tick of a precipitation update on a random column (vanilla). */
+	public const PRECIPITATION_CHANCE = 16;
+	/** Horizontal range in which lightning rods attract a natural strike. */
+	public const LIGHTNING_ROD_RANGE = 64;
+	/** Change of the sky darkening per tick while the weather fades in or out (vanilla). */
+	private const STRENGTH_STEP = 0.01;
 
 	private int $rainTime;
 	private float $rainLevel;
 	private int $lightningTime;
 	private float $lightningLevel;
+	private bool $cycle;
 
-	public function __construct(private World $world, WorldData $data){
+	/** Current darkening of the sky by rain and thunder, 0-1, fading like vanilla. */
+	private float $rainStrength;
+	private float $thunderStrength;
+
+	/**
+	 * @var true[]|null state IDs of lightning rods
+	 * @phpstan-var array<int, true>|null
+	 */
+	private static ?array $lightningRodStates = null;
+
+	public function __construct(
+		private World $world,
+		WorldData $data
+	){
 		$this->rainTime = max(0, $data->getRainTime());
 		$this->rainLevel = max(0.0, min(1.0, $data->getRainLevel()));
 		$this->lightningTime = max(0, $data->getLightningTime());
 		$this->lightningLevel = max(0.0, min(1.0, $data->getLightningLevel()));
+		$this->cycle = !$data instanceof WeatherCycleWorldData || $data->isWeatherCycleEnabled();
+		$this->rainStrength = $this->isRaining() ? 1.0 : 0.0;
+		$this->thunderStrength = $this->isThundering() ? 1.0 : 0.0;
 	}
 
 	public function save(WorldData $data) : void{
@@ -96,81 +134,83 @@ class Weather{
 		$data->setRainLevel($this->rainLevel);
 		$data->setLightningTime($this->lightningTime);
 		$data->setLightningLevel($this->lightningLevel);
+		if($data instanceof WeatherCycleWorldData){
+			$data->setWeatherCycleEnabled($this->cycle);
+		}
 	}
 
-	/** Nether and End worlds always report clear weather, even if old NBT holds rain values. */
+	/**
+	 * Whether the world has weather at all (only the Overworld: no rain in the Nether or the End).
+	 */
 	public function hasWeather() : bool{
-		return $this->world->getServer()->getDimensionManager()->getDimension($this->world) === DimensionIds::OVERWORLD;
+		return $this->world->getDimension() === Dimension::OVERWORLD;
 	}
 
+	/**
+	 * Whether it rains (or snows) in the world. Dry biomes stay dry: see {@link Weather::isRainingAt()}.
+	 */
 	public function isRaining() : bool{
-		return $this->rainLevel > 0.0 && $this->hasWeather();
+		return $this->rainLevel > 0 && $this->hasWeather();
 	}
 
+	/**
+	 * Whether there is a thunderstorm (rain with thunder).
+	 */
 	public function isThundering() : bool{
-		return $this->lightningLevel > 0.0 && $this->isRaining();
+		return $this->lightningLevel > 0 && $this->isRaining();
 	}
 
 	public function isClear() : bool{
 		return !$this->isRaining();
 	}
 
-	public function getRainLevel() : float{
-		return $this->isRaining() ? $this->rainLevel : 0.0;
-	}
+	/** Rain intensity sent to clients (0 when not raining). */
+	public function getRainLevel() : float{ return $this->isRaining() ? $this->rainLevel : 0.0; }
 
-	public function getLightningLevel() : float{
-		return $this->isThundering() ? $this->lightningLevel : 0.0;
-	}
+	/** Thunder intensity sent to clients (0 without a thunderstorm). */
+	public function getLightningLevel() : float{ return $this->isThundering() ? $this->lightningLevel : 0.0; }
 
-	public function getRainTime() : int{
-		return $this->rainTime;
-	}
+	/** Ticks until the rain starts or stops. */
+	public function getRainTime() : int{ return $this->rainTime; }
 
-	public function getLightningTime() : int{
-		return $this->lightningTime;
-	}
+	/** Ticks until the thunder starts or stops. */
+	public function getLightningTime() : int{ return $this->lightningTime; }
 
-	public function isWeatherCycleEnabled() : bool{
-		return $this->world->getGameRules()->getBool(GameRules::DO_WEATHER_CYCLE);
-	}
+	public function isWeatherCycleEnabled() : bool{ return $this->cycle; }
 
+	/**
+	 * Turns the natural weather cycle on or off (Bedrock gamerule doweathercycle). The current weather stays.
+	 */
 	public function setWeatherCycleEnabled(bool $enabled) : void{
-		$this->world->setGameRule(GameRules::DO_WEATHER_CYCLE, $enabled);
+		$this->cycle = $enabled;
 	}
+
+	/** Darkening of the sky by rain, 0-1 (fades in and out over 100 ticks). */
+	public function getRainStrength() : float{ return $this->rainStrength; }
+
+	/** Darkening of the sky by thunder, 0-1. */
+	public function getThunderStrength() : float{ return $this->thunderStrength; }
 
 	private static function randomIntensity() : float{
 		return self::MIN_INTENSITY + Utils::getRandomFloat() * (self::MAX_INTENSITY - self::MIN_INTENSITY);
 	}
 
-	/** Returns false when a plugin cancels the pending transition. */
-	private function change(bool $raining, bool $thundering, bool $forceFullRain = false) : bool{
-		$wasRaining = $this->rainLevel > 0.0;
-		$wasThundering = $this->lightningLevel > 0.0;
+	/**
+	 * Changes the weather. Returns false if a plugin cancelled the change.
+	 */
+	private function change(bool $raining, bool $thundering) : bool{
+		$wasRaining = $this->rainLevel > 0;
+		$wasThundering = $this->lightningLevel > 0;
 		if($wasRaining === $raining && $wasThundering === $thundering){
-			//Commands must also resend an already-active rain state to recover client visuals.
-			if($forceFullRain && $raining){
-				$this->rainLevel = 1.0;
-				$this->broadcast();
-			}
 			return true;
 		}
-
-		$hasWeather = $this->hasWeather();
-		$event = new WeatherChangeEvent(
-			$this->world,
-			$wasRaining && $hasWeather,
-			$wasRaining && $wasThundering && $hasWeather,
-			$raining,
-			$raining && $thundering
-		);
-		$event->call();
-		if($event->isCancelled()){
+		$ev = new WeatherChangeEvent($this->world, $wasRaining && $this->hasWeather(), $wasRaining && $wasThundering && $this->hasWeather(), $raining, $raining && $thundering);
+		$ev->call();
+		if($ev->isCancelled()){
 			return false;
 		}
-
-		if($raining !== $wasRaining || ($forceFullRain && $raining)){
-			$this->rainLevel = $raining ? ($forceFullRain ? 1.0 : self::randomIntensity()) : 0.0;
+		if($raining !== $wasRaining){
+			$this->rainLevel = $raining ? self::randomIntensity() : 0.0;
 		}
 		if($thundering !== $wasThundering){
 			$this->lightningLevel = $thundering ? self::randomIntensity() : 0.0;
@@ -179,6 +219,10 @@ class Weather{
 		return true;
 	}
 
+	/**
+	 * Clear weather for the given number of ticks (random 6000-18000 if null), like /weather clear. Returns false if
+	 * a plugin cancelled it.
+	 */
 	public function setClear(?int $duration = null) : bool{
 		$duration ??= mt_rand(self::COMMAND_MIN_TICKS, self::COMMAND_MAX_TICKS);
 		if(!$this->change(false, false)){
@@ -189,9 +233,12 @@ class Weather{
 		return true;
 	}
 
+	/**
+	 * Rain without thunder for the given number of ticks, like /weather rain.
+	 */
 	public function setRain(?int $duration = null) : bool{
 		$duration ??= mt_rand(self::COMMAND_MIN_TICKS, self::COMMAND_MAX_TICKS);
-		if(!$this->change(true, false, true)){
+		if(!$this->change(true, false)){
 			return false;
 		}
 		$this->rainTime = max(1, $duration);
@@ -199,9 +246,12 @@ class Weather{
 		return true;
 	}
 
+	/**
+	 * A thunderstorm for the given number of ticks, like /weather thunder.
+	 */
 	public function setThunder(?int $duration = null) : bool{
 		$duration ??= mt_rand(self::COMMAND_MIN_TICKS, self::COMMAND_MAX_TICKS);
-		if(!$this->change(true, true, true)){
+		if(!$this->change(true, true)){
 			return false;
 		}
 		$this->rainTime = max(1, $duration);
@@ -209,6 +259,9 @@ class Weather{
 		return true;
 	}
 
+	/**
+	 * Stops the rain and the thunder and restarts both timers, like waking up after sleeping through the night.
+	 */
 	public function resetCycle() : void{
 		if($this->change(false, false)){
 			$this->rainTime = 0;
@@ -216,107 +269,107 @@ class Weather{
 		}
 	}
 
-	/** Tick the two independent weather timers and natural lightning even when weather cycle is disabled. */
+	/**
+	 * @internal Called by the world every tick.
+	 */
 	public function tick() : void{
-		$this->precipitationSamplesThisTick = 0;
 		if(!$this->hasWeather()){
 			return;
 		}
-
-		if($this->isWeatherCycleEnabled()){
-			$raining = $this->rainLevel > 0.0;
-			$thundering = $this->lightningLevel > 0.0;
+		if($this->cycle){
+			$raining = $this->rainLevel > 0;
+			$thundering = $this->lightningLevel > 0;
 			if($this->lightningTime <= 0){
-				$this->lightningTime = $thundering ?
-					mt_rand(self::THUNDER_MIN_TICKS, self::THUNDER_MAX_TICKS) :
-					mt_rand(self::NO_THUNDER_MIN_TICKS, self::NO_THUNDER_MAX_TICKS);
+				$this->lightningTime = $thundering ? mt_rand(self::THUNDER_MIN_TICKS, self::THUNDER_MAX_TICKS) : mt_rand(self::NO_THUNDER_MIN_TICKS, self::NO_THUNDER_MAX_TICKS);
 			}elseif(--$this->lightningTime <= 0){
 				$thundering = !$thundering;
 			}
-
 			if($this->rainTime <= 0){
-				$this->rainTime = $raining ?
-					mt_rand(self::RAIN_MIN_TICKS, self::RAIN_MAX_TICKS) :
-					mt_rand(self::CLEAR_MIN_TICKS, self::CLEAR_MAX_TICKS);
+				$this->rainTime = $raining ? mt_rand(self::RAIN_MIN_TICKS, self::RAIN_MAX_TICKS) : mt_rand(self::CLEAR_MIN_TICKS, self::CLEAR_MAX_TICKS);
 			}elseif(--$this->rainTime <= 0){
 				$raining = !$raining;
 			}
-
-			if($raining !== ($this->rainLevel > 0.0) || $thundering !== ($this->lightningLevel > 0.0)){
+			if($raining !== $this->rainLevel > 0 || $thundering !== $this->lightningLevel > 0){
 				$this->change($raining, $thundering);
 			}
 		}
+
+		$rainTarget = $this->isRaining() ? 1.0 : 0.0;
+		if($this->rainStrength !== $rainTarget){
+			$this->rainStrength = $rainTarget > $this->rainStrength ? min($rainTarget, $this->rainStrength + self::STRENGTH_STEP) : max($rainTarget, $this->rainStrength - self::STRENGTH_STEP);
+		}
+		$thunderTarget = $this->isThundering() ? 1.0 : 0.0;
+		if($this->thunderStrength !== $thunderTarget){
+			$this->thunderStrength = $thunderTarget > $this->thunderStrength ? min($thunderTarget, $this->thunderStrength + self::STRENGTH_STEP) : max($thunderTarget, $this->thunderStrength - self::STRENGTH_STEP);
+		}
+
 		if($this->isThundering()){
 			$this->tickLightning();
 		}
 	}
 
 	/**
-	 * A thunderstorm selects at most one strike each tick.
-	 *
-	 * Each already loaded chunk in a 128-block radius around a non-spectating player
-	 * has exactly a 1/LIGHTNING_CHANCE chance of being selected. An upper-bound
-	 * rejection avoids examining hundreds of chunks on almost every tick.
+	 * Natural lightning: every loaded chunk within {@link Weather::LIGHTNING_RANGE} blocks of a player rolls
+	 * 1/{@link Weather::LIGHTNING_CHANCE} per tick, like vanilla, independently of the chunk ticking radius (which is
+	 * much smaller and would make thunderstorms almost silent). Instead of one roll per chunk, a single roll against
+	 * the number of chunks picks whether a strike happens this tick and then one of the chunks: the same rate, since
+	 * two strikes in the same tick are negligible (~200 chunks / 100000).
 	 */
 	private function tickLightning() : void{
 		$radius = self::LIGHTNING_RANGE >> Chunk::COORD_BIT_SIZE;
-		$centers = [];
+		$chunks = [];
 		foreach($this->world->getPlayers() as $player){
 			if($player->isSpectator()){
 				continue;
 			}
 			$pos = $player->getPosition();
-			$centers[] = [
-				$pos->getFloorX() >> Chunk::COORD_BIT_SIZE,
-				$pos->getFloorZ() >> Chunk::COORD_BIT_SIZE
-			];
-		}
-		if(count($centers) === 0){
-			return;
-		}
-
-		$roll = mt_rand(0, self::LIGHTNING_CHANCE - 1);
-		//A square containing the circle is a conservative upper bound. Rejecting
-		//before the expensive scan does not change the final probability.
-		if($roll >= count($centers) * (2 * $radius + 1) ** 2){
-			return;
-		}
-
-		$chunks = [];
-		foreach($centers as [$centerX, $centerZ]){
+			$centerX = $pos->getFloorX() >> Chunk::COORD_BIT_SIZE;
+			$centerZ = $pos->getFloorZ() >> Chunk::COORD_BIT_SIZE;
 			for($dx = -$radius; $dx <= $radius; ++$dx){
 				for($dz = -$radius; $dz <= $radius; ++$dz){
 					if($dx * $dx + $dz * $dz > $radius * $radius){
 						continue;
 					}
-					$cx = $centerX + $dx;
-					$cz = $centerZ + $dz;
-					if($this->world->isChunkLoaded($cx, $cz)){
-						$chunks[World::chunkHash($cx, $cz)] = true;
+					$chunkX = $centerX + $dx;
+					$chunkZ = $centerZ + $dz;
+					if($this->world->isChunkLoaded($chunkX, $chunkZ)){
+						$chunks[World::chunkHash($chunkX, $chunkZ)] = true;
 					}
 				}
 			}
 		}
-
-		if(!self::isSuccessfulLightningRoll($roll, count($chunks))){
+		$count = count($chunks);
+		if($count === 0 || mt_rand(0, self::LIGHTNING_CHANCE - 1) >= $count){
 			return;
 		}
 		$hashes = array_keys($chunks);
-		World::getXZ($hashes[mt_rand(0, count($hashes) - 1)], $chunkX, $chunkZ);
+		World::getXZ($hashes[mt_rand(0, $count - 1)], $chunkX, $chunkZ);
 		$this->tryNaturalStrike(
 			($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
 			($chunkZ << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1)
 		);
 	}
 
-	/** @internal A given roll succeeds only when it is below the number of eligible loaded chunks. */
-	public static function isSuccessfulLightningRoll(int $roll, int $loadedChunkCount) : bool{
-		return $loadedChunkCount > 0 && $roll >= 0 && $roll < $loadedChunkCount;
+	/**
+	 * Sends the weather to the given players (all the players of the world if none).
+	 */
+	public function broadcast(Player ...$targets) : void{
+		if(count($targets) === 0){
+			$targets = $this->world->getPlayers();
+		}
+		$rain = $this->getRainLevel();
+		$lightning = $this->getLightningLevel();
+		foreach($targets as $player){
+			$player->getNetworkSession()->syncWorldWeather($rain, $lightning);
+		}
 	}
 
+	// ---- where it rains ---------------------------------------------------------------------------------------------
+
 	/**
-	 * Lowest height reached by precipitation in an already loaded column.
-	 * Scans at most 8 pass-through blocks without loading or generating chunks.
+	 * Returns the Y of the lowest block that rain and snow reach in the column (one above the highest solid or liquid
+	 * block; flowers, grass, torches and other non-solid blocks let the rain through), or null if the chunk is not
+	 * loaded.
 	 */
 	public function getPrecipitationHeight(int $x, int $z) : ?int{
 		$chunk = $this->world->getChunk($x >> Chunk::COORD_BIT_SIZE, $z >> Chunk::COORD_BIT_SIZE);
@@ -327,8 +380,9 @@ class Weather{
 		if($highest === null){
 			return $this->world->getMinY();
 		}
+		$minY = $this->world->getMinY();
 		$y = $highest;
-		for($i = 0; $y >= $this->world->getMinY() && $i < 8; --$y, ++$i){
+		for($i = 0; $y >= $minY && $i < 8; --$y, ++$i){
 			$block = $this->world->getBlockAt($x, $y, $z);
 			if($block->isSolid() || $block instanceof Liquid){
 				return $y + 1;
@@ -337,11 +391,18 @@ class Weather{
 		return $y + 1;
 	}
 
+	/**
+	 * Whether the given block is exposed to the sky (nothing that stops the rain above it).
+	 */
 	public function isExposedToSky(int $x, int $y, int $z) : bool{
-		$top = $this->getPrecipitationHeight($x, $z);
-		return $top !== null && $y >= $top;
+		$height = $this->getPrecipitationHeight($x, $z);
+		return $height !== null && $y >= $height;
 	}
 
+	/**
+	 * What falls at the given position when it rains, depending on the biome and the height (whether it actually
+	 * rains is not checked).
+	 */
 	public function getPrecipitationAt(int $x, int $y, int $z) : Precipitation{
 		if(!$this->hasWeather() || !$this->world->isInWorld($x, $y, $z)){
 			return Precipitation::NONE;
@@ -349,26 +410,41 @@ class Weather{
 		return BiomeClimate::getPrecipitation($this->world->getBiomeId($x, $y, $z), $y);
 	}
 
+	/**
+	 * Whether rain (not snow) falls on the given block right now: it rains, the biome isn't dry or cold and the block
+	 * is under the open sky. This is what puts out burning entities, wets endermen and keeps farmland moist.
+	 */
 	public function isRainingAt(int $x, int $y, int $z) : bool{
 		return $this->isRaining() &&
 			$this->isExposedToSky($x, $y, $z) &&
 			$this->getPrecipitationAt($x, $y, $z) === Precipitation::RAIN;
 	}
 
-	/** @internal Called by World only for an already simulated chunk. */
+	// ---- per chunk effects ------------------------------------------------------------------------------------------
+
+	/**
+	 * @internal Called by the world for each ticked chunk, every tick.
+	 */
 	public function tickChunk(int $chunkX, int $chunkZ) : void{
 		if(!$this->hasWeather()){
 			return;
 		}
-		if($this->precipitationSamplesThisTick < self::MAX_PRECIPITATION_SAMPLES_PER_TICK &&
-			mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0
-		){
-			++$this->precipitationSamplesThisTick;
+		if(mt_rand(0, self::PRECIPITATION_CHANCE - 1) === 0){
 			$this->tickPrecipitationInChunk($chunkX, $chunkZ);
 		}
-
 	}
 
+	/**
+	 * @internal The chance of {@link Weather::tickChunk()}: a precipitation update when mt_rand(0, chance - 1) is 0, or
+	 * 0 when the world has no weather (no draw at all). Lets the world draw it natively.
+	 */
+	public function getPrecipitationChance() : int{
+		return $this->hasWeather() ? self::PRECIPITATION_CHANCE : 0;
+	}
+
+	/**
+	 * @internal What {@link Weather::tickChunk()} does once its draw hit: precipitation on a random column of the chunk.
+	 */
 	public function tickPrecipitationInChunk(int $chunkX, int $chunkZ) : void{
 		$this->tickPrecipitation(
 			($chunkX << Chunk::COORD_BIT_SIZE) + mt_rand(0, Chunk::EDGE_LENGTH - 1),
@@ -376,114 +452,112 @@ class Weather{
 		);
 	}
 
-	/** Ice formation is independent of rainfall; snow layers require rain state. */
+	/**
+	 * Precipitation on one column: water freezes in cold biomes (also when it doesn't snow), snow settles while it
+	 * snows, and the top block gets the rain or snow.
+	 */
 	public function tickPrecipitation(int $x, int $z) : void{
-		if(!$this->hasWeather()){
-			return;
-		}
 		$top = $this->getPrecipitationHeight($x, $z);
-		if($top === null || $top <= $this->world->getMinY() || $top >= $this->world->getMaxY()){
+		if($top === null || $top - 1 < $this->world->getMinY() || $top >= $this->world->getMaxY()){
 			return;
 		}
+		$world = $this->world;
 		$belowY = $top - 1;
-		$biome = $this->world->getBiomeId($x, $belowY, $z);
+		$biome = $world->getBiomeId($x, $belowY, $z);
 		if(!BiomeClimate::hasPrecipitation($biome)){
 			return;
 		}
-		$below = $this->world->getBlockAt($x, $belowY, $z);
-		if($below instanceof Water &&
-			self::canFreezeSourceWater($below, $biome, $belowY, $this->world->getBlockLightAt($x, $belowY, $z)) &&
-			$this->hasFreezingEdge($x, $belowY, $z)
-		){
-			BlockEventHelper::form($below, VanillaBlocks::ICE(), $below);
-			return;
+		$below = $world->getBlockAt($x, $belowY, $z);
+		if(BiomeClimate::isCold($biome, $belowY)){
+			if($below instanceof Water && $below->isSource() && $world->getBlockLightAt($x, $belowY, $z) < 10){
+				BlockEventHelper::form($below, VanillaBlocks::ICE(), $below);
+				return;
+			}
 		}
 		if(!$this->isRaining()){
 			return;
 		}
-		if(BiomeClimate::getPrecipitation($biome, $top) === Precipitation::SNOW){
+		$precipitation = BiomeClimate::getPrecipitation($biome, $top);
+		if($precipitation === Precipitation::SNOW){
 			$this->accumulateSnow($x, $top, $z, $below, $biome);
 		}
-		$fall = BiomeClimate::getPrecipitation($biome, $belowY);
-		if($fall !== Precipitation::NONE){
-			//The uppermost pass-through block (e.g. an open cauldron) also receives rain.
-			$this->world->getBlockAt($x, $top, $z)->onPrecipitation($fall);
-			$below->onPrecipitation($fall);
+		$at = BiomeClimate::getPrecipitation($biome, $belowY);
+		if($at !== Precipitation::NONE){
+			$below->onPrecipitation($at);
 		}
 	}
 
-	/** Vanilla freezes only cold, exposed source water with low block light and an edge. */
-	public static function canFreezeSourceWater(Water $water, int $biome, int $y, int $blockLight) : bool{
-		return $water->isSource() && BiomeClimate::isCold($biome, $y) && $blockLight < 10;
-	}
-
-	private function hasFreezingEdge(int $x, int $y, int $z) : bool{
-		foreach(Facing::HORIZONTAL as $face){
-			[$dx, $dy, $dz] = Facing::OFFSET[$face];
-			$nx = $x + $dx;
-			$nz = $z + $dz;
-			if(!$this->world->isChunkLoaded($nx >> Chunk::COORD_BIT_SIZE, $nz >> Chunk::COORD_BIT_SIZE)){
-				continue;
-			}
-			if(!($this->world->getBlockAt($nx, $y, $nz) instanceof Water)){
-				return true;
-			}
-		}
-		return false;
-	}
-
+	/**
+	 * Snowfall on top of a column: a layer settles on a full face or on leaves, and the layers pile up to the biome's
+	 * snow accumulation (Bedrock: up to 12 layers, the ones above 8 on top of a full layer). Snow layers are not solid,
+	 * so $top is the lowest snow layer of the column, if any.
+	 */
 	private function accumulateSnow(int $x, int $top, int $z, Block $below, int $biome) : void{
+		$world = $this->world;
 		$y = $top;
-		$current = $this->world->getBlockAt($x, $y, $z);
+		$current = $world->getBlockAt($x, $y, $z);
 		$depth = 0;
 		if($current instanceof SnowLayer && $current->getLayers() === SnowLayer::MAX_LAYERS){
 			$depth = SnowLayer::MAX_LAYERS;
-			if(++$y >= $this->world->getMaxY()){
+			if(++$y >= $world->getMaxY()){
 				return;
 			}
-			$current = $this->world->getBlockAt($x, $y, $z);
+			$current = $world->getBlockAt($x, $y, $z);
 		}
 		if($current instanceof SnowLayer){
 			$layers = $current->getLayers() + 1;
 			if($layers > SnowLayer::MAX_LAYERS){
 				return;
 			}
-		}elseif($current->getTypeId() === BlockTypeIds::AIR &&
-			($depth > 0 || $below instanceof Leaves || $below->getSupportType(Facing::UP) === SupportType::FULL)
-		){
+		}elseif($current->getTypeId() === BlockTypeIds::AIR && ($depth > 0 || $below instanceof Leaves || $below->getSupportType(Facing::UP) === SupportType::FULL)){
 			$layers = 1;
 		}else{
 			return;
 		}
-		if($depth + $layers > BiomeClimate::getSnowAccumulationLayers($biome) ||
-			$this->world->getBlockLightAt($x, $y, $z) >= 10
-		){
+		if($depth + $layers > BiomeClimate::getSnowAccumulationLayers($biome) || $world->getBlockLightAt($x, $y, $z) >= 10){
 			return;
 		}
 		BlockEventHelper::form($current, VanillaBlocks::SNOW_LAYER()->setLayers($layers), $current);
 	}
 
+	// ---- lightning --------------------------------------------------------------------------------------------------
 
-	/** Spawn a cancellable, short-lived lightning actor from a plugin or server system. */
-	public function strike(Vector3 $position, bool $visualOnly = false, int $cause = LightningStrikeEvent::CAUSE_CUSTOM) : ?LightningBolt{
-		return LightningBolt::strike(Location::fromObject($position, $this->world), $visualOnly, $cause);
-	}
-
-	/** Attempts a natural strike in a previously loaded, simulated chunk. */
+	/**
+	 * A natural strike near the given column: aimed like vanilla (see the class doc); nothing happens if it doesn't
+	 * rain or snow there. Returns the bolt, or null.
+	 */
 	public function tryNaturalStrike(int $x, int $z) : ?LightningBolt{
-		if(!$this->isThundering()){
-			return null;
-		}
 		$target = $this->findLightningTarget($x, $z);
-		if($target === null || !$this->isExposedToSky($target->getFloorX(), $target->getFloorY(), $target->getFloorZ()) ||
-			$this->getPrecipitationAt($target->getFloorX(), $target->getFloorY(), $target->getFloorZ()) === Precipitation::NONE
-		){
+		if($target === null){
 			return null;
 		}
-		return $this->strike($target->add(0.5, 0.0, 0.5), false, LightningStrikeEvent::CAUSE_WEATHER);
+		$tx = $target->getFloorX();
+		$ty = $target->getFloorY();
+		$tz = $target->getFloorZ();
+		if(!$this->isRaining() || !$this->isExposedToSky($tx, $ty, $tz) || $this->getPrecipitationAt($tx, $ty, $tz) === Precipitation::NONE){
+			return null;
+		}
+		$location = new Location($tx + 0.5, $ty, $tz + 0.5, $this->world, 0, 0);
+		if($this->trySkeletonTrap($location)){
+			return $this->strike($location, true, LightningStrikeEvent::CAUSE_TRAP);
+		}
+		return $this->strike($location, false, LightningStrikeEvent::CAUSE_WEATHER);
 	}
 
-	/** A lightning rod has priority over exposed living entities or the surface of the original column. */
+	/**
+	 * Spawns a lightning bolt at the given position (a visual-only bolt does no damage, sets no fire and powers no
+	 * lightning rod). Returns null if a plugin cancelled the strike.
+	 *
+	 * @phpstan-param LightningStrikeEvent::CAUSE_* $cause
+	 */
+	public function strike(Vector3 $pos, bool $visualOnly = false, int $cause = LightningStrikeEvent::CAUSE_CUSTOM) : ?LightningBolt{
+		return LightningBolt::strike(Location::fromObject($pos, $this->world), $visualOnly, $cause);
+	}
+
+	/**
+	 * Where a natural strike near the column lands: on a lightning rod in range, else on a random living entity under
+	 * the open sky within 3 blocks of the column, else on top of the column. Null if the chunk is not loaded.
+	 */
 	public function findLightningTarget(int $x, int $z) : ?Vector3{
 		$top = $this->getPrecipitationHeight($x, $z);
 		if($top === null){
@@ -494,17 +568,18 @@ class Weather{
 			return $rod->up();
 		}
 		$box = new AxisAlignedBB($x - 3, $top - 3, $z - 3, $x + 4, $this->world->getMaxY() + 3, $z + 4);
-		$entities = [];
+		$candidates = [];
 		foreach($this->world->getNearbyEntities($box) as $entity){
-			if($entity instanceof Living && $entity->isAlive()){
-				$pos = $entity->getPosition();
-				if($this->isExposedToSky($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())){
-					$entities[] = $pos;
-				}
+			if(!$entity instanceof Living || !$entity->isAlive()){
+				continue;
+			}
+			$pos = $entity->getPosition();
+			if($this->isExposedToSky($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ())){
+				$candidates[] = $pos;
 			}
 		}
-		if(count($entities) > 0){
-			$pos = $entities[mt_rand(0, count($entities) - 1)];
+		if(count($candidates) > 0){
+			$pos = $candidates[mt_rand(0, count($candidates) - 1)];
 			return new Vector3($pos->getFloorX(), $pos->getFloorY(), $pos->getFloorZ());
 		}
 		return new Vector3($x, $top, $z);
@@ -526,7 +601,7 @@ class Weather{
 	}
 
 	/**
-	 * Efficiently returns the nearest lightning rod within {@link Weather::LIGHTNING_ROD_RANGE} blocks that is the top block of
+	 * Returns the nearest lightning rod within {@link Weather::LIGHTNING_ROD_RANGE} blocks that is the top block of
 	 * its column, or null. Only the sub-chunks whose palette has a lightning rod are searched.
 	 */
 	public function findLightningRod(int $x, int $y, int $z) : ?Vector3{
@@ -583,15 +658,24 @@ class Weather{
 		return $best;
 	}
 
-	/** Broadcast through each player's own version-aware Bedrock session. */
-	public function broadcast(Player ...$targets) : void{
-		if(count($targets) === 0){
-			$targets = $this->world->getPlayers();
+	/**
+	 * Skeleton trap (vanilla): a natural strike has a chance of spawning a skeleton trap horse instead, which turns
+	 * into four skeleton horsemen when a player comes close. Chance: 1% per point of regional difficulty (simplified
+	 * to the world difficulty: easy 0.75%, normal 1.5%, hard 2.25%), only if there is no skeleton horse around.
+	 */
+	private function trySkeletonTrap(Location $location) : bool{
+		$difficulty = $this->world->getDifficulty();
+		if($difficulty === World::DIFFICULTY_PEACEFUL || Utils::getRandomFloat() >= $difficulty * 0.0075){
+			return false;
 		}
-		$rain = $this->getRainLevel();
-		$thunder = $this->getLightningLevel();
-		foreach($targets as $player){
-			$player->getNetworkSession()->syncWorldWeather($rain, $thunder);
+		foreach($this->world->getNearbyEntities(new AxisAlignedBB($location->x - 10, $location->y - 10, $location->z - 10, $location->x + 10, $location->y + 10, $location->z + 10)) as $entity){
+			if($entity instanceof SkeletonHorse){
+				return false;
+			}
 		}
+		$horse = new SkeletonHorse($location);
+		$horse->setTrap(true);
+		$horse->spawnToAll();
+		return true;
 	}
 }

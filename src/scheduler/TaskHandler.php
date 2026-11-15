@@ -23,6 +23,8 @@ declare(strict_types=1);
 
 namespace pocketmine\scheduler;
 
+use pocketmine\plugin\Plugin;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\timings\Timings;
 use pocketmine\timings\TimingsHandler;
 
@@ -46,7 +48,8 @@ class TaskHandler{
 		protected Task $task,
 		protected int $delay = -1,
 		protected int $period = -1,
-		?string $ownerName = null
+		?string $ownerName = null,
+		private ?Plugin $ownerPlugin = null
 	){
 		if($task->getHandler() !== null){
 			throw new \InvalidArgumentException("Cannot assign multiple handlers to the same task");
@@ -117,14 +120,34 @@ class TaskHandler{
 	 * @internal
 	 */
 	public function run() : void{
+		if($this->ownerPlugin !== null && PluginFaultHandler::isPluginPendingDisable($this->ownerPlugin)){
+			//the owner failed earlier and is about to be disabled (which cancels its tasks) - don't run its code any more
+			return;
+		}
 		$this->timings->startTiming();
 		try{
 			$this->task->onRun();
 		}catch(CancelTaskException $e){
 			$this->cancel();
+		}catch(\Throwable $e){
+			//rethrown if it isn't a plugin's fault (or if the server is configured to crash on plugin errors)
+			PluginFaultHandler::isolate($e, $this->ownerPlugin, "task " . $this->taskName . ($this->isRepeating() ? " (repeating, now cancelled)" : ""), $this->task);
+			//a failing task is cancelled: a repeating task would most likely just fail again
+			try{
+				$this->cancel();
+			}catch(\Throwable $e){
+				PluginFaultHandler::isolate($e, $this->ownerPlugin, "onCancel() of task " . $this->taskName, $this->task);
+			}
 		}finally{
 			$this->timings->stopTiming();
 		}
+	}
+
+	/**
+	 * Returns the plugin owning the scheduler this task was scheduled on, if known.
+	 */
+	public function getOwnerPlugin() : ?Plugin{
+		return $this->ownerPlugin;
 	}
 
 	public function getTaskName() : string{

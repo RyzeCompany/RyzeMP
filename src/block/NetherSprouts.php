@@ -30,7 +30,6 @@ class NetherSprouts extends Flowable{
 	use StaticSupportTrait;
 
 	private function canBeSupportedAt(Block $block) : bool{
-		//TODO: moss
 		$supportBlock = $block->getSide(Facing::DOWN);
 		return
 			$supportBlock->hasTypeTag(BlockTypeTags::DIRT) ||
@@ -38,4 +37,6 @@ class NetherSprouts extends Flowable{
 			$supportBlock->hasTypeTag(BlockTypeTags::NYLIUM) ||
 			$supportBlock->getTypeId() === BlockTypeIds::SOUL_SOIL;
 	}
+
+	public function getCompostabilityChance() : int{ return 50; }
 }

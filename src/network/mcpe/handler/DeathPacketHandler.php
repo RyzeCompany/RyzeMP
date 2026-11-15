@@ -28,10 +28,12 @@ use pocketmine\network\mcpe\InventoryManager;
 use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\ContainerClosePacket;
 use pocketmine\network\mcpe\protocol\DeathInfoPacket;
+use pocketmine\network\mcpe\protocol\MapInfoRequestPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
 use pocketmine\network\mcpe\protocol\RespawnPacket;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\player\Player;
+use pocketmine\world\map\MapManager;
 
 class DeathPacketHandler extends PacketHandler{
 	public function __construct(
@@ -87,5 +89,11 @@ class DeathPacketHandler extends PacketHandler{
 			return true;
 		}
 		return false;
+	}
+
+	public function handleMapInfoRequest(MapInfoRequestPacket $packet) : bool{
+		//maps in item frames the client sees from the death screen: it doesn't ask for them again after the respawn
+		MapManager::getInstance()->handleMapInfoRequest($this->player, $packet->mapId);
+		return true;
 	}
 }

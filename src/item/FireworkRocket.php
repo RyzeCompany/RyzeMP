@@ -92,11 +92,41 @@ class FireworkRocket extends Item{
 		return $this;
 	}
 
+	/**
+	 * Returns a random flight duration in ticks: (flight + 1) * 10 + 0..12, as vanilla
+	 * (https://minecraft.wiki/w/Firework_Rocket: (flight + 1) * 10 + rand(0..5) + rand(0..6)).
+	 */
+	protected function getRandomFlightDuration() : int{
+		return (($this->flightTimeMultiplier + 1) * 10) + mt_rand(0, 5) + mt_rand(0, 6);
+	}
+
+	/**
+	 * Using a firework in the air while gliding with an elytra boosts the player for the firework's flight duration.
+	 */
+	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
+		if(!$player->isGliding()){
+			return ItemUseResult::NONE;
+		}
+
+		$duration = $this->getRandomFlightDuration();
+		$location = $player->getLocation();
+		$entity = new FireworkEntity(Location::fromObject($location, $location->getWorld(), $location->yaw, $location->pitch), $duration, $this->explosions);
+		$entity->setOwningEntity($player);
+		$entity->setAttachedToOwner(true);
+		$entity->spawnToAll();
+
+		$player->getNetworkSession()->onGlideBoost($duration);
+
+		$this->pop();
+
+		return ItemUseResult::SUCCESS;
+	}
+
 	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
 		//TODO: this would be nicer if Vector3::getSide() accepted floats for distance
 		$position = $blockClicked->getPosition()->addVector($clickVector)->addVector(Vector3::zero()->getSide($face)->multiply(0.15));
 
-		$randomDuration = (($this->flightTimeMultiplier + 1) * 10) + mt_rand(0, 12);
+		$randomDuration = $this->getRandomFlightDuration();
 
 		$entity = new FireworkEntity(Location::fromObject($position, $player->getWorld(), Utils::getRandomFloat() * 360, 90), $randomDuration, $this->explosions);
 		$entity->setOwningEntity($player);

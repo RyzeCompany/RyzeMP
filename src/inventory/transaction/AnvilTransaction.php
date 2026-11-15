@@ -24,238 +24,277 @@ declare(strict_types=1);
 namespace pocketmine\inventory\transaction;
 
 use pocketmine\block\Anvil;
-use pocketmine\block\Block;
+use pocketmine\block\BlockTypeIds;
+use pocketmine\block\Planks;
+use pocketmine\block\VanillaBlocks;
+use pocketmine\item\Armor;
 use pocketmine\item\Durable;
-use pocketmine\item\EnchantedBook;
+use pocketmine\item\Elytra;
 use pocketmine\item\enchantment\AvailableEnchantmentRegistry;
 use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\enchantment\EnchantmentInstance;
-use pocketmine\item\enchantment\EnchantmentTransfer;
-use pocketmine\item\enchantment\IncompatibleEnchantMap;
+use pocketmine\item\enchantment\Rarity;
 use pocketmine\item\Item;
-use pocketmine\item\utils\ItemRepairUtils;
+use pocketmine\item\ItemBlock;
+use pocketmine\item\ItemTypeIds;
+use pocketmine\item\Mace;
+use pocketmine\item\Shield;
+use pocketmine\item\TieredTool;
+use pocketmine\item\ToolTier;
+use pocketmine\item\VanillaArmorMaterials;
 use pocketmine\player\Player;
-use pocketmine\utils\Limits;
+use pocketmine\world\Position;
+use pocketmine\world\sound\AnvilBreakSound;
 use pocketmine\world\sound\AnvilUseSound;
-use function array_intersect;
-use function array_merge;
 use function count;
-use function floor;
-use function log;
+use function intdiv;
 use function max;
+use function mb_substr;
 use function min;
+use function mt_rand;
+use function trim;
 
+/**
+ * Repairing, combining and renaming in an anvil (vanilla AnvilMenu.createResult):
+ * - repair with the material of the item: each material item restores a quarter of the durability (1 level each);
+ * - combine with the same item (durability of both plus 12%, 2 levels) and/or an enchanted book: enchantments are
+ *   merged (same levels go one up, up to the maximum), each costing its anvil cost (1, 2, 4 or 8 by rarity, halved for
+ *   books) times the level; incompatible ones cost 1 level and are dropped;
+ * - rename (1 level; renaming alone never costs more than 39 levels).
+ * The prior work penalty (RepairCost tag) of both items is added and doubles plus one after each use. Results of 40
+ * levels or more are "too expensive" outside creative. The anvil has a 12% chance to get damaged per use.
+ */
 class AnvilTransaction extends InventoryTransaction{
-	private const TAG_REPAIR_COST = "RepairCost";
-
-	private const MAX_COST = 39;
-	private const HARD_CAP = Limits::INT32_MAX;
-
-	private Item $result;
-	private int $xpCost = 0;
-	/** @var Item[] */
-	private array $consumed = [];
-
-	private static function repairCostToUses(int $repairCost) : int{
-		return (int) (log($repairCost + 1) / log(2));
-	}
-
-	private static function usesToRepairCost(int $uses) : int{
-		return (2 ** $uses) - 1;
-	}
+	public const TAG_REPAIR_COST = "RepairCost";
+	public const TOO_EXPENSIVE = 40;
+	public const MAX_NAME_LENGTH = 50;
 
 	public function __construct(
 		Player $source,
-		protected Block $holder,
-		protected Item $input,
-		protected Item $material,
-		protected ?string $rename,
+		private readonly Position $anvilPosition,
+		private readonly AnvilResult $expected,
 		array $actions = []
 	){
-		$this->consumed[] = clone $input;
 		parent::__construct($source, $actions);
-		$this->calculateResult();
 	}
 
-	private function calculateResult() : void{
-		$currentRepairCost = $this->input->getNamedTag()->getInt(self::TAG_REPAIR_COST, 0);
-		$currentRepairCost += $this->material->getNamedTag()->getInt(self::TAG_REPAIR_COST, 0);
-		$this->xpCost += $currentRepairCost;
-
-		$addRepairCost = false;
-
-		$this->result = clone $this->input;
-		if($this->rename !== null && $this->rename !== $this->input->getCustomName()){
-			// rename costs 1 additional XP but doesn't incur cumulative repair costs aside from the base cost
-			$this->result->setCustomName($this->rename);
-			$this->xpCost += 1;
-		}
-		if(!$this->material->isNull()){
-			$applicableEnchants = self::getApplicableEnchants($this->result, $this->material);
-			$sacrificeConsumed = false;
-
-			if($this->result instanceof Durable && $this->result->getDamage() > 0){
-				// result is a clone of input,
-				// therefore if input is instance of Durable, result must also be Durable
-				$damage = $this->result->getDamage();
-				if(ItemRepairUtils::isRepairableWith($this->result, $this->material)){
-					$currentRepairCost += $this->material->getNamedTag()->getInt(self::TAG_REPAIR_COST, 0);
-
-					$consumedCount = 0;
-					for($i = 0; $i < $this->material->getCount() && $damage > 0; $i++){
-						$damage -= (int) floor($this->result->getMaxDurability() / 4);
-						$consumedCount += 1;
-						$this->xpCost += 1;
-						$addRepairCost = true;
-					}
-					$this->consumed[] = $this->material->pop($consumedCount);
-					$sacrificeConsumed = true;
-				}elseif($this->material instanceof Durable && $this->result->equals($this->material, false, false)){
-					// merging the durability values of two items of the same type
-					$damage -= $this->material->getMaxDurability() - $this->material->getDamage();
-					$damage -= (int) floor($this->material->getMaxDurability() * 0.12) - 1;
-					$this->consumed[] = $this->material->pop();
-					$sacrificeConsumed = true;
-					$this->xpCost += 2;
-					$addRepairCost = true;
-				}
-
-				$this->result->setDamage(max(0, $damage));
-			}
-
-			if(count($applicableEnchants) > 0){
-				if(!$sacrificeConsumed){
-					$this->consumed[] = $this->material->pop();
-				}
-				$addRepairCost = true;
-
-				foreach($applicableEnchants as $enchant){
-					// we calculate the cost needed to "upgrade" the target item to the new enchant, considering the added level
-					$this->xpCost += EnchantmentTransfer::getCost(
-						$type = $enchant->getType(),
-						max($enchant->getLevel() - $this->result->getEnchantmentLevel($type), 0),
-						!$this->material instanceof EnchantedBook
-					);
-
-					$this->result->addEnchantment(clone $enchant);
-				}
-			}
-		}
-
-		if($addRepairCost){
-			$currentRepairCost = self::usesToRepairCost(self::repairCostToUses($currentRepairCost) + 1);
-		}
-		$this->result->getNamedTag()->setInt(self::TAG_REPAIR_COST, $currentRepairCost);
+	public function getExpectedResult() : AnvilResult{
+		return $this->expected;
 	}
 
-	public function getResult() : Item{
-		return $this->result;
-	}
-
-	public function getXPCost(bool $checkCreative = true) : int{
-		if($checkCreative && $this->source->isCreative() && $this->xpCost < self::HARD_CAP){
-			return 0;
-		}
-		return $this->xpCost;
+	public static function getRepairCost(Item $item) : int{
+		return $item->getNamedTag()->getInt(self::TAG_REPAIR_COST, 0);
 	}
 
 	/**
-	 * @return Item[]
+	 * Anvil cost of an enchantment per level (vanilla: 1, 2, 4 or 8 for common, uncommon, rare and very rare ones).
 	 */
-	public function getConsumedItems() : array{
-		return $this->consumed;
+	public static function getAnvilCost(Enchantment $enchantment) : int{
+		return match($enchantment->getRarity()){
+			Rarity::COMMON => 1,
+			Rarity::UNCOMMON => 2,
+			Rarity::RARE => 4,
+			default => 8
+		};
+	}
+
+	/**
+	 * Whether the material repairs the item in an anvil (vanilla repairable tags).
+	 */
+	public static function isValidRepairMaterial(Item $item, Item $material) : bool{
+		if($item instanceof Elytra || $item instanceof Mace || $item instanceof Shield){
+			return $item->isValidRepairMaterial($material);
+		}
+		$typeId = $material->getTypeId();
+		if($item instanceof TieredTool){
+			return match($item->getTier()){
+				ToolTier::WOOD => $material instanceof ItemBlock && $material->getBlock() instanceof Planks,
+				ToolTier::STONE => $material instanceof ItemBlock && match($material->getBlock()->getTypeId()){
+					BlockTypeIds::COBBLESTONE, BlockTypeIds::BLACKSTONE, BlockTypeIds::COBBLED_DEEPSLATE => true,
+					default => false
+				},
+				ToolTier::COPPER => $typeId === ItemTypeIds::COPPER_INGOT,
+				ToolTier::IRON => $typeId === ItemTypeIds::IRON_INGOT,
+				ToolTier::GOLD => $typeId === ItemTypeIds::GOLD_INGOT,
+				ToolTier::DIAMOND => $typeId === ItemTypeIds::DIAMOND,
+				ToolTier::NETHERITE => $typeId === ItemTypeIds::NETHERITE_INGOT
+			};
+		}
+		if($item instanceof Armor){
+			return match($item->getMaterial()){
+				VanillaArmorMaterials::LEATHER() => $typeId === ItemTypeIds::LEATHER,
+				VanillaArmorMaterials::CHAINMAIL(), VanillaArmorMaterials::IRON() => $typeId === ItemTypeIds::IRON_INGOT,
+				VanillaArmorMaterials::COPPER() => $typeId === ItemTypeIds::COPPER_INGOT,
+				VanillaArmorMaterials::GOLD() => $typeId === ItemTypeIds::GOLD_INGOT,
+				VanillaArmorMaterials::DIAMOND() => $typeId === ItemTypeIds::DIAMOND,
+				VanillaArmorMaterials::NETHERITE() => $typeId === ItemTypeIds::NETHERITE_INGOT,
+				VanillaArmorMaterials::TURTLE() => $typeId === ItemTypeIds::SCUTE,
+				default => false
+			};
+		}
+		return false;
+	}
+
+	/**
+	 * Computes the anvil result, or null if nothing can be made.
+	 *
+	 * @param string|null $newName the name typed in the anvil, null when it was not changed ("" removes a custom name)
+	 */
+	public static function calculateResult(Item $input, ?Item $material, ?string $newName, bool $creative) : ?AnvilResult{
+		if($input->isNull()){
+			return null;
+		}
+		if($material !== null && $material->isNull()){
+			$material = null;
+		}
+		$result = clone $input;
+		$cost = 0;
+		$renameCost = 0;
+		$materialUsed = 0;
+		$tax = self::getRepairCost($input) + ($material !== null ? self::getRepairCost($material) : 0);
+
+		if($material !== null){
+			$isBook = $material->getTypeId() === ItemTypeIds::ENCHANTED_BOOK;
+			if($result instanceof Durable && self::isValidRepairMaterial($input, $material)){
+				$max = $result->getMaxDurability();
+				$repair = min($result->getDamage(), intdiv($max, 4));
+				if($repair <= 0){
+					return null;
+				}
+				for(; $repair > 0 && $materialUsed < $material->getCount(); ++$materialUsed){
+					$result->setDamage($result->getDamage() - $repair);
+					++$cost;
+					$repair = min($result->getDamage(), intdiv($max, 4));
+				}
+			}else{
+				if(!$isBook && ($result->getTypeId() !== $material->getTypeId() || !$result instanceof Durable)){
+					return null;
+				}
+				if($result instanceof Durable && $input instanceof Durable && $material instanceof Durable && !$isBook){
+					$max = $result->getMaxDurability();
+					$remaining = ($max - $input->getDamage()) + ($max - $material->getDamage()) + intdiv($max * 12, 100);
+					$damage = max(0, $max - $remaining);
+					if($damage < $result->getDamage()){
+						$result->setDamage($damage);
+						$cost += 2;
+					}
+				}
+				$materialUsed = 1;
+				$applied = false;
+				$rejected = false;
+				$registry = AvailableEnchantmentRegistry::getInstance();
+				foreach($material->getEnchantments() as $instance){
+					$type = $instance->getType();
+					$current = $result->getEnchantmentLevel($type);
+					$level = $current === $instance->getLevel() ? $current + 1 : max($current, $instance->getLevel());
+					$accepted = $creative || $input->getTypeId() === ItemTypeIds::ENCHANTED_BOOK || $registry->isAvailableForItem($type, $input);
+					foreach($result->getEnchantments() as $other){
+						if($other->getType() !== $type && !$type->isCompatibleWith($other->getType())){
+							$accepted = false;
+							++$cost;
+						}
+					}
+					if(!$accepted){
+						$rejected = true;
+						continue;
+					}
+					$applied = true;
+					$level = min($level, $type->getMaxLevel());
+					$result->addEnchantment(new EnchantmentInstance($type, $level));
+					$enchantmentCost = self::getAnvilCost($type);
+					if($isBook){
+						$enchantmentCost = max(1, intdiv($enchantmentCost, 2));
+					}
+					$cost += $enchantmentCost * $level;
+					if($input->getCount() > 1){
+						$cost = self::TOO_EXPENSIVE;
+					}
+				}
+				if($rejected && !$applied){
+					return null;
+				}
+			}
+		}
+
+		if($newName !== null){
+			$newName = mb_substr($newName, 0, self::MAX_NAME_LENGTH);
+			if(trim($newName) === ""){
+				if($input->hasCustomName()){
+					$renameCost = 1;
+					$result->clearCustomName();
+				}
+			}elseif($newName !== $input->getName()){
+				$renameCost = 1;
+				$result->setCustomName($newName);
+			}
+			$cost += $renameCost;
+		}
+
+		if($cost <= 0){
+			return null;
+		}
+		$total = $tax + $cost;
+		if($renameCost === $cost && $total >= self::TOO_EXPENSIVE){
+			$total = self::TOO_EXPENSIVE - 1;
+		}
+		if($total >= self::TOO_EXPENSIVE && !$creative){
+			return null;
+		}
+
+		$repairCost = self::getRepairCost($result);
+		if($material !== null && $repairCost < self::getRepairCost($material)){
+			$repairCost = self::getRepairCost($material);
+		}
+		if($renameCost !== $cost){
+			$repairCost = $repairCost * 2 + 1;
+		}
+		$nbt = $result->getNamedTag();
+		$nbt->setInt(self::TAG_REPAIR_COST, $repairCost);
+		$result->setNamedTag($nbt);
+		$result->setCount(1);
+
+		return new AnvilResult($result, $total, $materialUsed);
 	}
 
 	public function validate() : void{
-		$this->squashDuplicateSlotChanges();
 		if(count($this->actions) < 1){
 			throw new TransactionValidationException("Transaction must have at least one action to be executable");
 		}
-
-		/** @var Item[] $createdItems */
-		$createdItems = [];
-		/** @var Item[] $deletedItems */
-		$deletedItems = [];
-		$this->matchItems($createdItems, $deletedItems);
-
-		if(count($createdItems) === 0){
-			throw new TransactionValidationException("Transaction attempted to execute but did not result to anything");
+		$inputs = [];
+		$outputs = [];
+		$this->matchItems($outputs, $inputs);
+		if(count($outputs) !== 1 || !$outputs[0]->equalsExact($this->expected->getResult())){
+			throw new TransactionValidationException("Invalid anvil output");
 		}
-		if(count($createdItems) > 1){
-			throw new TransactionValidationException("Transaction resulted into more than 1 item stack");
+		$consumed = 0;
+		foreach($inputs as $input){
+			$consumed += $input->getCount();
 		}
-		if(!$this->input->equals($createdItems[0], false, false)){
-			throw new TransactionValidationException("Transaction produced a different output item");
+		if($consumed !== 1 + $this->expected->getMaterialUsed()){
+			throw new TransactionValidationException("Expected the anvil to use 1 item and " . $this->expected->getMaterialUsed() . " material items, got $consumed items");
 		}
-		if(count($deletedItems) > count($this->consumed)){
-			throw new TransactionValidationException("Transaction consumed more than required items");
-		}
-		$cost = $this->getXPCost();
-		if($cost > self::MAX_COST || $cost > $this->source->getXpManager()->getXpLevel()){
-			throw new TransactionValidationException("Too expensive");
+		$xp = $this->source->getXpManager();
+		if($this->source->hasFiniteResources() && $xp->getXpLevel() < $this->expected->getXpCost()){
+			throw new TransactionValidationException("Not enough experience levels (need " . $this->expected->getXpCost() . ")");
 		}
 	}
 
 	public function execute() : void{
-		try{
-			parent::execute();
-		}catch(TransactionException $e){
-			$networkSession = $this->source->getNetworkSession();
-			$networkSession->getEntityEventBroadcaster()->syncAttributes([$networkSession], $this->source, $this->source->getAttributeMap()->getAll());
-			throw $e;
+		parent::execute();
+
+		if($this->source->hasFiniteResources()){
+			$this->source->getXpManager()->subtractXpLevels($this->expected->getXpCost());
 		}
-		$this->source->getXpManager()->subtractXpLevels($this->getXPCost());
-		$this->holder->getPosition()->getWorld()->addSound($this->holder->getPosition(), new AnvilUseSound());
-		if($this->holder instanceof Anvil && !$this->source->isCreative()){
-			$this->holder->attemptDamage();
+		$world = $this->anvilPosition->getWorld();
+		$block = $world->getBlock($this->anvilPosition);
+		if($this->source->hasFiniteResources() && $block instanceof Anvil && mt_rand(0, 99) < 12){
+			if($block->getDamage() >= Anvil::VERY_DAMAGED){
+				$world->setBlock($this->anvilPosition, VanillaBlocks::AIR());
+				$world->addSound($this->anvilPosition, new AnvilBreakSound());
+				return;
+			}
+			$world->setBlock($this->anvilPosition, $block->setDamage($block->getDamage() + 1));
 		}
-	}
-
-	/**
-	 * @return EnchantmentInstance[]
-	 */
-	public static function getApplicableEnchants(Item $target, Item $source) : array{
-		$applicableEnchants = [];
-
-		$availableEnchantRegistry = AvailableEnchantmentRegistry::getInstance();
-		$canEnchant = fn(Enchantment $enchantmentType) => (bool) count(
-			array_intersect($target->getEnchantmentTags(), array_merge(
-				$availableEnchantRegistry->getPrimaryItemTags($enchantmentType),
-				$availableEnchantRegistry->getSecondaryItemTags($enchantmentType)
-			))
-		);
-
-		foreach($source->getEnchantments() as $enchantment){
-			$enchantmentType = $enchantment->getType();
-			if(
-				!$canEnchant($enchantmentType) &&
-				!$target instanceof EnchantedBook // enchanted books let in any compatible
-			){
-				continue;
-			}
-
-			foreach($target->getEnchantments() as $existing){
-				if(IncompatibleEnchantMap::isIncompatible($existing->getType(), $enchantmentType)){
-					continue 2;
-				}
-			}
-
-			$level = $target->getEnchantment($enchantmentType)?->getLevel() ?? 0;
-			if($level > 0){
-				if($level < $enchantment->getLevel()){
-					// if target has a lower enchantment level, upgrade it to sacrifice's enchantment level
-					$enchantment = new EnchantmentInstance($enchantmentType, $enchantment->getLevel());
-				}elseif($level === $enchantment->getLevel()){
-					// if target has a matching enchantment level, add 1 to the resulting level capped at max
-					$enchantment = new EnchantmentInstance($enchantmentType, min($level + 1, $enchantmentType->getMaxLevel()));
-					if($level === $enchantment->getLevel()){
-						continue; // nothing changed, don't bother
-					}
-				}
-			}
-
-			$applicableEnchants[] = $enchantment;
-		}
-		return $applicableEnchants;
+		$world->addSound($this->anvilPosition, new AnvilUseSound());
 	}
 }

@@ -28,13 +28,12 @@ use pmmp\encoding\Byte;
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
 use pocketmine\nbt\LittleEndianNbtSerializer;
-use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\world\format\Chunk;
 use pocketmine\world\format\PalettedBlockArray;
 use pocketmine\world\format\SubChunk;
-use function array_map;
 use function array_values;
+use function class_exists;
 use function count;
 use function pack;
 use function strlen;
@@ -47,6 +46,7 @@ use function unpack;
 final class FastChunkSerializer{
 	private const FLAG_POPULATED = 1 << 1;
 	private const FLAG_PENDING_TILES = 1 << 2;
+	private const FLAG_PENDING_ENTITIES = 1 << 3;
 
 	private function __construct(){
 		//NOOP
@@ -64,17 +64,27 @@ final class FastChunkSerializer{
 	}
 
 	/**
-	 * Fast-serializes the chunk for passing between threads
-	 * Includes pending generator NBT. Live tiles and entities stay on the world thread.
+	 * Whether chunkutils2's FastSubChunkSerializer (>= 0.3.8) does the subchunk section: same bytes as the PHP code below.
+	 * Null until first use.
 	 */
-	public static function serializeTerrain(Chunk $chunk) : string{
-		$stream = new ByteBufferWriter();
-		$pendingTiles = $chunk->getPendingTileNBT();
-		Byte::writeUnsigned($stream, ($chunk->isPopulated() ? self::FLAG_POPULATED : 0) |
-			($pendingTiles !== [] ? self::FLAG_PENDING_TILES : 0));
+	private static ?bool $nativeSubChunks = null;
 
-		//subchunks
-		$subChunks = $chunk->getSubChunks();
+	/**
+	 * @internal for tests: forces the PHP (false) or native (true) subchunk code, or back to auto-detection (null).
+	 */
+	public static function setNativeSubChunks(?bool $native) : void{
+		if($native === true && !class_exists(FastSubChunkSerializer::class, false)){
+			throw new \LogicException("chunkutils2 >= 0.3.8 is required for native subchunk serialization");
+		}
+		self::$nativeSubChunks = $native;
+	}
+
+	/**
+	 * Reference implementation of the subchunk section (see FastSubChunkSerializer).
+	 * @param SubChunk[] $subChunks
+	 * @phpstan-param array<int, SubChunk> $subChunks
+	 */
+	private static function serializeSubChunks(ByteBufferWriter $stream, array $subChunks) : void{
 		$count = count($subChunks);
 		Byte::writeUnsigned($stream, $count);
 
@@ -90,14 +100,69 @@ final class FastChunkSerializer{
 			self::serializePalettedArray($stream, $subChunk->getBiomeArray());
 
 		}
+	}
 
-		if($pendingTiles !== []){
-			$nbt = (new LittleEndianNbtSerializer())->writeMultiple(array_map(
-				static fn(CompoundTag $tag) => new TreeRoot($tag),
-				array_values($pendingTiles)
-			));
-			BE::writeUnsignedInt($stream, strlen($nbt));
-			$stream->writeByteArray($nbt);
+	/**
+	 * Reference implementation of the subchunk section (see FastSubChunkSerializer).
+	 * @return SubChunk[]
+	 * @phpstan-return array<int, SubChunk>
+	 */
+	private static function deserializeSubChunks(ByteBufferReader $stream) : array{
+		$subChunks = [];
+
+		$count = Byte::readUnsigned($stream);
+		for($subCount = 0; $subCount < $count; ++$subCount){
+			$y = Byte::readSigned($stream);
+			//TODO: why the heck are we using big-endian here?
+			$airBlockId = BE::readUnsignedInt($stream);
+
+			$layers = [];
+			for($i = 0, $layerCount = Byte::readUnsigned($stream); $i < $layerCount; ++$i){
+				$layers[] = self::deserializePalettedArray($stream);
+			}
+			$biomeArray = self::deserializePalettedArray($stream);
+			$subChunks[$y] = new SubChunk($airBlockId, $layers, $biomeArray);
+		}
+		return $subChunks;
+	}
+
+	/**
+	 * Fast-serializes the chunk for passing between threads
+	 * TODO: tiles and entities
+	 */
+	public static function serializeTerrain(Chunk $chunk) : string{
+		$stream = new ByteBufferWriter();
+		$pendingTiles = $chunk->getPendingTileNBT();
+		$pendingEntities = $chunk->getPendingEntityNBT();
+		Byte::writeUnsigned($stream, ($chunk->isPopulated() ? self::FLAG_POPULATED : 0) | (count($pendingTiles) > 0 ? self::FLAG_PENDING_TILES : 0) | (count($pendingEntities) > 0 ? self::FLAG_PENDING_ENTITIES : 0));
+
+		//subchunks
+		$subChunks = $chunk->getSubChunks();
+		if(self::$nativeSubChunks ??= class_exists(FastSubChunkSerializer::class, false)){
+			$stream->writeByteArray(FastSubChunkSerializer::serialize($subChunks));
+		}else{
+			self::serializeSubChunks($stream, $subChunks);
+		}
+
+		if(count($pendingTiles) > 0){
+			//block entity data from world generators (see Chunk::addPendingTileNBT())
+			$nbtSerializer = new LittleEndianNbtSerializer();
+			BE::writeUnsignedInt($stream, count($pendingTiles));
+			foreach($pendingTiles as $nbt){
+				$serialNbt = $nbtSerializer->write(new TreeRoot($nbt));
+				BE::writeUnsignedInt($stream, strlen($serialNbt));
+				$stream->writeByteArray($serialNbt);
+			}
+		}
+		if(count($pendingEntities) > 0){
+			//entities from world generators (see Chunk::addPendingEntityNBT())
+			$nbtSerializer = new LittleEndianNbtSerializer();
+			BE::writeUnsignedInt($stream, count($pendingEntities));
+			foreach($pendingEntities as $nbt){
+				$serialNbt = $nbtSerializer->write(new TreeRoot($nbt));
+				BE::writeUnsignedInt($stream, strlen($serialNbt));
+				$stream->writeByteArray($serialNbt);
+			}
 		}
 
 		return $stream->getData();
@@ -123,27 +188,28 @@ final class FastChunkSerializer{
 		$flags = Byte::readUnsigned($stream);
 		$terrainPopulated = (bool) ($flags & self::FLAG_POPULATED);
 
-		$subChunks = [];
-
-		$count = Byte::readUnsigned($stream);
-		for($subCount = 0; $subCount < $count; ++$subCount){
-			$y = Byte::readSigned($stream);
-			//TODO: why the heck are we using big-endian here?
-			$airBlockId = BE::readUnsignedInt($stream);
-
-			$layers = [];
-			for($i = 0, $layerCount = Byte::readUnsigned($stream); $i < $layerCount; ++$i){
-				$layers[] = self::deserializePalettedArray($stream);
+		if(self::$nativeSubChunks ??= class_exists(FastSubChunkSerializer::class, false)){
+			$subChunks = [];
+			$offset = $stream->getOffset();
+			foreach(FastSubChunkSerializer::deserialize($data, $offset) as $y => [$airBlockId, $layers, $biomeArray]){
+				$subChunks[$y] = new SubChunk($airBlockId, $layers, $biomeArray);
 			}
-			$biomeArray = self::deserializePalettedArray($stream);
-			$subChunks[$y] = new SubChunk($airBlockId, $layers, $biomeArray);
+			$stream->setOffset($offset);
+		}else{
+			$subChunks = self::deserializeSubChunks($stream);
 		}
 
 		$chunk = new Chunk($subChunks, $terrainPopulated);
 		if(($flags & self::FLAG_PENDING_TILES) !== 0){
-			$nbt = $stream->readByteArray(BE::readUnsignedInt($stream));
-			foreach((new LittleEndianNbtSerializer())->readMultiple($nbt) as $tag){
-				$chunk->addPendingTileNBT($tag->mustGetCompoundTag());
+			$nbtSerializer = new LittleEndianNbtSerializer();
+			for($i = 0, $tileCount = BE::readUnsignedInt($stream); $i < $tileCount; ++$i){
+				$chunk->addPendingTileNBT($nbtSerializer->read($stream->readByteArray(BE::readUnsignedInt($stream)))->mustGetCompoundTag());
+			}
+		}
+		if(($flags & self::FLAG_PENDING_ENTITIES) !== 0){
+			$nbtSerializer = new LittleEndianNbtSerializer();
+			for($i = 0, $entityCount = BE::readUnsignedInt($stream); $i < $entityCount; ++$i){
+				$chunk->addPendingEntityNBT($nbtSerializer->read($stream->readByteArray(BE::readUnsignedInt($stream)))->mustGetCompoundTag());
 			}
 		}
 		return $chunk;

@@ -42,6 +42,15 @@ class Jukebox extends Spawnable{
 		$this->record = $record;
 	}
 
+	/** Server tick at which the current track ends (not saved: a reloaded jukebox is silent). */
+	private int $playingUntilTick = 0;
+
+	public function getPlayingUntilTick() : int{ return $this->playingUntilTick; }
+
+	public function setPlayingUntilTick(int $tick) : void{
+		$this->playingUntilTick = $tick;
+	}
+
 	public function readSaveData(CompoundTag $nbt) : void{
 		if(($tag = $nbt->getCompoundTag(self::TAG_RECORD)) !== null){
 			$record = Item::safeNbtDeserialize($tag, "Jukebox ($this->position) record");
@@ -57,14 +66,20 @@ class Jukebox extends Spawnable{
 		}
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 		//this is needed for the note particles to show on the client side
 		if($this->record !== null){
-			$nbt->setTag(self::TAG_RECORD, $typeConverter->getItemTranslator()->toNetworkNbt($this->record));
+			$nbt->setTag(self::TAG_RECORD, TypeConverter::getInstance()->getItemTranslator()->toNetworkNbt($this->record));
+		}
+	}
+
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		if($this->record !== null){
+			$nbt->setTag(self::TAG_RECORD, $converter->getItemTranslator()->toNetworkNbt($this->record));
 		}
 	}
 
 	protected function onBlockDestroyedHook() : void{
-		$this->position->getWorld()->addSound($this->position, new RecordStopSound());
+		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), new RecordStopSound($this->record?->getRecordType()));
 	}
 }

@@ -59,9 +59,9 @@ final class AvailableEnchantmentRegistry{
 		$this->register(Enchantments::RESPIRATION(), [Tags::HELMET], []);
 		$this->register(Enchantments::AQUA_AFFINITY(), [Tags::HELMET], []);
 		$this->register(Enchantments::FROST_WALKER(), [/* no primary items */], [Tags::BOOTS]);
-		$this->register(Enchantments::SHARPNESS(), [Tags::SWORD, Tags::AXE], []);
-		$this->register(Enchantments::KNOCKBACK(), [Tags::SWORD], []);
-		$this->register(Enchantments::FIRE_ASPECT(), [Tags::SWORD], []);
+		$this->register(Enchantments::SHARPNESS(), [Tags::SWORD, Tags::AXE, Tags::SPEAR], []);
+		$this->register(Enchantments::KNOCKBACK(), [Tags::SWORD, Tags::SPEAR], []);
+		$this->register(Enchantments::FIRE_ASPECT(), [Tags::SWORD, Tags::SPEAR], [Tags::MACE]);
 		$this->register(Enchantments::EFFICIENCY(), [Tags::BLOCK_TOOLS], [Tags::SHEARS]);
 		$this->register(Enchantments::FORTUNE(), [Tags::BLOCK_TOOLS], []);
 		$this->register(Enchantments::SILK_TOUCH(), [Tags::BLOCK_TOOLS], [Tags::SHEARS]);
@@ -82,6 +82,28 @@ final class AvailableEnchantmentRegistry{
 		);
 		$this->register(Enchantments::VANISHING(), [], [Tags::ALL]);
 		$this->register(Enchantments::SWIFT_SNEAK(), [], [Tags::LEGGINGS]);
+		//treasure enchantment: never offered by enchanting tables
+		$this->register(Enchantments::SOUL_SPEED(), [], [Tags::BOOTS]);
+		$this->register(Enchantments::MULTISHOT(), [Tags::CROSSBOW], []);
+		$this->register(Enchantments::QUICK_CHARGE(), [Tags::CROSSBOW], []);
+		$this->register(Enchantments::DENSITY(), [Tags::MACE], []);
+		$this->register(Enchantments::BREACH(), [Tags::MACE], []);
+		//treasure enchantment: never offered by enchanting tables
+		$this->register(Enchantments::WIND_BURST(), [], [Tags::MACE]);
+		$this->register(Enchantments::LUNGE(), [Tags::SPEAR], []);
+		$this->register(Enchantments::LOOTING(), [Tags::SWORD], []);
+		$this->register(Enchantments::CHANNELING(), [Tags::TRIDENT], []);
+		$this->register(Enchantments::SMITE(), [Tags::SWORD, Tags::AXE, Tags::SPEAR], [Tags::MACE]);
+		$this->register(Enchantments::BANE_OF_ARTHROPODS(), [Tags::SWORD, Tags::AXE, Tags::SPEAR], [Tags::MACE]);
+		$this->register(Enchantments::DEPTH_STRIDER(), [Tags::BOOTS], []);
+		$this->register(Enchantments::LUCK_OF_THE_SEA(), [Tags::FISHING_ROD], []);
+		$this->register(Enchantments::LURE(), [Tags::FISHING_ROD], []);
+		$this->register(Enchantments::IMPALING(), [Tags::TRIDENT], []);
+		$this->register(Enchantments::RIPTIDE(), [Tags::TRIDENT], []);
+		$this->register(Enchantments::LOYALTY(), [Tags::TRIDENT], []);
+		$this->register(Enchantments::PIERCING(), [Tags::CROSSBOW], []);
+		//treasure enchantment: never offered by enchanting tables
+		$this->register(Enchantments::BINDING(), [], [Tags::ARMOR, Tags::ELYTRA, Tags::MASK]);
 	}
 
 	/**

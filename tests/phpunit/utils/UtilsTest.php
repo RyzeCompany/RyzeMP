@@ -153,4 +153,78 @@ class UtilsTest extends TestCase{
 		$this->expectException(\InvalidArgumentException::class);
 		Utils::testValidInstance($className, $baseName); //@phpstan-ignore-line
 	}
+
+	/**
+	 * @return \Generator<int, array{string, ?int}, void, void>
+	 */
+	public static function cgroupCpuLimitProvider() : \Generator{
+		yield ["max 100000", null]; //cgroup v2, no limit
+		yield ["max 100000\n", null];
+		yield ["200000 100000", 2]; //200% (Pterodactyl CPU limit 200)
+		yield ["150000 100000\n", 2]; //150% rounds up
+		yield ["50000 100000", 1];
+		yield ["-1 100000", null]; //cgroup v1, no limit
+		yield ["", null];
+		yield ["garbage", null];
+	}
+
+	/**
+	 * @dataProvider cgroupCpuLimitProvider
+	 */
+	public function testParseCgroupCpuLimit(string $limit, ?int $expected) : void{
+		self::assertSame($expected, Utils::parseCgroupCpuLimit($limit));
+	}
+
+	/**
+	 * @return \Generator<int, array{string, ?int}, void, void>
+	 */
+	public static function cgroupCpuListProvider() : \Generator{
+		yield ["0-1,4", 3];
+		yield ["0-1,4\n", 3];
+		yield ["0", 1];
+		yield ["0-15", 16];
+		yield ["2,4,6-7", 4]; //Pterodactyl CPU pinning "2,4,6-7"
+		yield ["", null];
+		yield ["\n", null];
+		yield ["3-1", null];
+		yield ["0-", null];
+		yield ["0,,1", null];
+		yield ["garbage", null];
+	}
+
+	/**
+	 * @dataProvider cgroupCpuListProvider
+	 */
+	public function testParseCgroupCpuList(string $list, ?int $expected) : void{
+		self::assertSame($expected, Utils::parseCgroupCpuList($list));
+	}
+
+	/**
+	 * @return \Generator<int, array{string, ?string}, void, void>
+	 */
+	public static function cgroupV2PathProvider() : \Generator{
+		yield ["0::/\n", "/"]; //own cgroup namespace (Docker's default on cgroup v2)
+		yield ["0::/system.slice/docker-0123abcd.scope\n", "/system.slice/docker-0123abcd.scope"]; //host cgroup namespace
+		//cgroup v1 hierarchies listed before the unified one (hybrid systems)
+		yield ["12:cpu,cpuacct:/docker/0123abcd\n1:name=systemd:/docker/0123abcd\n0::/docker/0123abcd\n", "/docker/0123abcd"];
+		yield ["12:cpu,cpuacct:/docker/0123abcd\n1:name=systemd:/docker/0123abcd\n", null]; //cgroup v1 only
+		yield ["0::/../../user.slice\n", null]; //outside the cgroup namespace
+		yield ["0::\n", null];
+		yield ["", null];
+	}
+
+	/**
+	 * @dataProvider cgroupV2PathProvider
+	 */
+	public function testParseCgroupV2Path(string $procSelfCgroup, ?string $expected) : void{
+		self::assertSame($expected, Utils::parseCgroupV2Path($procSelfCgroup));
+	}
+
+	public function testGetUsableCoreCount() : void{
+		$usable = Utils::getUsableCoreCount();
+		self::assertGreaterThanOrEqual(0, $usable);
+		if(Utils::getCoreCount() > 0){
+			self::assertLessThanOrEqual(Utils::getCoreCount(), $usable, "the cgroup limits only lower the core count");
+		}
+	}
 }

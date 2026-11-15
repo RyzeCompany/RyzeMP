@@ -50,7 +50,6 @@ use pocketmine\network\mcpe\protocol\CraftingDataPacket;
 use pocketmine\network\mcpe\protocol\CreativeContentPacket;
 use pocketmine\network\mcpe\protocol\ItemRegistryPacket;
 use pocketmine\network\mcpe\protocol\PacketPool;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
 use pocketmine\network\mcpe\protocol\StartGamePacket;
 use pocketmine\network\mcpe\protocol\types\inventory\CreativeGroupEntry;
@@ -631,7 +630,7 @@ function main(array $argv) : int{
 		}
 		$serializer = new ByteBufferReader($raw);
 
-		$pk->decode($serializer, ProtocolInfo::CURRENT_PROTOCOL);
+		$pk->decode($serializer);
 		$pk->handle($handler);
 		$remaining = strlen($serializer->getData()) - $serializer->getOffset();
 		if($remaining > 0){

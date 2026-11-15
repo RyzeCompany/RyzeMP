@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\scheduler;
 
 use pmmp\thread\Thread as NativeThread;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\snooze\SleeperHandler;
 use pocketmine\thread\log\ThreadSafeLogger;
 use pocketmine\thread\ThreadCrashException;
@@ -34,8 +35,9 @@ use pocketmine\utils\Utils;
 use function array_keys;
 use function array_map;
 use function assert;
-use function count;
 use function get_class;
+use function max;
+use function min;
 use function spl_object_id;
 use function time;
 use const PHP_INT_MAX;
@@ -58,6 +60,9 @@ class AsyncPool{
 	 * @phpstan-var (\Closure(int $workerId) : void)[]
 	 */
 	private array $workerStartHooks = [];
+
+	/** See {@link AsyncPool::setReservedWorkerCount()}. */
+	private int $reservedWorkers = 0;
 
 	public function __construct(
 		protected int $size,
@@ -118,6 +123,15 @@ class AsyncPool{
 	}
 
 	/**
+	 * Returns whether the worker with the specified ID is running: started, and not shut down since (e.g. by
+	 * {@link AsyncPool::shutdownUnusedWorkers()}). Note that {@link AsyncPool::getRunningWorkers()} returns a list of
+	 * IDs, which must not be indexed by worker ID.
+	 */
+	public function isWorkerRunning(int $workerId) : bool{
+		return isset($this->workers[$workerId]);
+	}
+
+	/**
 	 * Fetches the worker with the specified ID, starting it if it does not exist, and firing any registered worker
 	 * start hooks.
 	 */
@@ -159,14 +173,55 @@ class AsyncPool{
 	/**
 	 * Selects a worker ID to run a task.
 	 *
-	 * - if an idle worker is found, it will be selected
+	 * - if an idle worker is found, it will be selected (a running worker outside the reserved ones first, see
+	 *   {@link AsyncPool::setReservedWorkerCount()})
 	 * - else, if the worker pool is not full, a new worker will be selected
 	 * - else, the worker with the smallest backlog is chosen.
 	 */
 	public function selectWorker() : int{
+		if($this->reservedWorkers > 0 && $this->reservedWorkers < $this->size){
+			foreach($this->workers as $i => $entry){
+				if($i >= $this->reservedWorkers && $entry->tasks->isEmpty()){
+					return $i;
+				}
+			}
+		}
+		return $this->selectWorkerAmong($this->size);
+	}
+
+	/**
+	 * Makes {@link AsyncPool::selectWorker()} (and so {@link AsyncPool::submitTask()}) prefer an idle running worker
+	 * with an ID of at least $count, so that the first $count workers stay free for the work that is kept on them with
+	 * selectWorkerAmong($count) (chunk generation, see chunk-generation.max-workers). The reserved workers still run
+	 * other tasks when no other running worker is idle, and no worker is started for this, so it costs no memory.
+	 * Has no effect when $count is 0 (the default) or not smaller than the pool size.
+	 */
+	public function setReservedWorkerCount(int $count) : void{
+		$this->reservedWorkers = max(0, $count);
+	}
+
+	/**
+	 * Returns the number of workers {@link AsyncPool::selectWorker()} keeps free for their own work when it can (see
+	 * {@link AsyncPool::setReservedWorkerCount()}): 0 when none are, or when that is not smaller than the pool size.
+	 */
+	public function getReservedWorkerCount() : int{
+		return $this->reservedWorkers < $this->size ? $this->reservedWorkers : 0;
+	}
+
+	/**
+	 * Like {@link AsyncPool::selectWorker()}, but only among the first $count workers (IDs 0 to $count - 1, at most the
+	 * pool size). Used to keep work that loads big thread-local state (world generators) on a few workers.
+	 */
+	public function selectWorkerAmong(int $count) : int{
+		$count = max(1, min($count, $this->size));
 		$worker = null;
 		$minUsage = PHP_INT_MAX;
+		$running = 0;
 		foreach($this->workers as $i => $entry){
+			if($i >= $count){
+				continue;
+			}
+			++$running;
 			if(($usage = $entry->tasks->count()) < $minUsage){
 				$worker = $i;
 				$minUsage = $usage;
@@ -175,9 +230,9 @@ class AsyncPool{
 				}
 			}
 		}
-		if($worker === null || ($minUsage > 0 && count($this->workers) < $this->size)){
+		if($worker === null || ($minUsage > 0 && $running < $count)){
 			//select a worker to start on the fly
-			for($i = 0; $i < $this->size; ++$i){
+			for($i = 0; $i < $count; ++$i){
 				if(!isset($this->workers[$i])){
 					$worker = $i;
 					break;
@@ -276,9 +331,24 @@ class AsyncPool{
 					 * been consumed before completing.
 					 */
 					$this->checkTaskProgressUpdates($task);
-					Timings::getAsyncTaskCompletionTimings($task)->time(function() use ($task) : void{
-						$task->onCompletion();
-					});
+					$failure = $task->getRunFailureInfo();
+					if($failure !== null){
+						//onRun() threw in the worker: crash as before if it's a core task, otherwise just log it
+						PluginFaultHandler::isolate(
+							new ThreadCrashException("Async task " . get_class($task) . " threw an exception in onRun() on worker $worker", $failure),
+							null,
+							"onRun() of async task " . get_class($task),
+							$task
+						);
+					}else{
+						Timings::getAsyncTaskCompletionTimings($task)->time(function() use ($task) : void{
+							try{
+								$task->onCompletion();
+							}catch(\Throwable $e){
+								PluginFaultHandler::isolate($e, null, "onCompletion() of async task " . get_class($task), $task);
+							}
+						});
+					}
 				}
 			}else{
 				$this->checkTaskProgressUpdates($task);
@@ -300,11 +370,27 @@ class AsyncPool{
 		return array_map(function(AsyncPoolWorkerEntry $entry) : int{ return $entry->tasks->count(); }, $this->workers);
 	}
 
+	/**
+	 * Shuts down the workers that have had no task for more than 300 seconds (they are started again when a task needs
+	 * them), giving their memory back.
+	 *
+	 * @return int the number of workers shut down
+	 */
 	public function shutdownUnusedWorkers() : int{
+		return $this->shutdownWorkersIdleFor(300);
+	}
+
+	/**
+	 * Shuts down the workers that have had no task for more than the given number of seconds (they are started again
+	 * when a task needs them), giving their memory back.
+	 *
+	 * @return int the number of workers shut down
+	 */
+	public function shutdownWorkersIdleFor(int $idleSeconds) : int{
 		$ret = 0;
 		$time = time();
 		foreach($this->workers as $i => $entry){
-			if($entry->lastUsed + 300 < $time && $entry->tasks->isEmpty()){
+			if($entry->lastUsed + $idleSeconds < $time && $entry->tasks->isEmpty()){
 				$entry->worker->quit();
 				$this->eventLoop->removeNotifier($entry->sleeperNotifierId);
 				unset($this->workers[$i]);
@@ -332,7 +418,11 @@ class AsyncPool{
 
 	private function checkTaskProgressUpdates(AsyncTask $task) : void{
 		Timings::getAsyncTaskProgressUpdateTimings($task)->time(function() use ($task) : void{
-			$task->checkProgressUpdates();
+			try{
+				$task->checkProgressUpdates();
+			}catch(\Throwable $e){
+				PluginFaultHandler::isolate($e, null, "onProgressUpdate() of async task " . get_class($task), $task);
+			}
 		});
 	}
 }

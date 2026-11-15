@@ -25,10 +25,13 @@ namespace pocketmine\network\mcpe\handler;
 
 use pocketmine\network\mcpe\protocol\EmoteListPacket;
 use pocketmine\network\mcpe\protocol\InteractPacket;
+use pocketmine\network\mcpe\protocol\MapInfoRequestPacket;
 use pocketmine\network\mcpe\protocol\MobEquipmentPacket;
 use pocketmine\network\mcpe\protocol\PlayerAuthInputPacket;
 use pocketmine\network\mcpe\protocol\ServerboundLoadingScreenPacket;
 use pocketmine\network\mcpe\protocol\SetLocalPlayerAsInitializedPacket;
+use pocketmine\player\Player;
+use pocketmine\world\map\MapManager;
 
 #[SilentDiscard(EmoteListPacket::class, comment: "Probably not needed?")]
 #[SilentDiscard(InteractPacket::class, comment: "Player interacting with itself somehow")]
@@ -37,12 +40,26 @@ use pocketmine\network\mcpe\protocol\SetLocalPlayerAsInitializedPacket;
 #[SilentDiscard(ServerboundLoadingScreenPacket::class, comment: "Not used, arrives with SetLocalPlayerAsInitialized")]
 final class SpawnResponsePacketHandler extends PacketHandler{
 	/**
+	 * @param Player|null $player the spawning player, whose map requests are answered once it has spawned
 	 * @phpstan-param \Closure() : void $responseCallback
 	 */
-	public function __construct(private \Closure $responseCallback){}
+	public function __construct(
+		private \Closure $responseCallback,
+		private ?Player $player = null
+	){}
 
 	public function handleSetLocalPlayerAsInitialized(SetLocalPlayerAsInitializedPacket $packet) : bool{
 		($this->responseCallback)();
+		return true;
+	}
+
+	public function handleMapInfoRequest(MapInfoRequestPacket $packet) : bool{
+		//the client's inventory already ticks while it loads, and it asks for the data of a map only once: the request
+		//is kept and answered once the player has spawned
+		if($this->player === null){
+			return false;
+		}
+		MapManager::getInstance()->handleMapInfoRequest($this->player, $packet->mapId);
 		return true;
 	}
 }

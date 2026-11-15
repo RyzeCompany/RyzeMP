@@ -26,17 +26,25 @@ namespace pocketmine\world\format\io\data;
 use pocketmine\data\bedrock\WorldDataVersions;
 use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\nbt\NbtDataException;
+use pocketmine\nbt\tag\ByteTag;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\ListTag;
+use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\utils\Binary;
 use pocketmine\utils\Filesystem;
 use pocketmine\utils\Limits;
 use pocketmine\VersionInfo;
+use pocketmine\world\BonusChest;
 use pocketmine\world\format\io\exception\CorruptedWorldException;
 use pocketmine\world\format\io\exception\UnsupportedWorldFormatException;
+use pocketmine\world\format\io\GameRulesWorldData;
+use pocketmine\world\format\io\MobSpawningWorldData;
+use pocketmine\world\format\io\WeatherCycleWorldData;
+use pocketmine\world\format\io\WorldAgeWorldData;
+use pocketmine\world\GameRules;
 use pocketmine\world\generator\Flat;
 use pocketmine\world\generator\GeneratorManager;
 use pocketmine\world\World;
@@ -49,7 +57,7 @@ use function strlen;
 use function substr;
 use function time;
 
-class BedrockWorldData extends BaseNbtWorldData{
+class BedrockWorldData extends BaseNbtWorldData implements WeatherCycleWorldData, MobSpawningWorldData, GameRulesWorldData, WorldAgeWorldData{
 
 	public const CURRENT_STORAGE_VERSION = WorldDataVersions::STORAGE;
 	public const CURRENT_STORAGE_NETWORK_VERSION = WorldDataVersions::NETWORK;
@@ -81,6 +89,9 @@ class BedrockWorldData extends BaseNbtWorldData{
 	private const TAG_TEXTURE_PACKS_REQUIRED = "texturePacksRequired";
 	private const TAG_LAST_OPENED_WITH_VERSION = "lastOpenedWithVersion";
 	private const TAG_COMMANDS_ENABLED = "commandsEnabled";
+	private const TAG_DO_WEATHER_CYCLE = "doweathercycle";
+	private const TAG_DO_MOB_SPAWNING = "domobspawning";
+	private const TAG_CURRENT_TICK = "currentTick";
 
 	public static function generate(string $path, string $name, WorldCreationOptions $options) : void{
 		switch($options->getGeneratorClass()){
@@ -109,6 +120,7 @@ class BedrockWorldData extends BaseNbtWorldData{
 			->setInt(self::TAG_SPAWN_Z, $options->getSpawnPosition()->getFloorZ())
 			->setInt(self::TAG_STORAGE_VERSION, self::CURRENT_STORAGE_VERSION)
 			->setLong(self::TAG_TIME, 0)
+			->setLong(self::TAG_CURRENT_TICK, 0)
 			->setByte(self::TAG_IS_EDU, 0)
 			->setByte(self::TAG_FALL_DAMAGE_ENABLED, 1)
 			->setByte(self::TAG_FIRE_DAMAGE_ENABLED, 1)
@@ -122,6 +134,11 @@ class BedrockWorldData extends BaseNbtWorldData{
 			->setByte(self::TAG_SPAWN_MOBS, 1)
 			->setByte(self::TAG_TEXTURE_PACKS_REQUIRED, 0) //TODO
 			->setByte(self::TAG_COMMANDS_ENABLED, 1)
+			->setByte(self::TAG_DO_WEATHER_CYCLE, 1)
+			->setByte(self::TAG_DO_MOB_SPAWNING, 1)
+			//BonusChest places the chest once the spawn chunk is populated and sets bonusChestSpawned then
+			->setByte(BonusChest::TAG_ENABLED, $options->hasBonusChest() ? 1 : 0)
+			->setByte(BonusChest::TAG_SPAWNED, 0)
 			->setTag(self::TAG_LAST_OPENED_WITH_VERSION, new ListTag(array_map(fn(int $v) => new IntTag($v), self::CURRENT_CLIENT_VERSION_TARGET)))
 
 			//Additional PocketMine-MP fields
@@ -249,5 +266,49 @@ class BedrockWorldData extends BaseNbtWorldData{
 
 	public function setLightningLevel(float $level) : void{
 		$this->compoundTag->setFloat(self::TAG_LIGHTNING_LEVEL, $level);
+	}
+
+	public function isWeatherCycleEnabled() : bool{
+		return $this->compoundTag->getByte(self::TAG_DO_WEATHER_CYCLE, 1) !== 0;
+	}
+
+	public function setWeatherCycleEnabled(bool $enabled) : void{
+		$this->compoundTag->setByte(self::TAG_DO_WEATHER_CYCLE, $enabled ? 1 : 0);
+	}
+
+	public function isMobSpawningEnabled() : bool{
+		return $this->compoundTag->getByte(self::TAG_DO_MOB_SPAWNING, 1) !== 0;
+	}
+
+	public function setMobSpawningEnabled(bool $enabled) : void{
+		$this->compoundTag->setByte(self::TAG_DO_MOB_SPAWNING, $enabled ? 1 : 0);
+	}
+
+	public function getWorldAge() : ?int{
+		$tag = $this->compoundTag->getTag(self::TAG_CURRENT_TICK);
+		return $tag instanceof LongTag ? $tag->getValue() : null;
+	}
+
+	public function setWorldAge(int $ticks) : void{
+		$this->compoundTag->setLong(self::TAG_CURRENT_TICK, $ticks);
+	}
+
+	/**
+	 * Game rules are stored like vanilla Bedrock does: a byte (bool rules) or an int tag named after the rule.
+	 */
+	public function getGameRule(string $name) : bool|int|null{
+		$tag = $this->compoundTag->getTag($name);
+		if(GameRules::isBool($name)){
+			return $tag instanceof ByteTag ? $tag->getValue() !== 0 : null;
+		}
+		return $tag instanceof IntTag ? $tag->getValue() : null;
+	}
+
+	public function setGameRule(string $name, bool|int $value) : void{
+		if($value === true || $value === false){
+			$this->compoundTag->setByte($name, $value ? 1 : 0);
+		}else{
+			$this->compoundTag->setInt($name, $value);
+		}
 	}
 }

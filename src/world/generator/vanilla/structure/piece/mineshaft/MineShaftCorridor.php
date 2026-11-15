@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\structure\piece\mineshaft;
 
+use pocketmine\block\tile\Container;
+use pocketmine\loot\LootTables;
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\generator\vanilla\feature\block\Direction;
 use pocketmine\world\generator\vanilla\feature\BlockEntityData;
 use pocketmine\world\generator\vanilla\feature\FeatureRandom;
@@ -30,6 +33,7 @@ use pocketmine\world\generator\vanilla\random\LegacyRandom;
 use pocketmine\world\generator\vanilla\structure\BoundingBox;
 use pocketmine\world\generator\vanilla\structure\piece\StructurePiecesBuilder;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
+use pocketmine\world\generator\vanilla\structure\template\EntityConversion;
 use function intdiv;
 
 /**
@@ -37,8 +41,12 @@ use function intdiv;
  * cobwebs, chest minecarts and sometimes a cave spider spawner.
  */
 final class MineShaftCorridor extends MineShaftPiece{
+	private const LOOT_TABLE = "minecraft:chests/abandoned_mineshaft";
+
 	private bool $hasRails;
 	private bool $spiderCorridor;
+	/** Set when the spawner is placed (vanilla keeps it in the piece, shared by the chunks of the start). */
+	private bool $hasPlacedSpider = false;
 	private int $numSections;
 
 	public function __construct(int $genDepth, LegacyRandom $random, BoundingBox $box, int $direction, bool $mesa){
@@ -149,7 +157,15 @@ final class MineShaftCorridor extends MineShaftPiece{
 		}
 		$rail = $random->nextBoolean() ? "minecraft:rail[shape=north_south]" : "minecraft:rail[shape=east_west]";
 		$this->placeBlock($c, $this->state($c, $rail), $x, $y, $z, $box);
-		$random->nextLong(); // Preserve the loot seed draw for the deferred chest minecart.
+		//MinecartChest at the block centre with a lazy loot table (World::createPendingEntities() gives it the table)
+		$seed = $random->nextLong();
+		$nbt = EntityConversion::pendingEntity(CompoundTag::create()->setString("id", "minecraft:chest_minecart"), $wx + 0.5, $wy + 0.5, $wz + 0.5, 0.0, 0.0);
+		if($nbt !== null){
+			$nbt->setString(Container::TAG_LOOT_TABLE, LootTables::toBedrockPath(self::LOOT_TABLE));
+			$nbt->setInt(Container::TAG_LOOT_TABLE_SEED, ($seed & 0xffffffff) - (($seed & 0x80000000) << 1));
+			$nbt->setLong(Container::TAG_LOOT_TABLE_SEED_LONG, $seed);
+			$level->addEntity($wx, $wz, $nbt);
+		}
 		return true;
 	}
 
@@ -162,7 +178,6 @@ final class MineShaftCorridor extends MineShaftPiece{
 		$level = $c->level;
 		$caveAir = $blocks->caveAir;
 		$length = $this->numSections * 5 - 1;
-		$placedSpider = false;
 		$planks = $this->state($c, $this->planksName());
 		$this->generateBox($c, $chunkBox, 0, 0, 0, 2, 1, $length, $caveAir, $caveAir, false);
 		$this->generateMaybeBox($c, $chunkBox, $random, 0.800000011920929, 0, 2, 0, 2, 2, $length, $caveAir, $caveAir, false, false);
@@ -187,11 +202,11 @@ final class MineShaftCorridor extends MineShaftPiece{
 			if($random->nextBoundedInt(100) === 0){
 				$this->createMinecartChest($c, $chunkBox, $random, 0, 0, $z + 1);
 			}
-			if($this->spiderCorridor && !$placedSpider){
+			if($this->spiderCorridor && !$this->hasPlacedSpider){
 				$newZ = $z - 1 + $random->nextBoundedInt(3);
 				[$wx, $wy, $wz] = $this->getWorldPos(1, 0, $newZ);
 				if($chunkBox->isInside($wx, $wy, $wz) && $this->isInterior($c, 1, 0, $newZ, $chunkBox)){
-					$placedSpider = true;
+					$this->hasPlacedSpider = true;
 					//level.setBlock() + SpawnerBlockEntity.setEntityId(): the empty spawn potentials consume no randomness
 					$level->setState($wx, $wy, $wz, $blocks->defaultOf("minecraft:spawner"));
 					$level->setBlockEntity($wx, $wy, $wz, BlockEntityData::spawner("minecraft:cave_spider"));

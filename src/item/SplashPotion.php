@@ -71,6 +71,11 @@ class SplashPotion extends ProjectileItem{
 		return 0.5;
 	}
 
+	/** Bedrock splash_potion.json and lingering_potion.json angle_offset: thrown 20 degrees above the look direction. */
+	protected function getThrowAngleOffset() : float{
+		return -20.0;
+	}
+
 	/**
 	 * Returns whether this splash potion will create an area-effect cloud on impact.
 	 */

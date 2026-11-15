@@ -26,8 +26,10 @@ namespace pocketmine\block;
 use pocketmine\block\tile\ItemFrame as TileItemFrame;
 use pocketmine\block\utils\AnyFacing;
 use pocketmine\block\utils\AnyFacingTrait;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\item\FilledMap;
 use pocketmine\item\Item;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
@@ -40,7 +42,7 @@ use pocketmine\world\sound\ItemFrameRotateItemSound;
 use function is_infinite;
 use function is_nan;
 
-class ItemFrame extends Flowable implements AnyFacing{
+class ItemFrame extends Flowable implements AnyFacing, ComparatorReadable{
 	use AnyFacingTrait;
 
 	public const ROTATIONS = 8;
@@ -106,6 +108,13 @@ class ItemFrame extends Flowable implements AnyFacing{
 		return $this;
 	}
 
+	/**
+	 * Rotation + 1 while the frame holds an item, 0 when empty (vanilla ItemFrame.getAnalogOutput()).
+	 */
+	public function getComparatorOutput() : int{
+		return $this->framedItem !== null ? ((($this->itemRotation % self::ROTATIONS) + self::ROTATIONS) % self::ROTATIONS) + 1 : 0;
+	}
+
 	public function getItemDropChance() : float{
 		return $this->itemDropChance;
 	}
@@ -139,6 +148,8 @@ class ItemFrame extends Flowable implements AnyFacing{
 			$this->position->getWorld()->addSound($this->position, new ItemFrameRotateItemSound());
 		}elseif(!$item->isNull()){
 			$this->framedItem = $item->pop();
+			//vanilla stretches the frame over the whole block face while it holds a map (item_frame_map_bit)
+			$this->hasMap = $this->framedItem instanceof FilledMap;
 
 			$this->position->getWorld()->addSound($this->position, new ItemFrameAddItemSound());
 		}else{
@@ -160,6 +171,7 @@ class ItemFrame extends Flowable implements AnyFacing{
 			$world->addSound($this->position, new ItemFrameRemoveItemSound());
 		}
 		$this->setFramedItem(null);
+		$this->hasMap = false;
 		$world->setBlock($this->position, $this);
 		return true;
 	}

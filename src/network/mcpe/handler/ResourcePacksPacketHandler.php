@@ -84,7 +84,6 @@ class ResourcePacksPacketHandler extends PacketHandler{
 
 	private bool $requestedMetadata = false;
 	private bool $requestedStack = false;
-	private bool $completed = false;
 
 	/** @var bool[][] uuid => [chunk index => hasSent] */
 	private array $downloadedChunks = [];
@@ -103,7 +102,7 @@ class ResourcePacksPacketHandler extends PacketHandler{
 	 * @phpstan-param \Closure() : void     $completionCallback
 	 */
 	public function __construct(
-		protected NetworkSession $session,
+		private NetworkSession $session,
 		private array $resourcePackStack,
 		private array $encryptionKeys,
 		private bool $mustAccept,
@@ -157,9 +156,6 @@ class ResourcePacksPacketHandler extends PacketHandler{
 	}
 
 	public function handleResourcePackClientResponse(ResourcePackClientResponsePacket $packet) : bool{
-		if($this->completed){
-			return true;
-		}
 		switch($packet->status){
 			case ResourcePackClientResponsePacket::STATUS_REFUSED:
 				//TODO: add lang strings for this
@@ -233,10 +229,10 @@ class ResourcePacksPacketHandler extends PacketHandler{
 				$this->session->getLogger()->debug("Applying resource pack stack");
 				break;
 			case ResourcePackClientResponsePacket::STATUS_COMPLETED:
-				// Player creation may complete asynchronously while this handler is
-				// still installed. Latch before the callback, including reentrant calls.
-				$this->completed = true;
 				$this->session->getLogger()->debug("Resource packs sequence completed");
+				if($this->session->getHandler() === $this){
+					$this->session->setHandler(null);
+				}
 				($this->completionCallback)();
 				break;
 			default:
@@ -291,14 +287,6 @@ class ResourcePacksPacketHandler extends PacketHandler{
 		$packId = $pack->getPackId();
 		$offset = $chunkIndex * self::PACK_CHUNK_SIZE;
 		$chunkData = $pack->getPackChunk($offset, self::PACK_CHUNK_SIZE);
-		if(!$this->session->supportsTransportReceipts()){
-			// SCTP supplies reliable ordered delivery; the next Minecraft chunk request
-			// drives progress. Do not invent a RakNet ACK from a local WebRTC enqueue.
-			if(!$this->session->sendDataPacket(ResourcePackChunkDataPacket::create($packId, $chunkIndex, $offset, $chunkData), true)){
-				$this->disconnectWithError("Plugin interrupted sending of resource packs");
-			}
-			return;
-		}
 		$this->activeRequests++;
 		$this->session
 			->sendDataPacketWithReceipt(ResourcePackChunkDataPacket::create($packId, $chunkIndex, $offset, $chunkData))

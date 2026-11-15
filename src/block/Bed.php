@@ -33,20 +33,21 @@ use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Living;
+use pocketmine\entity\npc\VillagerV2;
 use pocketmine\event\block\BlockPreExplodeEvent;
 use pocketmine\item\Item;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
-use pocketmine\Server;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\dimension\Dimension;
 use pocketmine\world\Explosion;
+use pocketmine\world\GameRules;
 use pocketmine\world\Position;
-use pocketmine\world\World;
+use pocketmine\world\SleepRules;
 
 class Bed extends Transparent implements Colored, HorizontalFacing{
 	use ColoredTrait;
@@ -126,36 +127,54 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($player !== null){
-			$dimension = Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld());
-			if($dimension === DimensionIds::NETHER || $dimension === DimensionIds::THE_END){
-				$this->explodeInInvalidDimension($player);
-				return true;
-			}
 			$other = $this->getOtherHalf();
 			$playerPos = $player->getPosition();
 			if($other === null){
 				$player->sendMessage(KnownTranslationFactory::pocketmine_block_bed_incomplete()->prefix(TextFormat::GRAY));
 
 				return true;
+			}elseif($this->position->getWorld()->getDimension() !== Dimension::OVERWORLD){
+				//beds can't be slept in outside the Overworld: they blow up (unless respawnblocksexplode is off)
+				if(GameRules::allowsRespawnBlockExplosions($this->position->getWorld())){
+					$this->explode($player, $other);
+				}else{
+					$player->sendMessage(KnownTranslationFactory::tile_bed_noSleep()->prefix(TextFormat::GRAY));
+				}
+				return true;
 			}elseif($playerPos->distanceSquared($this->position) > 4 && $playerPos->distanceSquared($other->position) > 4){
 				$player->sendMessage(KnownTranslationFactory::tile_bed_tooFar()->prefix(TextFormat::GRAY));
 				return true;
 			}
 
-			$time = $this->position->getWorld()->getTimeOfDay();
+			$b = ($this->isHeadPart() ? $this : $other);
+			$world = $b->position->getWorld();
 
-			$isNight = ($time >= World::TIME_NIGHT && $time < World::TIME_SUNRISE);
+			if($b->occupied && ($villager = VillagerV2::findSleeperAt($world, $b->position)) !== null){
+				//using a villager's bed wakes it up
+				$villager->wakeUp();
+				$b->occupied = false;
+			}
+			if($b->occupied){
+				$player->sendMessage(KnownTranslationFactory::tile_bed_occupied()->prefix(TextFormat::GRAY));
 
-			if(!$isNight){
+				return true;
+			}
+
+			//using a bed sets the spawn point at any time, even when the player can't sleep (Bedrock 1.16+)
+			if(!$this->isSpawnPointOf($player, $b)){
+				$player->setSpawn($b->position);
+				$player->sendMessage(KnownTranslationFactory::tile_bed_respawnSet()->prefix(TextFormat::GRAY));
+			}
+
+			//players can also sleep through a thunderstorm (vanilla)
+			if(!SleepRules::canSleepNow($world)){
 				$player->sendMessage(KnownTranslationFactory::tile_bed_noSleep()->prefix(TextFormat::GRAY));
 
 				return true;
 			}
 
-			$b = ($this->isHeadPart() ? $this : $other);
-
-			if($b->occupied){
-				$player->sendMessage(KnownTranslationFactory::tile_bed_occupied()->prefix(TextFormat::GRAY));
+			if(($player->isSurvival() || $player->isAdventure()) && SleepRules::findMonsterPreventingSleep($world, $b->position, $player) !== null){
+				$player->sendMessage(KnownTranslationFactory::tile_bed_notSafe()->prefix(TextFormat::GRAY));
 
 				return true;
 			}
@@ -167,8 +186,23 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 
 	}
 
-	private function explodeInInvalidDimension(Player $player) : void{
-		$ev = new BlockPreExplodeEvent($this, 5.0, $player);
+	private function isSpawnPointOf(Player $player, Bed $head) : bool{
+		if(!$player->hasValidCustomSpawn()){
+			return false;
+		}
+		$spawn = $player->getSpawn();
+		return $spawn->getWorld() === $head->position->getWorld() &&
+			$spawn->getFloorX() === $head->position->getFloorX() &&
+			$spawn->getFloorY() === $head->position->getFloorY() &&
+			$spawn->getFloorZ() === $head->position->getFloorZ();
+	}
+
+	/**
+	 * Vanilla "intentional game design": power 5 incendiary explosion centred on the head of the bed.
+	 */
+	private function explode(Player $player, Bed $other) : void{
+		$head = $this->head ? $this : $other;
+		$ev = new BlockPreExplodeEvent($head, 5, $player);
 		$ev->setIncendiary(true);
 		$ev->call();
 		if($ev->isCancelled()){
@@ -176,19 +210,10 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 		}
 
 		$world = $this->position->getWorld();
-		$other = $this->getOtherHalf();
-		$head = ($other === null || $this->isHeadPart()) ? $this : $other;
-		$center = Position::fromObject($head->getPosition()->add(0.5, 0.5, 0.5), $world);
+		$world->setBlock($this->position, VanillaBlocks::AIR());
+		$world->setBlock($other->position, VanillaBlocks::AIR());
 
-		foreach([$this, $other] as $half){
-			if($half === null){
-				continue;
-			}
-			$world->getTile($half->getPosition())?->onBlockDestroyed();
-			$world->setBlock($half->getPosition(), VanillaBlocks::AIR());
-		}
-
-		$explosion = new Explosion($center, $ev->getRadius(), $this);
+		$explosion = new Explosion(Position::fromObject($head->position->add(0.5, 0.5, 0.5), $world), $ev->getRadius(), $head);
 		$explosion->setFireChance($ev->getFireChance());
 		if($ev->isBlockBreaking()){
 			$explosion->explodeA();
@@ -204,11 +229,20 @@ class Bed extends Transparent implements Colored, HorizontalFacing{
 	}
 
 	public function onEntityLand(Entity $entity) : ?float{
+		//beds halve the fall damage (the part of the distance above the 3 safe blocks), sneaking only stops the bounce
+		$fallDistance = $entity->getFallDistance();
+		if($fallDistance > 3){
+			$entity->setFallDistance(3 + ($fallDistance - 3) * 0.5);
+		}
 		if($entity instanceof Living && $entity->isSneaking()){
 			return null;
 		}
-		$entity->fallDistance *= 0.5;
-		return $entity->getMotion()->y * -3 / 4; // 2/3 in Java, according to the wiki
+		$motionY = $entity->getMotion()->y;
+		if($motionY >= 0){
+			return null;
+		}
+		//2/3 in Java, according to the wiki; items, orbs, minecarts... get 80% of it (vanilla BedBlock.bounceUp())
+		return $motionY * -3 / 4 * ($entity instanceof Living ? 1.0 : 0.8);
 	}
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{

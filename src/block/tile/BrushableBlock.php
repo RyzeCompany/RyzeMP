@@ -23,18 +23,16 @@ declare(strict_types=1);
 
 namespace pocketmine\block\tile;
 
-use pocketmine\block\BrushableBlock as BrushableBlockState;
+use pocketmine\block\utils\ArchaeologyLoot;
 use pocketmine\entity\Entity;
 use pocketmine\item\Item;
 use pocketmine\loot\LootContext;
-use pocketmine\loot\LootStack;
+use pocketmine\loot\LootItemConverter;
 use pocketmine\loot\LootTables;
+use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\IntTag;
 use pocketmine\nbt\tag\LongTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
-use pocketmine\world\format\io\GlobalBlockStateHandlers;
-use pocketmine\world\format\io\GlobalItemDataHandlers;
 use function count;
 
 /**
@@ -81,47 +79,38 @@ class BrushableBlock extends Spawnable{
 		$this->item = $item === null || $item->isNull() ? null : clone $item;
 	}
 
-	/** Reveals one item using the generated seed and the world's pinned loot data. */
+	/**
+	 * Rolls the loot table if it was not rolled yet and returns the item that will be uncovered. Uses the vanilla loot
+	 * table (exact for the seed) when the vanilla data is available, otherwise a built-in copy of the archaeology tables.
+	 */
 	public function unpackLootTable(?Entity $brushingEntity = null, ?Item $brush = null) : ?Item{
-		if($this->lootTable === null){
-			return $this->getItem();
-		}
-		$world = $this->position->getWorld();
-		try{
-			$table = LootTables::forWorld($world)?->get($this->lootTable);
-			if($table === null){
-				return null;
+		if($this->lootTable !== null){
+			$table = LootTables::get($this->lootTable);
+			if($table !== null){
+				$context = LootContext::seeded($this->lootTableSeed);
+				$context->world = $this->position->getWorld();
+				$context->origin = new Vector3($this->position->getFloorX() + 0.5, $this->position->getFloorY() + 0.5, $this->position->getFloorZ() + 0.5);
+				$context->thisEntity = $brushingEntity;
+				$context->tool = $brush !== null ? LootItemConverter::fromItem($brush) : null;
+				//vanilla uncovers the first item rolled
+				$stacks = $table->getRandomItems($context);
+				$this->item = isset($stacks[0]) ? LootItemConverter::toItem($stacks[0]) : null;
+			}else{
+				$this->item = ArchaeologyLoot::roll($this->lootTable);
 			}
-			$context = LootContext::seeded($this->lootTableSeed);
-			$context->world = $world;
-			$context->origin = $this->position->add(0.5, 0.5, 0.5);
-			$context->thisEntity = $brushingEntity;
-			if($brush !== null){
-				$context->tool = new LootStack(GlobalItemDataHandlers::getSerializer()->serializeType($brush)->getName());
-			}
-			$this->item = $table->generate($context)[0] ?? null;
 			$this->lootTable = null;
 			$this->lootTableSeed = 0;
-			$this->clearSpawnCompoundCache();
-		}catch(\UnexpectedValueException|\RuntimeException|\JsonException $e){
-			$world->getLogger()->warning("Unable to reveal generated archaeology loot at " . $this->position . ": " . $e->getMessage());
 		}
 		return $this->getItem();
 	}
 
 	public function getBrushCount() : int{ return $this->brushCount; }
 
-	public function setBrushCount(int $brushCount) : void{
-		$this->brushCount = $brushCount;
-		$this->clearSpawnCompoundCache();
-	}
+	public function setBrushCount(int $brushCount) : void{ $this->brushCount = $brushCount; }
 
 	public function getBrushDirection() : int{ return $this->brushDirection; }
 
-	public function setBrushDirection(int $brushDirection) : void{
-		$this->brushDirection = $brushDirection;
-		$this->clearSpawnCompoundCache();
-	}
+	public function setBrushDirection(int $brushDirection) : void{ $this->brushDirection = $brushDirection; }
 
 	public function readSaveData(CompoundTag $nbt) : void{
 		$lootTable = $nbt->getString(self::TAG_LOOT_TABLE, "");
@@ -152,14 +141,10 @@ class BrushableBlock extends Spawnable{
 		$nbt->setByte(self::TAG_BRUSH_DIRECTION, $this->brushDirection);
 	}
 
-	protected function getRequiredNetworkBlockName() : ?string{
-		$block = $this->getBlock();
-		return $block instanceof BrushableBlockState ? GlobalBlockStateHandlers::getSerializer()->serializeBlock($block)->getName() : null;
-	}
-
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
-		if($this->item !== null && $typeConverter->getItemTranslator()->toNetworkIdQuiet($this->item) !== null){
-			$nbt->setTag(self::TAG_ITEM, $typeConverter->getItemTranslator()->toNetworkNbt($this->item));
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
+		//the client shows the uncovered item while brushing
+		if($this->item !== null){
+			$nbt->setTag(self::TAG_ITEM, $this->item->nbtSerialize());
 		}
 		$nbt->setInt(self::TAG_BRUSH_COUNT, $this->brushCount);
 		$nbt->setByte(self::TAG_BRUSH_DIRECTION, $this->brushDirection);

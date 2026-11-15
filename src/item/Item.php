@@ -276,6 +276,7 @@ class Item implements \JsonSerializable{
 	 * Removes the Item's NBT.
 	 * @return $this
 	 * @throws NbtException
+	 * @throws SavedDataLoadingException if the item needs data that an empty tag lacks (e.g. firework rockets)
 	 */
 	public function clearNamedTag() : Item{
 		$this->nbt = new CompoundTag();
@@ -594,6 +595,20 @@ class Item implements \JsonSerializable{
 	}
 
 	/**
+	 * Returns the chance that this item will fill one layer of a composter.
+	 */
+	public function getCompostabilityChance() : int{
+		return 0;
+	}
+
+	/**
+	 * Returns whether this item can be used in a composter.
+	 */
+	public function isCompostable() : bool{
+		return $this->getCompostabilityChance() > 0;
+	}
+
+	/**
 	 * Called when a player uses this item on a block.
 	 *
 	 * @param Item[] &$returnedItems Items to be added to the target's inventory (or dropped, if the inventory is full)
@@ -620,6 +635,13 @@ class Item implements \JsonSerializable{
 	 */
 	public function onReleaseUsing(Player $player, array &$returnedItems) : ItemUseResult{
 		return ItemUseResult::NONE;
+	}
+
+	/**
+	 * Called every tick while the player is using a Chargeable item (holding right-click/pressing screen).
+	 */
+	public function continueUsing(Player $player, int $useDuration) : void{
+
 	}
 
 	/**

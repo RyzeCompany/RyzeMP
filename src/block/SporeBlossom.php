@@ -33,4 +33,14 @@ final class SporeBlossom extends Flowable{
 	private function canBeSupportedAt(Block $block) : bool{
 		return $block->getAdjacentSupportType(Facing::UP) === SupportType::FULL;
 	}
+
+	public function getCompostabilityChance() : int{ return 65; }
+
+	public function getFlameEncouragement() : int{
+		return 15;
+	}
+
+	public function getFlammability() : int{
+		return 100;
+	}
 }

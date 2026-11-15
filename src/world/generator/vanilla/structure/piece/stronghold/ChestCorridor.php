@@ -32,6 +32,8 @@ use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
  * StrongholdPieces.ChestCorridor: a corridor with a slab altar holding a chest.
  */
 final class ChestCorridor extends StrongholdPiece{
+	private bool $hasPlacedChest = false;
+
 	private function __construct(int $genDepth, LegacyRandom $random, BoundingBox $box, int $direction){
 		parent::__construct($genDepth, $box, $direction);
 		$this->entryDoor = self::randomSmallDoor($random);
@@ -63,6 +65,12 @@ final class ChestCorridor extends StrongholdPiece{
 		for($z = 2; $z <= 4; ++$z){
 			$this->placeBlock($c, $slab, 2, 1, $z, $box);
 		}
-		$this->createChest($c, $box, $random, 3, 2, 3, "minecraft:chests/stronghold_corridor");
+		if(!$this->hasPlacedChest){
+			[$x, $y, $z] = $this->getWorldPos(3, 2, 3);
+			if($box->isInside($x, $y, $z)){
+				$this->hasPlacedChest = true;
+				$this->createChest($c, $box, $random, 3, 2, 3, "minecraft:chests/stronghold_corridor");
+			}
+		}
 	}
 }

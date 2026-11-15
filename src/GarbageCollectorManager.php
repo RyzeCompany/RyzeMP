@@ -29,6 +29,7 @@ use function gc_disable;
 use function gc_status;
 use function hrtime;
 use function max;
+use function memory_get_usage;
 use function min;
 use function number_format;
 use function sprintf;
@@ -48,8 +49,11 @@ final class GarbageCollectorManager{
 	private const GC_THRESHOLD_STEP = 10_000;
 
 	private int $threshold = self::GC_THRESHOLD_DEFAULT;
+	private int $minThreshold = self::GC_THRESHOLD_DEFAULT;
+	private int $maxThreshold = self::GC_THRESHOLD_MAX;
 	private int $collectionTimeTotalNs = 0;
 	private int $runs = 0;
+	private int $lastCollectionTimeNs = 0;
 
 	private \Logger $logger;
 	private TimingsHandler $timings;
@@ -68,44 +72,94 @@ final class GarbageCollectorManager{
 		//If there are "too few" collections, increase the collection threshold
 		//by a fixed step
 		//Adapted from zend_gc.c/gc_adjust_threshold() as of PHP 8.3.14
-		if($cyclesCollected < self::GC_THRESHOLD_TRIGGER || $rootsAfterGC >= $this->threshold){
-			$this->threshold = min(self::GC_THRESHOLD_MAX, $this->threshold + self::GC_THRESHOLD_STEP);
-		}elseif($this->threshold > self::GC_THRESHOLD_DEFAULT){
-			$this->threshold = max(self::GC_THRESHOLD_DEFAULT, $this->threshold - self::GC_THRESHOLD_STEP);
+		if($cyclesCollected === 0){
+			//nothing to collect at all: a server keeps tens of thousands of possible roots alive that are no garbage, and
+			//growing by one step at a time made a 60-140 ms main thread pause every few seconds after a player joined
+			//(30k, 40k, 50k... roots, 0 cycles each time); double the threshold instead
+			$this->threshold = min($this->maxThreshold, $this->threshold * 2);
+		}elseif($cyclesCollected < self::GC_THRESHOLD_TRIGGER || $rootsAfterGC >= $this->threshold){
+			$this->threshold = min($this->maxThreshold, $this->threshold + self::GC_THRESHOLD_STEP);
+		}elseif($this->threshold > $this->minThreshold){
+			$this->threshold = max($this->minThreshold, $this->threshold - self::GC_THRESHOLD_STEP);
 		}
+	}
+
+	/**
+	 * Bounds of the number of possible roots at which a collection runs (memory.garbage-collection.cycle-threshold-min / -max
+	 * for the main thread). The threshold starts at the minimum. Without a call (async workers): PHP's own, 10001 and 1 billion.
+	 */
+	public function setThresholdLimits(int $min, int $max) : void{
+		$this->minThreshold = max(1, $min);
+		$this->maxThreshold = max($this->minThreshold, $max);
+		$this->threshold = $this->minThreshold;
 	}
 
 	public function getThreshold() : int{ return $this->threshold; }
 
 	public function getCollectionTimeTotalNs() : int{ return $this->collectionTimeTotalNs; }
 
+	/** Returns how long the last collection took (0 before the first one). */
+	public function getLastCollectionTimeNs() : int{ return $this->lastCollectionTimeNs; }
+
 	public function maybeCollectCycles() : int{
 		$rootsBefore = gc_status()["roots"];
 		if($rootsBefore < $this->threshold){
 			return 0;
 		}
+		return $this->collect($rootsBefore, true);
+	}
 
+	/**
+	 * Same as {@link GarbageCollectorManager::maybeCollectCycles()}, and also collects from $earlyThreshold possible
+	 * roots (below the threshold): for a thread that has spare time now. Early collections don't move the threshold.
+	 */
+	public function maybeCollectCyclesEarly(int $earlyThreshold) : int{
+		$rootsBefore = gc_status()["roots"];
+		if($rootsBefore >= $this->threshold){
+			return $this->collect($rootsBefore, true);
+		}
+		if($earlyThreshold <= 0 || $rootsBefore < $earlyThreshold){
+			return 0;
+		}
+		return $this->collect($rootsBefore, false);
+	}
+
+	/**
+	 * Returns the number of possible roots now (what the thresholds are compared with).
+	 */
+	public function getRoots() : int{
+		return gc_status()["roots"];
+	}
+
+	private function collect(int $rootsBefore, bool $adjustThreshold) : int{
 		$this->timings->startTiming();
 
+		$memoryBefore = memory_get_usage();
 		$start = hrtime(true);
 		$cycles = gc_collect_cycles();
 		$end = hrtime(true);
+		$freed = $memoryBefore - memory_get_usage();
 
 		$rootsAfter = gc_status()["roots"];
-		$this->adjustGcThreshold($cycles, $rootsAfter);
+		if($adjustThreshold){
+			$this->adjustGcThreshold($cycles, $rootsAfter);
+		}
 
 		$this->timings->stopTiming();
 
 		$time = $end - $start;
 		$this->collectionTimeTotalNs += $time;
+		$this->lastCollectionTimeNs = $time;
 		$this->runs++;
 		$this->logger->info(sprintf(
-			"Run #%d took %s ms (%s -> %s roots, %s cycles collected) - cumulative GC time: %s ms",
+			"Run #%d%s took %s ms (%s -> %s roots, %s cycles collected, %s MB freed) - cumulative GC time: %s ms",
 			$this->runs,
+			$adjustThreshold ? "" : " (spare time)",
 			number_format($time / 1_000_000, 2),
 			$rootsBefore,
 			$rootsAfter,
 			$cycles,
+			number_format($freed / 1_048_576, 2),
 			number_format($this->collectionTimeTotalNs / 1_000_000, 2)
 		));
 

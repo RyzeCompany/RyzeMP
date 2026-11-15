@@ -37,6 +37,7 @@ use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\protocol\AddPaintingPacket;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\player\Player;
+use pocketmine\world\GameRules;
 use pocketmine\world\particle\BlockBreakParticle;
 use pocketmine\world\World;
 use function ceil;
@@ -107,7 +108,7 @@ class Painting extends Entity{
 	protected function onDeath() : void{
 		parent::onDeath();
 
-		$drops = true;
+		$drops = GameRules::allowsEntityDrops($this->getWorld());
 
 		if($this->lastDamageCause instanceof EntityDamageByEntityEvent){
 			$killer = $this->lastDamageCause->getDamager();

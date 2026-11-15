@@ -27,23 +27,20 @@ use pocketmine\entity\InvalidSkinException;
 use pocketmine\event\player\PlayerPreLoginEvent;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\lang\Translatable;
-use pocketmine\network\mcpe\auth\ProcessLegacyLoginTask;
 use pocketmine\network\mcpe\auth\ProcessOpenIdLoginTask;
 use pocketmine\network\mcpe\auth\ProcessSelfSignedLoginTask;
 use pocketmine\network\mcpe\JwtException;
 use pocketmine\network\mcpe\JwtUtils;
 use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\LoginPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\login\AuthenticationInfo;
 use pocketmine\network\mcpe\protocol\types\login\AuthenticationType;
 use pocketmine\network\mcpe\protocol\types\login\clientdata\ClientData;
 use pocketmine\network\mcpe\protocol\types\login\clientdata\ClientDataToSkinDataHelper;
-use pocketmine\network\mcpe\protocol\types\login\legacy\LegacyAuthChain;
-use pocketmine\network\mcpe\protocol\types\login\legacy\LegacyAuthIdentityData;
 use pocketmine\network\mcpe\protocol\types\login\openid\SelfSignedJwtBody;
 use pocketmine\network\mcpe\protocol\types\login\openid\XboxAuthJwtBody;
 use pocketmine\network\mcpe\protocol\types\login\openid\XboxAuthJwtHeader;
+use pocketmine\network\mcpe\proxy\ProxyTicket;
 use pocketmine\network\PacketHandlingException;
 use pocketmine\player\Player;
 use pocketmine\player\PlayerInfo;
@@ -54,9 +51,9 @@ use Ramsey\Uuid\Uuid;
 use Ramsey\Uuid\UuidInterface;
 use function base64_decode;
 use function chr;
-use function count;
 use function gettype;
-use function is_array;
+use function hash;
+use function hash_equals;
 use function is_object;
 use function json_decode;
 use function md5;
@@ -88,17 +85,10 @@ class LoginPacketHandler extends PacketHandler{
 	}
 
 	public function handleLogin(LoginPacket $packet) : bool{
-		if($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93){
-			$authInfo = $this->parseAuthInfo($packet->authInfoJson);
-		}elseif($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_90){
-			$authInfo = $this->parseAuthInfo($packet->authInfoJson);
-			$authInfo->AuthenticationType = AuthenticationType::SELF_SIGNED->value;
-		}else{
-			$authInfo = new AuthenticationInfo();
-			$authInfo->AuthenticationType = AuthenticationType::SELF_SIGNED->value;
-			$authInfo->Certificate = $packet->authInfoJson;
-			$authInfo->Token = "";
+		if($packet->protocol !== $this->session->getProtocolId()){
+			throw new PacketHandlingException("Login protocol does not match negotiated network settings");
 		}
+		$authInfo = $this->parseAuthInfo($packet->authInfoJson);
 
 		if($authInfo->AuthenticationType === AuthenticationType::FULL->value){
 			try{
@@ -118,109 +108,41 @@ class LoginPacketHandler extends PacketHandler{
 				//plugin cancelled
 				return true;
 			}
-			$this->processOpenIdLogin($authInfo->Token, $header->kid, $packet->clientDataJwt, $authRequired);
+			if(($ticket = $this->session->getProxyTicket()) !== null){
+				$this->processProxyLogin($ticket, $username, $xuid, $legacyUuid, $packet->clientDataJwt, $authRequired);
+			}else{
+				$this->processOpenIdLogin($authInfo->Token, $header->kid, $packet->clientDataJwt, $authRequired);
+			}
 
 		}elseif($authInfo->AuthenticationType === AuthenticationType::SELF_SIGNED->value){
-			if($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_26_20){
-				try{
-					[, $claimsArray, ] = JwtUtils::parse($authInfo->Token);
-				}catch(JwtException $e){
-					throw PacketHandlingException::wrap($e, "Error parsing self-signed authentication token");
-				}
-				$claims = $this->mapSelfSignedTokenBody($claimsArray);
+			try{
+				[, $claimsArray, ] = JwtUtils::parse($authInfo->Token);
+			}catch(JwtException $e){
+				throw PacketHandlingException::wrap($e, "Error parsing self-signed authentication token");
+			}
+			$claims = $this->mapSelfSignedTokenBody($claimsArray);
 
-				if(!Uuid::isValid($claims->leguuid)){
-					throw new PacketHandlingException("Invalid UUID string in self-signed certificate: " . $claims->leguuid);
-				}
+			if(!Uuid::isValid($claims->leguuid)){
+				throw new PacketHandlingException("Invalid UUID string in self-signed certificate: " . $claims->leguuid);
+			}
+			$legacyUuid = Uuid::fromString($claims->leguuid);
+			$username = $claims->xname;
+			$xuid = "";
 
-				$legacyUuid = Uuid::fromString($claims->leguuid);
-				$username = $claims->xname;
-				$xuid = "";
+			$selfSignedKey = base64_decode($claims->cpk, strict: true);
+			if($selfSignedKey === false){
+				throw new PacketHandlingException("Invalid self-signed key");
+			}
 
-				$selfSignedKey = base64_decode($claims->cpk, strict: true);
-				if($selfSignedKey === false){
-					throw new PacketHandlingException("Invalid self-signed key");
-				}
-
-				$authRequired = $this->processLoginCommon($packet, $username, $legacyUuid, $xuid);
-				if($authRequired === null){
-					//plugin cancelled
-					return true;
-				}
-				$this->processSelfSignedLogin($authInfo->Token, $selfSignedKey, $packet->clientDataJwt, $authRequired);
+			$authRequired = $this->processLoginCommon($packet, $username, $legacyUuid, $xuid);
+			if($authRequired === null){
+				//plugin cancelled
+				return true;
+			}
+			if(($ticket = $this->session->getProxyTicket()) !== null){
+				$this->processProxyLogin($ticket, $username, $xuid, $legacyUuid, $packet->clientDataJwt, $authRequired);
 			}else{
-				try{
-					$chainData = json_decode($authInfo->Certificate, flags: JSON_THROW_ON_ERROR);
-				}catch(\JsonException $e){
-					throw PacketHandlingException::wrap($e, "Error parsing self-signed certificate chain");
-				}
-				if(!is_object($chainData)){
-					throw new PacketHandlingException("Unexpected type for self-signed certificate chain: " . gettype($chainData) . ", expected object");
-				}
-				try{
-					$chain = $this->defaultJsonMapper("Self-signed auth chain JSON")->map($chainData, new LegacyAuthChain());
-				}catch(\JsonMapper_Exception $e){
-					throw PacketHandlingException::wrap($e, "Error mapping self-signed certificate chain");
-				}
-				if($this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93){
-					if(count($chain->chain) > 1 || !isset($chain->chain[0])){
-						throw new PacketHandlingException("Expected exactly one certificate in self-signed certificate chain, got " . count($chain->chain));
-					}
-
-					try{
-						[, $claimsArray, ] = JwtUtils::parse($chain->chain[0]);
-					}catch(JwtException $e){
-						throw PacketHandlingException::wrap($e, "Error parsing self-signed certificate");
-					}
-					if(!isset($claimsArray["extraData"]) || !is_array($claimsArray["extraData"])){
-						throw new PacketHandlingException("Expected \"extraData\" to be present in self-signed certificate");
-					}
-				}else{
-					$claimsArray = null;
-
-					foreach($chain->chain as $jwt){
-						try{
-							[, $claims, ] = JwtUtils::parse($jwt);
-						}catch(JwtException $e){
-							throw PacketHandlingException::wrap($e, "Error parsing legacy certificate");
-						}
-						if(isset($claims["extraData"])){
-							if($claimsArray !== null){
-								throw new PacketHandlingException("Multiple certificates in self-signed certificate chain contain \"extraData\" field");
-							}
-
-							if(!is_array($claims["extraData"])){
-								throw new PacketHandlingException("'extraData' key should be an array");
-							}
-
-							$claimsArray = $claims;
-						}
-					}
-
-					if($claimsArray === null){
-						throw new PacketHandlingException("'extraData' not found in legacy chain data");
-					}
-				}
-
-				try{
-					$claims = $this->defaultJsonMapper("Self-signed auth JWT 'extraData'")->map($claimsArray["extraData"], new LegacyAuthIdentityData());
-				}catch(\JsonMapper_Exception $e){
-					throw PacketHandlingException::wrap($e, "Error mapping self-signed certificate extraData");
-				}
-
-				if(!Uuid::isValid($claims->identity)){
-					throw new PacketHandlingException("Invalid UUID string in self-signed certificate: " . $claims->identity);
-				}
-				$legacyUuid = Uuid::fromString($claims->identity);
-				$username = $claims->displayName;
-				$xuid = $this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93 ? "" : $claims->XUID;
-
-				$authRequired = $this->processLoginCommon($packet, $username, $legacyUuid, $xuid);
-				if($authRequired === null){
-					//plugin cancelled
-					return true;
-				}
-				$this->processLegacySelfSignedLogin($chain->chain, $packet->clientDataJwt, $authRequired);
+				$this->processSelfSignedLogin($authInfo->Token, $selfSignedKey, $packet->clientDataJwt, $authRequired);
 			}
 		}else{
 			throw new PacketHandlingException("Unsupported authentication type: $authInfo->AuthenticationType");
@@ -240,7 +162,8 @@ class LoginPacketHandler extends PacketHandler{
 		$this->session->setGameVersion($clientData->GameVersion);
 
 		try{
-			$skin = $this->session->getTypeConverter()->netSkinToCore(ClientDataToSkinDataHelper::fromClientData($clientData));
+			$skinData = ClientDataToSkinDataHelper::fromClientData($clientData);
+			$skin = $this->session->getTypeConverter()->getSkinAdapter()->fromSkinData($skinData);
 		}catch(\InvalidArgumentException | InvalidSkinException $e){
 			$this->session->disconnectWithError(
 				reason: "Invalid skin: " . $e->getMessage(),
@@ -257,7 +180,8 @@ class LoginPacketHandler extends PacketHandler{
 				$legacyUuid,
 				$skin,
 				$clientData->LanguageCode,
-				(array) $clientData
+				(array) $clientData,
+				$skinData
 			);
 		}else{
 			$playerInfo = new PlayerInfo(
@@ -265,14 +189,16 @@ class LoginPacketHandler extends PacketHandler{
 				$legacyUuid,
 				$skin,
 				$clientData->LanguageCode,
-				(array) $clientData
+				(array) $clientData,
+				$skinData
 			);
 		}
 		($this->playerInfoConsumer)($playerInfo);
 
 		$ev = new PlayerPreLoginEvent(
 			$playerInfo,
-			$this->session,
+			$this->session->getIp(),
+			$this->session->getPort(),
 			$this->server->requiresAuthentication()
 		);
 		if($this->server->getNetwork()->getValidConnectionCount() > $this->server->getMaxPlayers()){
@@ -359,6 +285,9 @@ class LoginPacketHandler extends PacketHandler{
 	 */
 	protected function mapSelfSignedTokenBody(array $bodyArray) : SelfSignedJwtBody{
 		$mapper = $this->defaultJsonMapper("OpenID JWT body");
+		//self-signed tokens may copy these Xbox token claims (platform type, PlayFab title and creation date), which
+		//mean nothing without Xbox authentication
+		unset($bodyArray["ipt"], $bodyArray["tid"], $bodyArray["pfcd"]);
 		try{
 			$header = $mapper->map($bodyArray, new SelfSignedJwtBody());
 		}catch(\JsonMapper_Exception $e){
@@ -377,9 +306,6 @@ class LoginPacketHandler extends PacketHandler{
 			throw PacketHandlingException::wrap($e);
 		}
 
-		// The signature is verified against the original JWT later in the login flow.
-		// Only omit skin-unrelated claims from the mapping to the protocol ClientData DTO.
-		$clientDataClaims = ClientDataClaimsFilter::forSkinMapping($clientDataClaims);
 		$mapper = $this->defaultJsonMapper("ClientData JWT body");
 		try{
 			$clientData = $mapper->map($clientDataClaims, new ClientData());
@@ -416,16 +342,19 @@ class LoginPacketHandler extends PacketHandler{
 	}
 
 	/**
-	 * @param string[] $legacyCertificate
+	 * A session from pm-proxy: the proxy already verified the login (Xbox Live and the client data signature) and
+	 * signed a ticket for it, so only check that this is the login the ticket was issued for.
 	 */
-	protected function processLegacySelfSignedLogin(array $legacyCertificate, string $clientDataJwt, bool $authRequired) : void{
+	protected function processProxyLogin(ProxyTicket $ticket, string $username, string $xuid, UuidInterface $uuid, string $clientDataJwt, bool $authRequired) : void{
 		$this->session->setHandler(null); //drop packets received during login verification
 
-		$rootAuthKeyDer = $this->session->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_93 ? null : base64_decode(ProcessLegacyLoginTask::LEGACY_MOJANG_ROOT_PUBLIC_KEY, true);
-		if($rootAuthKeyDer === false){ //should never happen unless the constant is messed up
-			throw new \InvalidArgumentException("Failed to base64-decode hardcoded Mojang root public key");
+		$error = null;
+		if($ticket->name !== $username || $ticket->xuid !== $xuid || !$uuid->equals(Uuid::fromString($ticket->uuid))){
+			$error = "Proxy ticket was issued for another player";
+		}elseif(!hash_equals($ticket->clientDataSha256, hash("sha256", $clientDataJwt))){
+			$error = "Proxy ticket was issued for another login";
 		}
-		$this->server->getAsyncPool()->submitTask(new ProcessLegacyLoginTask($legacyCertificate, $clientDataJwt, rootAuthKeyDer: $rootAuthKeyDer, authRequired: $authRequired, onCompletion: $this->authCallback));
+		($this->authCallback)($ticket->xbox && $error === null, $authRequired, $error, $error === null ? $ticket->clientKeyDer : null);
 	}
 
 	private function defaultJsonMapper(string $logContext) : \JsonMapper{

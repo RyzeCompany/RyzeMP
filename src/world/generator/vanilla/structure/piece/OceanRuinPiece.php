@@ -23,11 +23,13 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\structure\piece;
 
+use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 use pocketmine\world\generator\vanilla\structure\BoundingBox;
 use pocketmine\world\generator\vanilla\structure\processor\Processors;
 use pocketmine\world\generator\vanilla\structure\StructureEnvironment;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
+use pocketmine\world\generator\vanilla\structure\template\EntityConversion;
 use pocketmine\world\generator\vanilla\structure\template\PlaceSettings;
 use pocketmine\world\generator\vanilla\structure\template\Rotations;
 use pocketmine\world\generator\vanilla\structure\template\TemplatePlacer;
@@ -104,6 +106,10 @@ final class OceanRuinPiece extends TemplatePiece{
 			$level->setState($x, $y, $z, $blocks->withBool($chest, "waterlogged", $blocks->isWater($level->getState($x, $y, $z))));
 			TemplatePlacer::lootChest($c, $x, $y, $z, $this->large ? "minecraft:chests/underwater_ruin_big" : "minecraft:chests/underwater_ruin_small");
 		}elseif($metadata === "drowned"){
+			$nbt = EntityConversion::pendingEntity(CompoundTag::create()->setString("id", "minecraft:drowned"), $x + 0.5, $y, $z + 0.5, 0.0, 0.0);
+			if($nbt !== null){
+				$level->addEntity($x, $z, $nbt);
+			}
 			$level->setState($x, $y, $z, $y > $level->seaLevel ? $blocks->air : $blocks->water);
 		}
 	}

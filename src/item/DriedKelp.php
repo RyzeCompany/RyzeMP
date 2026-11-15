@@ -30,6 +30,10 @@ class DriedKelp extends Food{
 	}
 
 	public function getSaturationRestore() : float{
-		return 0.6;
+		return 0.2;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 }

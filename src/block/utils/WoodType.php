@@ -32,6 +32,7 @@ use pocketmine\utils\LegacyEnumShimTrait;
  * @method static WoodType ACACIA()
  * @method static WoodType BIRCH()
  * @method static WoodType CHERRY()
+ * @method static WoodType POPLAR()
  * @method static WoodType CRIMSON()
  * @method static WoodType DARK_OAK()
  * @method static WoodType JUNGLE()
@@ -54,6 +55,7 @@ enum WoodType{
 	case WARPED;
 	case CHERRY;
 	case PALE_OAK;
+	case POPLAR;
 	case BAMBOO;
 
 	public function getDisplayName() : string{
@@ -69,6 +71,7 @@ enum WoodType{
 			self::WARPED => "Warped",
 			self::CHERRY => "Cherry",
 			self::PALE_OAK => "Pale Oak",
+			self::POPLAR => "Poplar",
 			self::BAMBOO => "Bamboo",
 		};
 	}

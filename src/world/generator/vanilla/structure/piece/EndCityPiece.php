@@ -26,13 +26,14 @@ namespace pocketmine\world\generator\vanilla\structure\piece;
 use pocketmine\block\tile\ItemFrame as ItemFrameTile;
 use pocketmine\block\tile\Tile;
 use pocketmine\block\VanillaBlocks;
-use pocketmine\item\StringToItemParser;
+use pocketmine\item\VanillaItems;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\generator\vanilla\feature\block\Direction;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 use pocketmine\world\generator\vanilla\structure\BoundingBox;
 use pocketmine\world\generator\vanilla\structure\processor\Processors;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
+use pocketmine\world\generator\vanilla\structure\template\EntityConversion;
 use pocketmine\world\generator\vanilla\structure\template\PlaceSettings;
 use pocketmine\world\generator\vanilla\structure\template\Rotations;
 use pocketmine\world\generator\vanilla\structure\template\StructureTemplates;
@@ -63,6 +64,7 @@ final class EndCityPiece extends TemplatePiece{
 	 */
 	protected function makeSettings(?JavaBlocks $blocks) : PlaceSettings{
 		$settings = (new PlaceSettings())->setRotation($this->rotation);
+		$settings->ignoreEntities = true;
 		if($blocks !== null){
 			$settings->addProcessor($this->overwrite ? Processors::ignoreStructureBlocks($blocks) : Processors::ignoreStructureBlocksAndAir($blocks));
 		}
@@ -79,20 +81,24 @@ final class EndCityPiece extends TemplatePiece{
 			}
 			return;
 		}
+		if(str_starts_with($metadata, "Sentry")){
+			$nbt = EntityConversion::pendingEntity(CompoundTag::create()->setString("id", "minecraft:shulker"), $x + 0.5, $y, $z + 0.5, 0.0, 0.0);
+			if($nbt !== null){
+				$c->level->addEntity($x, $z, $nbt);
+			}
+			return;
+		}
 		if(str_starts_with($metadata, "Elytra")){
 			//an item frame entity in Java (facing rotation.rotate(SOUTH)), a block with a tile in Bedrock
 			$facing = Rotations::rotateDirection(Direction::SOUTH, $this->rotation);
 			$frame = VanillaBlocks::ITEM_FRAME()->setFacing($facing);
 			if($c->level->setPmState($x, $y, $z, $frame->getStateId())){
-				$tile = CompoundTag::create()
+				$c->level->setBlockEntity($x, $y, $z, CompoundTag::create()
 					->setString(Tile::TAG_ID, "ItemFrame")
+					->setTag(ItemFrameTile::TAG_ITEM, VanillaItems::ELYTRA()->nbtSerialize())
 					->setFloat(ItemFrameTile::TAG_ITEM_ROTATION, 0.0)
-					->setFloat(ItemFrameTile::TAG_ITEM_DROP_CHANCE, 1.0);
-				$elytra = $c->blocks->hasStructureContent ? StringToItemParser::getInstance()->parse("elytra") : null;
-				if($elytra !== null){
-					$tile->setTag(ItemFrameTile::TAG_ITEM, $elytra->nbtSerialize());
-				}
-				$c->level->setBlockEntity($x, $y, $z, $tile);
+					->setFloat(ItemFrameTile::TAG_ITEM_DROP_CHANCE, 1.0)
+				);
 			}
 		}
 	}

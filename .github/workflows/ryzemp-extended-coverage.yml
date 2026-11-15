@@ -1,0 +1,163 @@
+name: RyzeMP extended integration coverage
+
+on:
+  push:
+    branches:
+      - integration/vanillamine-base
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ryzemp-extended-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vanilla-data:
+    name: Real vanilla worldgen and loot tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-vanilla-fixtures
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Fetch official pinned Mojang Java 26.3 worldgen data, do not redistribute
+        run: |
+          php -d memory_limit=2G tools/fetch-vanilla-worldgen-data.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/template_pool"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/feature"
+      - name: Run vanilla worldgen, tree, loot and biome regressions with real data
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php --display-skipped --fail-on-warning \
+            tests/phpunit/block/LeavesNetworkStateTest.php \
+            tests/phpunit/block/TreesFungiTest.php \
+            tests/phpunit/loot \
+            tests/phpunit/world/generator/vanilla \
+            tests/phpunit/world/locate
+
+  bedrock-fixture:
+    name: Official Bedrock 26.50.4 food fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Download pinned release of Mojang Bedrock samples (text-only)
+        run: |
+          curl --fail --location --retry 3 --proto '=https' \
+            --output "$RUNNER_TEMP/bedrock-samples.zip" \
+            'https://github.com/Mojang/bedrock-samples/releases/download/v1.26.50.4/bedrock-samples-v1.26.50.4-min.zip'
+          unzip -q "$RUNNER_TEMP/bedrock-samples.zip" -d "$RUNNER_TEMP/bedrock-samples"
+          dir="$(find "$RUNNER_TEMP/bedrock-samples" -type d -name behavior_pack -print -quit)"
+          test -n "$dir" && test -d "$dir/items"
+          echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
+      - name: Verify food fixture against official behavior pack
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --filter testFixtureMatchesBehaviorPack --display-skipped tests/phpunit/item/FoodBehaviorPackParityTest.php
+
+  benchmarks:
+    name: Explicit opt-in performance regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      MOB_BENCH: '1'
+      STRUCTURE_BENCH: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Run all opt-in mob, wind burst and structure benchmarks
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php --display-skipped --fail-on-warning \
+            tests/phpunit/entity/ai/HostileMobBenchmarkTest.php \
+            tests/phpunit/entity/ai/RaidGardenBenchmarkTest.php \
+            tests/phpunit/world/WindBurstWorldTest.php \
+            tests/phpunit/world/structure/StructureLoadBenchmarkTest.php
+
+  native-all-coverage:
+    name: All PHPUnit cases with official native chunkutils2 0.3.15 and vanilla data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      MOB_BENCH: '1'
+      STRUCTURE_BENCH: '1'
+      POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-native-full-vanilla
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SHA256-verified VanillaMine PHP 8.4 v2 release (2026-10-26)
+        run: |
+          set -euo pipefail
+          name='PHP-8.4-Linux-x86-64-v2-PM5.tar.gz'
+          base='https://gitlab.com/api/v4/projects/87651115/packages/generic/PHP-Binaries/php-8.4-20261026'
+          curl --fail --location --retry 3 --proto '=https' "$base/$name" -o "$RUNNER_TEMP/$name"
+          curl --fail --location --retry 3 --proto '=https' "$base/$name.sha256" -o "$RUNNER_TEMP/$name.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum -c "$name.sha256")
+          tar -xzf "$RUNNER_TEMP/$name" -C "$GITHUB_WORKSPACE"
+          binary="$GITHUB_WORKSPACE/bin/php7/bin/php"
+          ini="$GITHUB_WORKSPACE/bin/php7/bin/php.ini"
+          test -x "$binary"
+          extensionDir="$(find "$GITHUB_WORKSPACE/bin/php7/lib/php/extensions" -maxdepth 1 -type d -name '*debug-zts*' -print -quit)"
+          if [ -n "$extensionDir" ]; then
+            if grep -q '^extension_dir' "$ini"; then
+              sed -i "s|^extension_dir.*$|extension_dir=\"$extensionDir\"|" "$ini"
+            else
+              printf '\nextension_dir="%s"\n' "$extensionDir" >> "$ini"
+            fi
+          fi
+          curl --fail --location --retry 3 --proto '=https' \
+            'https://getcomposer.org/download/latest-2.x/composer.phar' \
+            -o "$GITHUB_WORKSPACE/bin/php7/bin/composer"
+          chmod +x "$GITHUB_WORKSPACE/bin/php7/bin/composer"
+          echo "$GITHUB_WORKSPACE/bin/php7/bin" >> "$GITHUB_PATH"
+          "$binary" -r '
+            $v = phpversion("chunkutils2");
+            if ($v !== "0.3.15") throw new RuntimeException("Expected native chunkutils2 0.3.15, got " . var_export($v, true));
+            foreach (["pocketmine\\network\\mcpe\\NativeSendBuffers", "pocketmine\\world\\light\\NativeLightPopulation"] as $name) {
+              if (!class_exists($name)) throw new RuntimeException("Missing native accelerator: " . $name);
+            }
+            echo "chunkutils2 0.3.15 available in bundled PHP binary\n";'
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Fetch official pinned Mojang generator test data
+        run: |
+          php -d memory_limit=2G tools/fetch-vanilla-worldgen-data.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/template_pool"
+      - name: Obtain official Bedrock food fixtures for the pinned test version
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --proto '=https' \
+            'https://github.com/Mojang/bedrock-samples/releases/download/v1.26.50.4/bedrock-samples-v1.26.50.4-min.zip' \
+            -o "$RUNNER_TEMP/bedrock.zip"
+          unzip -q "$RUNNER_TEMP/bedrock.zip" -d "$RUNNER_TEMP/bedrock"
+          dir="$(find "$RUNNER_TEMP/bedrock" -type d -name behavior_pack -print -quit)"
+          test -n "$dir" && test -d "$dir/items"
+          echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Build native Go vanillagen for remaining equivalence cases
+        env:
+          NATIVE_TARGETS: linux/amd64
+        run: |
+          bash build/ci/build-native.sh "full-coverage-$GITHUB_RUN_NUMBER"
+          test -x native/vanillagen/bin/vanillagen-linux-amd64
+      - name: Require a truly complete PHPUnit run (no skipped native or data tests)
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php \
+            --display-skipped --fail-on-skipped --fail-on-warning tests/phpunit

@@ -30,6 +30,7 @@ use function is_bool;
 use function is_int;
 use function is_string;
 use function strtolower;
+use function trim;
 
 final class ServerConfigGroup{
 	/**
@@ -57,7 +58,23 @@ final class ServerConfigGroup{
 	}
 
 	public function getPropertyBool(string $variable, bool $defaultValue) : bool{
-		return (bool) $this->getProperty($variable, $defaultValue);
+		$value = $this->getProperty($variable, $defaultValue);
+		if(is_bool($value)){
+			return $value;
+		}
+		if(is_int($value)){
+			return $value !== 0;
+		}
+		if(is_string($value)){
+			switch(strtolower(trim($value))){
+				case "on":
+				case "true":
+				case "1":
+				case "yes":
+					return true;
+			}
+		}
+		return false;
 	}
 
 	public function getPropertyInt(string $variable, int $defaultValue) : int{

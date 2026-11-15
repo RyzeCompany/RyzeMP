@@ -37,7 +37,9 @@ use function mb_strtoupper;
  */
 final class VanillaEffects{
 	private static AbsorptionEffect $_mABSORPTION;
+	private static Effect $_mBAD_OMEN;
 	private static Effect $_mBLINDNESS;
+	private static Effect $_mBREATH_OF_THE_NAUTILUS;
 	private static Effect $_mCONDUIT_POWER;
 	private static Effect $_mDARKNESS;
 	private static PoisonEffect $_mFATAL_POISON;
@@ -45,6 +47,7 @@ final class VanillaEffects{
 	private static Effect $_mHASTE;
 	private static HealthBoostEffect $_mHEALTH_BOOST;
 	private static HungerEffect $_mHUNGER;
+	private static InfestedEffect $_mINFESTED;
 	private static InstantDamageEffect $_mINSTANT_DAMAGE;
 	private static InstantHealthEffect $_mINSTANT_HEALTH;
 	private static InvisibilityEffect $_mINVISIBILITY;
@@ -53,15 +56,22 @@ final class VanillaEffects{
 	private static Effect $_mMINING_FATIGUE;
 	private static Effect $_mNAUSEA;
 	private static Effect $_mNIGHT_VISION;
+	private static OozingEffect $_mOOZING;
 	private static PoisonEffect $_mPOISON;
+	private static RaidOmenEffect $_mRAID_OMEN;
 	private static RegenerationEffect $_mREGENERATION;
 	private static Effect $_mRESISTANCE;
 	private static SaturationEffect $_mSATURATION;
 	private static SlownessEffect $_mSLOWNESS;
+	private static SlowFallingEffect $_mSLOW_FALLING;
 	private static SpeedEffect $_mSPEED;
 	private static Effect $_mSTRENGTH;
+	private static Effect $_mTRIAL_OMEN;
+	private static Effect $_mVILLAGE_HERO;
 	private static Effect $_mWATER_BREATHING;
 	private static Effect $_mWEAKNESS;
+	private static WeavingEffect $_mWEAVING;
+	private static WindChargedEffect $_mWIND_CHARGED;
 	private static WitherEffect $_mWITHER;
 
 	/**
@@ -98,7 +108,9 @@ final class VanillaEffects{
 	private static function getInitAssigners() : array{
 		return [
 			"absorption" => fn(AbsorptionEffect $v) => self::$_mABSORPTION = $v,
+			"bad_omen" => fn(Effect $v) => self::$_mBAD_OMEN = $v,
 			"blindness" => fn(Effect $v) => self::$_mBLINDNESS = $v,
+			"breath_of_the_nautilus" => fn(Effect $v) => self::$_mBREATH_OF_THE_NAUTILUS = $v,
 			"conduit_power" => fn(Effect $v) => self::$_mCONDUIT_POWER = $v,
 			"darkness" => fn(Effect $v) => self::$_mDARKNESS = $v,
 			"fatal_poison" => fn(PoisonEffect $v) => self::$_mFATAL_POISON = $v,
@@ -106,6 +118,7 @@ final class VanillaEffects{
 			"haste" => fn(Effect $v) => self::$_mHASTE = $v,
 			"health_boost" => fn(HealthBoostEffect $v) => self::$_mHEALTH_BOOST = $v,
 			"hunger" => fn(HungerEffect $v) => self::$_mHUNGER = $v,
+			"infested" => fn(InfestedEffect $v) => self::$_mINFESTED = $v,
 			"instant_damage" => fn(InstantDamageEffect $v) => self::$_mINSTANT_DAMAGE = $v,
 			"instant_health" => fn(InstantHealthEffect $v) => self::$_mINSTANT_HEALTH = $v,
 			"invisibility" => fn(InvisibilityEffect $v) => self::$_mINVISIBILITY = $v,
@@ -114,15 +127,22 @@ final class VanillaEffects{
 			"mining_fatigue" => fn(Effect $v) => self::$_mMINING_FATIGUE = $v,
 			"nausea" => fn(Effect $v) => self::$_mNAUSEA = $v,
 			"night_vision" => fn(Effect $v) => self::$_mNIGHT_VISION = $v,
+			"oozing" => fn(OozingEffect $v) => self::$_mOOZING = $v,
 			"poison" => fn(PoisonEffect $v) => self::$_mPOISON = $v,
+			"raid_omen" => fn(RaidOmenEffect $v) => self::$_mRAID_OMEN = $v,
 			"regeneration" => fn(RegenerationEffect $v) => self::$_mREGENERATION = $v,
 			"resistance" => fn(Effect $v) => self::$_mRESISTANCE = $v,
 			"saturation" => fn(SaturationEffect $v) => self::$_mSATURATION = $v,
 			"slowness" => fn(SlownessEffect $v) => self::$_mSLOWNESS = $v,
+			"slow_falling" => fn(SlowFallingEffect $v) => self::$_mSLOW_FALLING = $v,
 			"speed" => fn(SpeedEffect $v) => self::$_mSPEED = $v,
 			"strength" => fn(Effect $v) => self::$_mSTRENGTH = $v,
+			"trial_omen" => fn(Effect $v) => self::$_mTRIAL_OMEN = $v,
+			"village_hero" => fn(Effect $v) => self::$_mVILLAGE_HERO = $v,
 			"water_breathing" => fn(Effect $v) => self::$_mWATER_BREATHING = $v,
 			"weakness" => fn(Effect $v) => self::$_mWEAKNESS = $v,
+			"weaving" => fn(WeavingEffect $v) => self::$_mWEAVING = $v,
+			"wind_charged" => fn(WindChargedEffect $v) => self::$_mWIND_CHARGED = $v,
 			"wither" => fn(WitherEffect $v) => self::$_mWITHER = $v,
 		];
 	}
@@ -167,9 +187,19 @@ final class VanillaEffects{
 		return self::$_mABSORPTION;
 	}
 
+	public static function BAD_OMEN() : Effect{
+		if(!isset(self::$_mBAD_OMEN)){ self::init(); }
+		return self::$_mBAD_OMEN;
+	}
+
 	public static function BLINDNESS() : Effect{
 		if(!isset(self::$_mBLINDNESS)){ self::init(); }
 		return self::$_mBLINDNESS;
+	}
+
+	public static function BREATH_OF_THE_NAUTILUS() : Effect{
+		if(!isset(self::$_mBREATH_OF_THE_NAUTILUS)){ self::init(); }
+		return self::$_mBREATH_OF_THE_NAUTILUS;
 	}
 
 	public static function CONDUIT_POWER() : Effect{
@@ -205,6 +235,11 @@ final class VanillaEffects{
 	public static function HUNGER() : HungerEffect{
 		if(!isset(self::$_mHUNGER)){ self::init(); }
 		return self::$_mHUNGER;
+	}
+
+	public static function INFESTED() : InfestedEffect{
+		if(!isset(self::$_mINFESTED)){ self::init(); }
+		return self::$_mINFESTED;
 	}
 
 	public static function INSTANT_DAMAGE() : InstantDamageEffect{
@@ -247,9 +282,19 @@ final class VanillaEffects{
 		return self::$_mNIGHT_VISION;
 	}
 
+	public static function OOZING() : OozingEffect{
+		if(!isset(self::$_mOOZING)){ self::init(); }
+		return self::$_mOOZING;
+	}
+
 	public static function POISON() : PoisonEffect{
 		if(!isset(self::$_mPOISON)){ self::init(); }
 		return self::$_mPOISON;
+	}
+
+	public static function RAID_OMEN() : RaidOmenEffect{
+		if(!isset(self::$_mRAID_OMEN)){ self::init(); }
+		return self::$_mRAID_OMEN;
 	}
 
 	public static function REGENERATION() : RegenerationEffect{
@@ -272,6 +317,11 @@ final class VanillaEffects{
 		return self::$_mSLOWNESS;
 	}
 
+	public static function SLOW_FALLING() : SlowFallingEffect{
+		if(!isset(self::$_mSLOW_FALLING)){ self::init(); }
+		return self::$_mSLOW_FALLING;
+	}
+
 	public static function SPEED() : SpeedEffect{
 		if(!isset(self::$_mSPEED)){ self::init(); }
 		return self::$_mSPEED;
@@ -282,6 +332,16 @@ final class VanillaEffects{
 		return self::$_mSTRENGTH;
 	}
 
+	public static function TRIAL_OMEN() : Effect{
+		if(!isset(self::$_mTRIAL_OMEN)){ self::init(); }
+		return self::$_mTRIAL_OMEN;
+	}
+
+	public static function VILLAGE_HERO() : Effect{
+		if(!isset(self::$_mVILLAGE_HERO)){ self::init(); }
+		return self::$_mVILLAGE_HERO;
+	}
+
 	public static function WATER_BREATHING() : Effect{
 		if(!isset(self::$_mWATER_BREATHING)){ self::init(); }
 		return self::$_mWATER_BREATHING;
@@ -290,6 +350,16 @@ final class VanillaEffects{
 	public static function WEAKNESS() : Effect{
 		if(!isset(self::$_mWEAKNESS)){ self::init(); }
 		return self::$_mWEAKNESS;
+	}
+
+	public static function WEAVING() : WeavingEffect{
+		if(!isset(self::$_mWEAVING)){ self::init(); }
+		return self::$_mWEAVING;
+	}
+
+	public static function WIND_CHARGED() : WindChargedEffect{
+		if(!isset(self::$_mWIND_CHARGED)){ self::init(); }
+		return self::$_mWIND_CHARGED;
 	}
 
 	public static function WITHER() : WitherEffect{

@@ -31,6 +31,7 @@ use pocketmine\event\entity\ProjectileLaunchEvent;
 use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\player\Player;
 use pocketmine\world\sound\BowShootSound;
+use pocketmine\world\vibration\GameEvent;
 use function intdiv;
 use function min;
 
@@ -45,16 +46,12 @@ class Bow extends Tool implements Releasable{
 	}
 
 	public function onReleaseUsing(Player $player, array &$returnedItems) : ItemUseResult{
-		$arrow = VanillaItems::ARROW();
-		$inventory = match(true){
-			$player->getOffHandInventory()->contains($arrow) => $player->getOffHandInventory(),
-			$player->getInventory()->contains($arrow) => $player->getInventory(),
-			default => null
-		};
-
-		if($player->hasFiniteResources() && $inventory === null){
+		$ammo = ArrowAmmo::find($player);
+		if($player->hasFiniteResources() && $ammo === null){
 			return ItemUseResult::FAIL;
 		}
+		$arrow = $ammo?->getItem() ?? VanillaItems::ARROW();
+		$tipped = $arrow instanceof TippedArrow;
 
 		$location = $player->getLocation();
 
@@ -69,8 +66,10 @@ class Bow extends Tool implements Releasable{
 			-$location->pitch
 		), $player, $baseForce >= 1);
 		$entity->setMotion($player->getDirectionVector());
+		ArrowAmmo::applyTip($arrow, $entity);
 
-		$infinity = $this->hasEnchantment(VanillaEnchantments::INFINITY());
+		//Infinity has no effect on tipped arrows: they are consumed and can be picked up
+		$infinity = $this->hasEnchantment(VanillaEnchantments::INFINITY()) && !$tipped;
 		if($infinity){
 			$entity->setPickupMode(ArrowEntity::PICKUP_CREATIVE);
 		}
@@ -110,13 +109,14 @@ class Bow extends Tool implements Releasable{
 
 			$ev->getProjectile()->spawnToAll();
 			$location->getWorld()->addSound($location, new BowShootSound());
+			$location->getWorld()->addGameEvent($location, GameEvent::PROJECTILE_SHOOT, $player);
 		}else{
 			$entity->spawnToAll();
 		}
 
 		if($player->hasFiniteResources()){
-			if(!$infinity){ //TODO: tipped arrows are still consumed when Infinity is applied
-				$inventory?->removeItem($arrow);
+			if(!$infinity){
+				$ammo?->consume();
 			}
 			$this->applyDamage(1);
 		}
@@ -125,6 +125,6 @@ class Bow extends Tool implements Releasable{
 	}
 
 	public function canStartUsingItem(Player $player) : bool{
-		return !$player->hasFiniteResources() || $player->getOffHandInventory()->contains($arrow = VanillaItems::ARROW()) || $player->getInventory()->contains($arrow);
+		return !$player->hasFiniteResources() || ArrowAmmo::find($player) !== null;
 	}
 }

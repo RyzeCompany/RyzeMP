@@ -25,10 +25,11 @@ namespace pocketmine\network\mcpe\cache;
 
 use pocketmine\color\Color;
 use pocketmine\data\bedrock\BedrockDataFiles;
+use pocketmine\data\bedrock\BiomeDefinitionSupplement;
 use pocketmine\data\SavedDataLoadingException;
 use pocketmine\network\mcpe\protocol\AvailableActorIdentifiersPacket;
 use pocketmine\network\mcpe\protocol\BiomeDefinitionListPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\network\mcpe\protocol\JigsawStructureDataPacket;
 use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
 use pocketmine\network\mcpe\protocol\types\biome\BiomeDefinitionEntry;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
@@ -37,8 +38,10 @@ use pocketmine\utils\SingletonTrait;
 use pocketmine\utils\Utils;
 use pocketmine\world\biome\model\BiomeDefinitionEntryData;
 use function count;
+use function base64_decode;
 use function get_debug_type;
 use function is_array;
+use function is_string;
 use function json_decode;
 
 class StaticPacketCache{
@@ -47,7 +50,7 @@ class StaticPacketCache{
 	/**
 	 * @phpstan-return CacheableNbt<\pocketmine\nbt\tag\CompoundTag>
 	 */
-	protected static function loadCompoundFromFile(string $filePath) : CacheableNbt{
+	private static function loadCompoundFromFile(string $filePath) : CacheableNbt{
 		return new CacheableNbt((new NetworkNbtSerializer())->read(Filesystem::fileGetContents($filePath))->mustGetCompoundTag());
 	}
 
@@ -59,6 +62,7 @@ class StaticPacketCache{
 		if(!is_array($biomeEntries)){
 			throw new SavedDataLoadingException("$filePath root should be an array, got " . get_debug_type($biomeEntries));
 		}
+		$biomeEntries = BiomeDefinitionSupplement::addDefinitions($biomeEntries);
 
 		$jsonMapper = new \JsonMapper();
 		$jsonMapper->bExceptionOnMissingData = true;
@@ -80,10 +84,10 @@ class StaticPacketCache{
 					$biomeDefinition->id,
 					$biomeDefinition->temperature,
 					$biomeDefinition->downfall,
-					$biomeDefinition->redSporeDensity,
-					$biomeDefinition->blueSporeDensity,
-					$biomeDefinition->ashDensity,
-					$biomeDefinition->whiteAshDensity,
+					0.0,
+					0.0,
+					0.0,
+					0.0,
 					$biomeDefinition->foliageSnow,
 					$biomeDefinition->depth,
 					$biomeDefinition->scale,
@@ -107,22 +111,48 @@ class StaticPacketCache{
 	private static function make() : self{
 		return new self(
 			BiomeDefinitionListPacket::fromDefinitions(self::loadBiomeDefinitionModel(BedrockDataFiles::BIOME_DEFINITIONS_JSON)),
-			BiomeDefinitionListPacket::createLegacy(self::loadCompoundFromFile(BedrockDataFiles::BIOME_DEFINITIONS_NBT)),
-			AvailableActorIdentifiersPacket::create(self::loadCompoundFromFile(BedrockDataFiles::ENTITY_IDENTIFIERS_NBT))
+			AvailableActorIdentifiersPacket::create(self::loadCompoundFromFile(BedrockDataFiles::ENTITY_IDENTIFIERS_NBT)),
+			self::loadJigsawStructureData()
 		);
 	}
 
+	private static function loadJigsawStructureData() : JigsawStructureDataPacket{
+		$json = json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "/jigsaw_structures-1.26.50.json"), true, flags: JSON_THROW_ON_ERROR);
+		$encoded = is_array($json) ? ($json["nbtB64"] ?? null) : null;
+		$nbt = is_string($encoded) ? base64_decode($encoded, true) : false;
+		if($nbt === false){
+			throw new SavedDataLoadingException("Invalid jigsaw structure fixture");
+		}
+		return JigsawStructureDataPacket::create(new CacheableNbt((new NetworkNbtSerializer())->read($nbt)->mustGetCompoundTag()));
+	}
+
+	private JigsawStructureDataPacket $jigsawStructureData;
+
+	/**
+	 * $jigsawStructureData is optional so that code written for PocketMine-MP 5.44.3 keeps working: the vanilla rules
+	 * from BedrockData are used when it isn't given.
+	 */
 	public function __construct(
 		private BiomeDefinitionListPacket $biomeDefs,
-		private BiomeDefinitionListPacket $legacyBiomeDefs,
-		private AvailableActorIdentifiersPacket $availableActorIdentifiers
-	){}
+		private AvailableActorIdentifiersPacket $availableActorIdentifiers,
+		?JigsawStructureDataPacket $jigsawStructureData = null
+	){
+		$this->jigsawStructureData = $jigsawStructureData ?? self::loadJigsawStructureData();
+	}
 
-	public function getBiomeDefs(int $protocolId) : BiomeDefinitionListPacket{
-		return $protocolId >= ProtocolInfo::PROTOCOL_1_21_80 ? $this->biomeDefs : $this->legacyBiomeDefs;
+	public function getBiomeDefs() : BiomeDefinitionListPacket{
+		return $this->biomeDefs;
 	}
 
 	public function getAvailableActorIdentifiers() : AvailableActorIdentifiersPacket{
 		return $this->availableActorIdentifiers;
+	}
+
+	/**
+	 * Vanilla jigsaw structure rules. Since 1.26.50 the client disconnects ("MissingStructureData") if it doesn't
+	 * receive this before StartGamePacket.
+	 */
+	public function getJigsawStructureData() : JigsawStructureDataPacket{
+		return $this->jigsawStructureData;
 	}
 }

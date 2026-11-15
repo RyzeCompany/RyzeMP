@@ -28,25 +28,32 @@ use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\world\World;
 
-class Barrel extends Spawnable implements Container, Nameable{
+class Barrel extends Spawnable implements ComparatorReadableContainer, Nameable{
 	use NameableTrait;
-	use ContainerTrait;
+	use ComparatorReadableContainerTrait;
+	use ContainerTrait {
+		onBlockDestroyedHook as containerTraitBlockDestroyedHook;
+	}
+	use LootTableContainerTrait;
 
 	protected BarrelInventory $inventory;
 
 	public function __construct(World $world, Vector3 $pos){
 		parent::__construct($world, $pos);
 		$this->inventory = new BarrelInventory($this->position);
+		$this->addComparatorInventoryListener();
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
 		$this->loadName($nbt);
 		$this->loadItems($nbt);
+		$this->loadLootTable($nbt);
 	}
 
 	protected function writeSaveData(CompoundTag $nbt) : void{
 		$this->saveName($nbt);
 		$this->saveItems($nbt);
+		$this->saveLootTable($nbt);
 	}
 
 	public function close() : void{
@@ -56,9 +63,17 @@ class Barrel extends Spawnable implements Container, Nameable{
 		}
 	}
 
+	/**
+	 * Returns the inventory, filling it from its loot table first if it has one (see {@link LootTableContainerTrait}).
+	 */
 	public function getInventory() : BarrelInventory{
-		$this->unpackWorldgenLoot();
+		$this->unpackLootTable();
 		return $this->inventory;
+	}
+
+	protected function onBlockDestroyedHook() : void{
+		$this->unpackLootTable();
+		$this->containerTraitBlockDestroyedHook();
 	}
 
 	public function getRealInventory() : BarrelInventory{

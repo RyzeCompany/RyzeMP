@@ -73,6 +73,17 @@ final class EnchantingHelper{
 	}
 
 	/**
+	 * Enchants the item like an enchanting table option of the given level (vanilla enchant_with_levels loot
+	 * function). With $treasure (Bedrock "treasure": true), the treasure enchantments that loot can give (Mending,
+	 * Frost Walker and the curses) are possible too. Books become enchanted books. Returns the item unchanged when
+	 * nothing can be applied.
+	 */
+	public static function enchantWithLevels(Item $item, int $levels, Random $random, bool $treasure = false) : Item{
+		$enchantments = self::createOption($random, $item, $levels, $treasure)->getEnchantments();
+		return count($enchantments) > 0 ? self::enchantItem($item, $enchantments) : $item;
+	}
+
+	/**
 	 * @return EnchantingOption[]
 	 */
 	public static function generateOptions(Position $tablePos, Item $input, int $seed) : array{
@@ -88,11 +99,18 @@ final class EnchantingHelper{
 		$middleRequiredLevel = (int) floor($baseRequiredLevel * 2 / 3 + 1);
 		$bottomRequiredLevel = max($baseRequiredLevel, $bookshelfCount * 2);
 
-		return [
+		$options = [
 			self::createOption($random, $input, $topRequiredLevel),
 			self::createOption($random, $input, $middleRequiredLevel),
 			self::createOption($random, $input, $bottomRequiredLevel),
 		];
+		foreach($options as $option){
+			if(count($option->getEnchantments()) > 0){
+				return $options;
+			}
+		}
+		//nothing can be put on the item (a stick): no offers, like vanilla (it showed costs without enchantments)
+		return [];
 	}
 
 	private static function countBookshelves(Position $tablePos) : int{
@@ -133,7 +151,7 @@ final class EnchantingHelper{
 		return $bookshelfCount;
 	}
 
-	private static function createOption(Random $random, Item $inputItem, int $requiredXpLevel) : EnchantingOption{
+	private static function createOption(Random $random, Item $inputItem, int $requiredXpLevel, bool $treasure = false) : EnchantingOption{
 		$enchantingPower = $requiredXpLevel;
 
 		$enchantability = $inputItem->getEnchantability();
@@ -143,7 +161,7 @@ final class EnchantingHelper{
 		$enchantingPower = (int) round($enchantingPower * $bonus);
 
 		$resultEnchantments = [];
-		$availableEnchantments = self::getAvailableEnchantments($enchantingPower, $inputItem);
+		$availableEnchantments = self::getAvailableEnchantments($enchantingPower, $inputItem, $treasure);
 
 		$lastEnchantment = self::getRandomWeightedEnchantment($random, $availableEnchantments);
 		if($lastEnchantment !== null){
@@ -177,10 +195,16 @@ final class EnchantingHelper{
 	/**
 	 * @return EnchantmentInstance[]
 	 */
-	private static function getAvailableEnchantments(int $enchantingPower, Item $item) : array{
+	private static function getAvailableEnchantments(int $enchantingPower, Item $item, bool $treasure) : array{
 		$list = [];
 
-		foreach(EnchantmentRegistry::getInstance()->getPrimaryEnchantmentsForItem($item) as $enchantment){
+		$candidates = EnchantmentRegistry::getInstance()->getPrimaryEnchantmentsForItem($item);
+		if($treasure){
+			foreach(self::getTreasureEnchantmentsForItem($item) as $enchantment){
+				$candidates[] = $enchantment;
+			}
+		}
+		foreach($candidates as $enchantment){
 			for($lvl = $enchantment->getMaxLevel(); $lvl > 0; $lvl--){
 				if($enchantingPower >= $enchantment->getMinEnchantingPower($lvl) &&
 					$enchantingPower <= $enchantment->getMaxEnchantingPower($lvl)
@@ -192,6 +216,31 @@ final class EnchantingHelper{
 		}
 
 		return $list;
+	}
+
+	/**
+	 * Treasure enchantments that random loot can give (Bedrock enchant_with_levels "treasure") and that the item
+	 * accepts by its primary or secondary tags. Soul Speed, Swift Sneak and Wind Burst only come from specific tables.
+	 *
+	 * @return Enchantment[]
+	 */
+	private static function getTreasureEnchantmentsForItem(Item $item) : array{
+		$itemTags = $item->getEnchantmentTags();
+		if(count($itemTags) === 0 || $item->hasEnchantments()){
+			return [];
+		}
+		$registry = EnchantmentRegistry::getInstance();
+		$tags = ItemEnchantmentTagRegistry::getInstance();
+		$result = [];
+		foreach([VanillaEnchantments::MENDING(), VanillaEnchantments::FROST_WALKER(), VanillaEnchantments::BINDING(), VanillaEnchantments::VANISHING()] as $enchantment){
+			if($registry->isRegistered($enchantment) && (
+				$tags->isTagArrayIntersection($registry->getPrimaryItemTags($enchantment), $itemTags) ||
+				$tags->isTagArrayIntersection($registry->getSecondaryItemTags($enchantment), $itemTags)
+			)){
+				$result[] = $enchantment;
+			}
+		}
+		return $result;
 	}
 
 	/**

@@ -23,23 +23,27 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\event\block\BlockPreExplodeEvent;
 use pocketmine\event\player\PlayerRespawnAnchorUseEvent;
 use pocketmine\item\Item;
 use pocketmine\item\ItemTypeIds;
 use pocketmine\lang\KnownTranslationFactory;
+use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
 use pocketmine\player\Player;
-use pocketmine\Server;
 use pocketmine\utils\TextFormat;
+use pocketmine\world\dimension\Dimension;
 use pocketmine\world\Explosion;
+use pocketmine\world\GameRules;
 use pocketmine\world\Position;
 use pocketmine\world\sound\RespawnAnchorChargeSound;
 use pocketmine\world\sound\RespawnAnchorSetSpawnSound;
+use pocketmine\world\vibration\GameEvent;
+use function intdiv;
 
-final class RespawnAnchor extends Opaque{
+final class RespawnAnchor extends Opaque implements ComparatorReadable{
 	private const MIN_CHARGES = 0;
 	private const MAX_CHARGES = 4;
 
@@ -66,10 +70,18 @@ final class RespawnAnchor extends Opaque{
 		return $this->charges > 0 ? ($this->charges * 4) - 1 : 0;
 	}
 
+	/**
+	 * floor(charges / 4 * 15): 0, 3, 7, 11, 15 (vanilla RespawnAnchorBlock.getScaledChargeLevel()).
+	 */
+	public function getComparatorOutput() : int{
+		return intdiv($this->charges * 15, self::MAX_CHARGES);
+	}
+
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($item->getTypeId() === ItemTypeIds::fromBlockTypeId(BlockTypeIds::GLOWSTONE) && $this->charges < self::MAX_CHARGES){
 			$this->position->getWorld()->setBlock($this->position, $this->setCharges($this->charges + 1));
 			$this->position->getWorld()->addSound($this->position, new RespawnAnchorChargeSound());
+			$this->position->getWorld()->addGameEvent($this->position, GameEvent::BLOCK_CHANGE, $player);
 			$item->pop();
 			return true;
 		}
@@ -79,11 +91,11 @@ final class RespawnAnchor extends Opaque{
 				return false;
 			}
 
-			$dimension = Server::getInstance()->getDimensionManager()->getDimension($this->position->getWorld());
-			$defaultAction = $dimension === DimensionIds::NETHER ?
+			//respawn anchors only work in the Nether; anywhere else a charged anchor explodes
+			$ev = new PlayerRespawnAnchorUseEvent($player, $this, $this->position->getWorld()->getDimension() === Dimension::NETHER ?
 				PlayerRespawnAnchorUseEvent::ACTION_SET_SPAWN :
-				PlayerRespawnAnchorUseEvent::ACTION_EXPLODE;
-			$ev = new PlayerRespawnAnchorUseEvent($player, $this, $defaultAction);
+				PlayerRespawnAnchorUseEvent::ACTION_EXPLODE
+			);
 			$ev->call();
 			if($ev->isCancelled()){
 				return false;
@@ -91,7 +103,11 @@ final class RespawnAnchor extends Opaque{
 
 			switch($ev->getAction()){
 				case PlayerRespawnAnchorUseEvent::ACTION_EXPLODE:
-					$this->explode($player);
+					if(GameRules::allowsRespawnBlockExplosions($this->position->getWorld())){
+						$this->explode($player);
+					}else{
+						$player->sendMessage(KnownTranslationFactory::tile_respawn_anchor_notValid()->prefix(TextFormat::GRAY));
+					}
 					return true;
 
 				case PlayerRespawnAnchorUseEvent::ACTION_SET_SPAWN:
@@ -119,12 +135,40 @@ final class RespawnAnchor extends Opaque{
 
 		$this->position->getWorld()->setBlock($this->position, VanillaBlocks::AIR());
 
+		$hasWater = false;
+		foreach($this->getHorizontalSides() as $side){
+			if($this->isSurroundedByWater($side)){
+				$hasWater = true;
+				break;
+			}
+		}
+
 		$explosion = new Explosion(Position::fromObject($this->position->add(0.5, 0.5, 0.5), $this->position->getWorld()), $ev->getRadius(), $this);
 		$explosion->setFireChance($ev->getFireChance());
 
-		if($ev->isBlockBreaking()){
+		if($ev->isBlockBreaking() && !$hasWater && !($this->getSide(Facing::UP) instanceof Water)){
 			$explosion->explodeA();
 		}
 		$explosion->explodeB();
+	}
+
+	private function isSurroundedByWater(Block $block) : bool{
+		$world = $block->getPosition()->getWorld();
+
+		$fluid = $world->getBlock($block->getPosition());
+		if(!($fluid instanceof Water)){
+			return false;
+		}
+
+		if($fluid->isSource()){
+			return true;
+		}
+
+		if($fluid->getDecay() >= 7){ //vanilla: flow amount < 2 (furthest-spread water) does not count
+			return false;
+		}
+
+		$below = $fluid->getSide(Facing::DOWN);
+		return !($below instanceof Water);
 	}
 }

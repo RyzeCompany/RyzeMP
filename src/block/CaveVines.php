@@ -162,4 +162,12 @@ class CaveVines extends Flowable implements Ageable{
 	public function getSupportType(int $facing) : SupportType{
 		return SupportType::NONE;
 	}
+
+	public function getFlameEncouragement() : int{
+		return 15;
+	}
+
+	public function getFlammability() : int{
+		return 100;
+	}
 }

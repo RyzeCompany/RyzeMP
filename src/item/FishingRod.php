@@ -23,60 +23,61 @@ declare(strict_types=1);
 
 namespace pocketmine\item;
 
-use pocketmine\block\Block;
 use pocketmine\entity\Location;
 use pocketmine\entity\projectile\FishingHook;
-use pocketmine\entity\projectile\FishingSettings;
 use pocketmine\event\entity\ProjectileLaunchEvent;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\sound\ThrowSound;
+use pocketmine\world\vibration\GameEvent;
 
+/**
+ * Fishing rod: using it casts a bobber (see {@link FishingHook}); using it again reels the line in.
+ */
 class FishingRod extends Durable{
+	/** Speed of the cast bobber (vanilla FishingHook: 0.6 blocks per tick). */
+	public const CAST_SPEED = 0.6;
 
 	public function getMaxStackSize() : int{
 		return 1;
 	}
 
 	public function getMaxDurability() : int{
-		return 384;
+		return 385;
 	}
 
 	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
-		$settings = FishingSettings::fromConfig($player->getServer()->getConfigGroup());
-		if(!$settings->enabled || !$player->isAlive() || $player->isSpectator()
-			|| !$player->tryStartFishingAction($settings->cooldownTicks)){
+		// Keep the existing RyzeMP fishing.enabled flag when upgrading to VanillaMine fishing.
+		if(!$player->getServer()->getConfigGroup()->getPropertyBool("fishing.enabled", true)){
 			return ItemUseResult::FAIL;
 		}
-		$hook = $player->getFishingHook();
+		$world = $player->getWorld();
+		$hook = FishingHook::getActive($player);
 		if($hook !== null){
-			$damage = $hook->reelIn($player);
-			$player->setFishingHook(null);
-			if(!$player->isCreative()){
+			$damage = $hook->retrieve($player);
+			if($damage > 0 && $player->hasFiniteResources()){
 				$this->applyDamage($damage);
 			}
+			$world->addSound($player->getPosition(), new ThrowSound());
 			return ItemUseResult::SUCCESS;
 		}
 
 		$location = $player->getLocation();
-		$hook = new FishingHook(Location::fromObject($player->getEyePos(), $player->getWorld(), $location->yaw, $location->pitch), $player, $settings);
-		$hook->setMotion($directionVector->normalize()->multiply(1.1));
-		$player->setFishingHook($hook);
-		$event = new ProjectileLaunchEvent($hook);
-		$event->call();
-		if($event->isCancelled() || !$hook->isValidFor($player) || $player->getFishingHook() !== $hook){
+		$hook = new FishingHook(Location::fromObject($player->getEyePos(), $world, $location->yaw, $location->pitch), $player, $this);
+		$hook->setMotion($directionVector->multiply(self::CAST_SPEED));
+		$ev = new ProjectileLaunchEvent($hook);
+		$ev->call();
+		if($ev->isCancelled()){
 			$hook->flagForDespawn();
-			if($player->getFishingHook() === $hook){
-				$player->setFishingHook(null);
-			}
 			return ItemUseResult::FAIL;
 		}
 		$hook->spawnToAll();
-		$player->getWorld()->addSound($location, new ThrowSound());
+		$world->addSound($location, new ThrowSound());
+		$world->addGameEvent($location, GameEvent::PROJECTILE_SHOOT, $player);
 		return ItemUseResult::SUCCESS;
 	}
 
-	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
-		return $this->onClickAir($player, $player->getDirectionVector(), $returnedItems);
+	public function getFuelTime() : int{
+		return 300;
 	}
 }

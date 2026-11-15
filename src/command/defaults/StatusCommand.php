@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory as l10n;
 use pocketmine\lang\Translatable;
 use pocketmine\permission\DefaultPermissionNames;
@@ -36,7 +37,7 @@ use function number_format;
 use function round;
 use function strval;
 
-class StatusCommand extends NativeCommand{
+class StatusCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -63,7 +64,11 @@ class StatusCommand extends NativeCommand{
 		return l10n::pocketmine_command_status_memory_stat(number_format(round(($bytes / 1024) / 1024, 2), 2))->prefix(TextFormat::RED);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		$mUsage = Process::getAdvancedMemoryUsage();
 
 		$server = $sender->getServer();

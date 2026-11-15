@@ -92,4 +92,16 @@ class SimpleInventory extends BaseInventory{
 	public function isSlotEmpty(int $index) : bool{
 		return $this->slots[$index] === null || $this->slots[$index]->isNull();
 	}
+
+	/**
+	 * Returns whether the slot holds an item which is an instance of the given class, without cloning it: the same as
+	 * getItem($index) instanceof $class for any class air items are not instances of. Only for this class' own
+	 * getItem(): callers must check that the inventory's class does not override it.
+	 *
+	 * @internal
+	 * @phpstan-param class-string<Item> $class
+	 */
+	public function isSlotInstanceOf(int $index, string $class) : bool{
+		return $this->slots[$index] instanceof $class;
+	}
 }

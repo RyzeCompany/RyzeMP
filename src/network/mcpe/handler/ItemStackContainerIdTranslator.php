@@ -82,6 +82,7 @@ final class ItemStackContainerIdTranslator{
 			ContainerUIIds::BREWING_STAND_FUEL,
 			ContainerUIIds::BREWING_STAND_INPUT,
 			ContainerUIIds::BREWING_STAND_RESULT,
+			ContainerUIIds::CRAFTER, //crafter grid, if not sent as LEVEL_ENTITY
 			ContainerUIIds::FURNACE_FUEL,
 			ContainerUIIds::FURNACE_INGREDIENT,
 			ContainerUIIds::FURNACE_RESULT,

@@ -24,12 +24,20 @@ declare(strict_types=1);
 namespace pocketmine\world\format;
 
 use function array_map;
+use function array_pop;
+use function array_slice;
 use function count;
 
 class SubChunk{
 	public const COORD_BIT_SIZE = 4;
 	public const COORD_MASK = ~(~0 << self::COORD_BIT_SIZE);
 	public const EDGE_LENGTH = 1 << self::COORD_BIT_SIZE;
+
+	/**
+	 * Incremented on every block change made through this object, so that facts derived from the blocks (e.g. whether
+	 * any of them needs random ticking) can be cached and revalidated cheaply.
+	 */
+	private int $blockModificationCount = 0;
 
 	/**
 	 * SubChunk constructor.
@@ -81,6 +89,34 @@ class SubChunk{
 			$this->blockLayers[] = new PalettedBlockArray($this->emptyBlockId);
 		}
 		$this->blockLayers[0]->set($x, $y, $z, $block);
+		++$this->blockModificationCount;
+	}
+
+	public function getBlockModificationCount() : int{ return $this->blockModificationCount; }
+
+	/**
+	 * Returns the block state ID in the liquid layer (block layer 1), where vanilla stores the water of waterlogged
+	 * blocks.
+	 */
+	public function getLiquidLayerStateId(int $x, int $y, int $z) : int{
+		if(!isset($this->blockLayers[1])){
+			return $this->emptyBlockId;
+		}
+		return $this->blockLayers[1]->get($x, $y, $z);
+	}
+
+	public function setLiquidLayerStateId(int $x, int $y, int $z, int $block) : void{
+		if(!isset($this->blockLayers[1])){
+			if($block === $this->emptyBlockId){
+				return;
+			}
+			if(count($this->blockLayers) === 0){
+				$this->blockLayers[] = new PalettedBlockArray($this->emptyBlockId);
+			}
+			$this->blockLayers[] = new PalettedBlockArray($this->emptyBlockId);
+		}
+		$this->blockLayers[1]->set($x, $y, $z, $block);
+		++$this->blockModificationCount;
 	}
 
 	/**
@@ -89,6 +125,18 @@ class SubChunk{
 	 */
 	public function getBlockLayers() : array{
 		return $this->blockLayers;
+	}
+
+	/**
+	 * Replaces all the block layers at once (layer 0: blocks, layer 1: the liquid layer), e.g. with arrays a world
+	 * generator built elsewhere. Counts as a block change.
+	 *
+	 * @param PalettedBlockArray[] $blockLayers
+	 * @phpstan-param list<PalettedBlockArray> $blockLayers
+	 */
+	public function setBlockLayers(array $blockLayers) : void{
+		$this->blockLayers = $blockLayers;
+		++$this->blockModificationCount;
 	}
 
 	public function getHighestBlockAt(int $x, int $z) : ?int{
@@ -130,17 +178,34 @@ class SubChunk{
 	}
 
 	public function collectGarbage() : void{
-		$cleanedLayers = [];
 		foreach($this->blockLayers as $layer){
 			$layer->collectGarbage();
-
-			if($layer->getBitsPerBlock() !== 0 || $layer->get(0, 0, 0) !== $this->emptyBlockId){
-				$cleanedLayers[] = $layer;
-			}
 		}
-		$this->blockLayers = $cleanedLayers;
+		//only empty layers at the end can go: the position of a layer has a meaning (layer 1 is the liquid layer), so an
+		//empty layer 0 must stay while layer 1 has water in it
+		$count = count($this->blockLayers);
+		$keep = $count;
+		while(($last = $this->blockLayers[$keep - 1] ?? null) !== null && $last->getBitsPerBlock() === 0 && $last->get(0, 0, 0) === $this->emptyBlockId){
+			--$keep;
+		}
+		if($keep !== $count){
+			//a new array instead of array_pop($this->blockLayers): passing the property by reference leaves it as a PHP
+			//reference after the call, which the native FastSubChunkSerializer of chunkutils2 0.3.8-0.3.12 rejects
+			//("malformed SubChunk", a server crash when the chunk is sent)
+			$this->blockLayers = array_slice($this->blockLayers, 0, $keep);
+		}
 		$this->biomes->collectGarbage();
 
+		$this->collectLightGarbage();
+	}
+
+	/**
+	 * Drops the light arrays that are all zero (the getters create a new one when needed), without the block and
+	 * biome palette work of {@link SubChunk::collectGarbage()}.
+	 *
+	 * @internal
+	 */
+	public function collectLightGarbage() : void{
 		if($this->skyLight !== null && $this->skyLight->isUniform(0)){
 			$this->skyLight = null;
 		}

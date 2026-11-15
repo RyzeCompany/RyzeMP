@@ -32,6 +32,8 @@ use pocketmine\block\utils\FroglightType;
 use pocketmine\block\utils\LeverFacing;
 use pocketmine\block\utils\MobHeadType;
 use pocketmine\block\utils\MushroomBlockType;
+use pocketmine\block\utils\RedstoneWireConnection;
+use pocketmine\block\utils\StairShape;
 use pocketmine\data\bedrock\block\BlockLegacyMetadata as LegacyMeta;
 use pocketmine\data\bedrock\block\BlockStateStringValues as StringValues;
 use pocketmine\data\bedrock\block\BlockTypeNames as Ids;
@@ -59,6 +61,10 @@ final class ValueMappings{
 	public readonly EnumFromRawStateMap $bellAttachmentType;
 	/** @phpstan-var EnumFromRawStateMap<LeverFacing, string> */
 	public readonly EnumFromRawStateMap $leverFacing;
+	/** @phpstan-var EnumFromRawStateMap<StairShape, string> */
+	public readonly EnumFromRawStateMap $stairCorner;
+	/** @phpstan-var EnumFromRawStateMap<RedstoneWireConnection, string> */
+	public readonly EnumFromRawStateMap $redstoneWireConnection;
 
 	/** @phpstan-var EnumFromRawStateMap<MushroomBlockType, int> */
 	public readonly EnumFromRawStateMap $mushroomBlockType;
@@ -167,6 +173,20 @@ final class ValueMappings{
 			LeverFacing::SOUTH => StringValues::LEVER_DIRECTION_SOUTH,
 			LeverFacing::WEST => StringValues::LEVER_DIRECTION_WEST,
 			LeverFacing::EAST => StringValues::LEVER_DIRECTION_EAST
+		});
+		//1.26.50: minecraft:corner state of stairs
+		$this->stairCorner = EnumFromRawStateMap::string(StairShape::class, fn(StairShape $case) => match ($case) {
+			StairShape::STRAIGHT => StringValues::MC_CORNER_NONE,
+			StairShape::INNER_LEFT => StringValues::MC_CORNER_INNER_LEFT,
+			StairShape::INNER_RIGHT => StringValues::MC_CORNER_INNER_RIGHT,
+			StairShape::OUTER_LEFT => StringValues::MC_CORNER_OUTER_LEFT,
+			StairShape::OUTER_RIGHT => StringValues::MC_CORNER_OUTER_RIGHT,
+		});
+		//1.26.60: redstone_{north,east,south,west} states of redstone dust (all four sides use the same values)
+		$this->redstoneWireConnection = EnumFromRawStateMap::string(RedstoneWireConnection::class, fn(RedstoneWireConnection $case) => match ($case) {
+			RedstoneWireConnection::NONE => StringValues::REDSTONE_NORTH_NONE,
+			RedstoneWireConnection::SIDE => StringValues::REDSTONE_NORTH_SIDE,
+			RedstoneWireConnection::UP => StringValues::REDSTONE_NORTH_UP,
 		});
 
 		$this->mushroomBlockType = EnumFromRawStateMap::int(

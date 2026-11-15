@@ -23,11 +23,19 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\DirtPathHelper;
+use pocketmine\item\Hoe;
 use pocketmine\item\Item;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
 
 class GrassPath extends Transparent{
+
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		return $item instanceof Hoe && DirtPathHelper::till($this, $item, $face);
+	}
 
 	protected function recalculateCollisionBoxes() : array{
 		return [AxisAlignedBB::one()->trim(Facing::UP, 1 / 16)];

@@ -38,8 +38,17 @@ class HayBale extends Opaque implements PillarRotation{
 		return 20;
 	}
 
+	public function getCompostabilityChance() : int{
+		return 85;
+	}
+
 	public function onEntityLand(Entity $entity) : ?float{
-		$entity->fallDistance *= 0.2;
+		//vanilla multiplies the fall damage by 0.2 (HayBlock.fallOn()): keep the 3 safe blocks and scale the rest of the
+		//distance, so that the damage is ceil((distance - 3) * 0.2)
+		$fallDistance = $entity->getFallDistance();
+		if($fallDistance > 3){
+			$entity->setFallDistance(3 + ($fallDistance - 3) * 0.2);
+		}
 		return null;
 	}
 }

@@ -85,10 +85,6 @@ final class FeatureBiomes{
 		$this->fiddleZ = [];
 	}
 
-	public function finish() : void{
-		$this->chunks = [];
-	}
-
 	/**
 	 * Java biome index of the cell at quart coordinates (y clamped to the world like ChunkAccess.getNoiseBiome()).
 	 */

@@ -47,6 +47,8 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 	public const MODIFIER_WEAPON_ENCHANTMENTS = 9;
 	public const MODIFIER_PREVIOUS_DAMAGE_COOLDOWN = 10;
 	public const MODIFIER_ARMOR_HELMET = 11;
+	/** Extra damage of a mace smash attack (fall distance and Density). */
+	public const MODIFIER_SMASH = 12;
 
 	public const CAUSE_CONTACT = 0;
 	public const CAUSE_ENTITY_ATTACK = 1;
@@ -65,8 +67,34 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 	public const CAUSE_CUSTOM = 14;
 	public const CAUSE_STARVATION = 15;
 	public const CAUSE_FALLING_BLOCK = 16;
-	/** Damage produced by a lightning bolt. */
-	public const CAUSE_LIGHTNING = 17;
+	/** Flying into a wall while gliding with an elytra (kinetic energy). */
+	public const CAUSE_FLY_INTO_WALL = 17;
+	/** Struck by a lightning bolt. */
+	public const CAUSE_LIGHTNING = 18;
+	/** Freezing in powder snow. */
+	public const CAUSE_FREEZE = 19;
+	/** The Wither effect (bypasses armour). */
+	public const CAUSE_WITHER = 20;
+	/** The Thorns enchantment of the armour of the entity that was attacked (reduced by armour). */
+	public const CAUSE_THORNS = 21;
+	/** Standing on a magma block or touching a hot sulfur cube ("hot floor", fire damage). */
+	public const CAUSE_MAGMA = 22;
+	/** Standing in a lit campfire or soul campfire (fire damage). */
+	public const CAUSE_CAMPFIRE = 23;
+	/** Moving through a sweet berry bush. */
+	public const CAUSE_SWEET_BERRY_BUSH = 24;
+	/** Hit by a falling pointed dripstone stalactite. */
+	public const CAUSE_STALACTITE = 25;
+	/** Falling onto a pointed dripstone stalagmite (fall damage that bypasses armour). */
+	public const CAUSE_STALAGMITE = 26;
+	/** The Warden's sonic boom (bypasses armour and protection enchantments). */
+	public const CAUSE_SONIC_BOOM = 27;
+	/** Dragon's breath clouds (bypasses armour). */
+	public const CAUSE_DRAGON_BREATH = 28;
+	/** Hit by a blaze or ghast fireball, or a fire charge (projectile and fire damage). */
+	public const CAUSE_FIREBALL = 29;
+	/** Hit by a wither skull (projectile damage). */
+	public const CAUSE_WITHER_SKULL = 30;
 
 	private float $baseDamage;
 	private float $originalBase;
@@ -160,14 +188,51 @@ class EntityDamageEvent extends EntityEvent implements Cancellable{
 			case self::CAUSE_DROWNING:
 			case self::CAUSE_STARVATION:
 			case self::CAUSE_FALL:
+			case self::CAUSE_FLY_INTO_WALL:
 			case self::CAUSE_VOID:
 			case self::CAUSE_MAGIC:
 			case self::CAUSE_SUICIDE:
+			case self::CAUSE_WITHER:
+			case self::CAUSE_STALAGMITE:
+			case self::CAUSE_SONIC_BOOM:
+			case self::CAUSE_DRAGON_BREATH:
 				return false;
 
 		}
 
 		return true;
+	}
+
+	/**
+	 * Returns whether protection enchantments on the worn armour can reduce this type of damage. Only the Warden's sonic
+	 * boom bypasses them (vanilla bypasses_enchantments).
+	 */
+	public function canBeReducedByArmorEnchantments() : bool{
+		return $this->cause !== self::CAUSE_SONIC_BOOM;
+	}
+
+	/**
+	 * Returns whether the given cause is fire damage (vanilla is_fire): fire immune entities ignore it, the Fire
+	 * Resistance effect cancels it, Fire Protection reduces it and the firedamage game rule turns it off for players.
+	 */
+	public static function isFireCause(int $cause) : bool{
+		return match($cause){
+			self::CAUSE_FIRE,
+			self::CAUSE_FIRE_TICK,
+			self::CAUSE_LAVA,
+			self::CAUSE_MAGMA,
+			self::CAUSE_CAMPFIRE,
+			self::CAUSE_FIREBALL => true,
+			default => false
+		};
+	}
+
+	/**
+	 * Returns whether the given cause is a projectile hit (vanilla is_projectile): shields block it and Projectile
+	 * Protection reduces it.
+	 */
+	public static function isProjectileCause(int $cause) : bool{
+		return $cause === self::CAUSE_PROJECTILE || $cause === self::CAUSE_FIREBALL || $cause === self::CAUSE_WITHER_SKULL;
 	}
 
 	/**

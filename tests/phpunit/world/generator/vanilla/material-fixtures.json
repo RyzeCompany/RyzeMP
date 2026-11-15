@@ -1,0 +1,76 @@
+{
+    "_comment": "md5 of the block ids (Java names) of whole chunks after the material stage, computed by an independent implementation on deepslate 0.27.2 primitives (MIT) with vanilla semantics, except seed 13579 chunk 0,0, recomputed by the PHP implementation after the aquifer fix that was checked against a Java 26.3 server (the reference implementation shared the old aquifer behaviour), and the seed 12345 chunks, which are aquifer-rich chunks identical block for block to the ones of a Java 26.3 server with carvers and features disabled; numbers only, no Mojang data",
+    "seeds": {
+        "13579": [
+            {
+                "cx": 0,
+                "cz": 0,
+                "md5": "70070f3e5191df14321930e54228c2e3"
+            },
+            {
+                "cx": -234,
+                "cz": 135,
+                "md5": "e7d50be67db926597696dd438055f80e"
+            },
+            {
+                "cx": -180,
+                "cz": -270,
+                "md5": "08b033993769f266c9102a76bc5f6a6a"
+            },
+            {
+                "cx": 126,
+                "cz": -18,
+                "md5": "e6b0dccc416cb199808944351e42fee3"
+            },
+            {
+                "cx": -189,
+                "cz": -225,
+                "md5": "f53073bfad23448d88b03c9f6a173b8d"
+            },
+            {
+                "cx": -270,
+                "cz": -72,
+                "md5": "03fe7517574ac977d5bff85e8e845f32"
+            }
+        ],
+        "-4172144997902289642": [
+            {
+                "cx": 225,
+                "cz": -45,
+                "md5": "04fdf6aa45264de4003cb477e3aa65f7"
+            },
+            {
+                "cx": -270,
+                "cz": -117,
+                "md5": "7a7c7a7cb707fedc431534df67340df9"
+            },
+            {
+                "cx": -261,
+                "cz": -126,
+                "md5": "a2679e17aed16c3cca21a4ef009d8086"
+            },
+            {
+                "cx": -252,
+                "cz": -36,
+                "md5": "0820b728d924eb608739dfccd9e61541"
+            }
+        ],
+        "12345": [
+            {
+                "cx": -110,
+                "cz": -108,
+                "md5": "6040960275b5d0bb5533b463be26f66e"
+            },
+            {
+                "cx": -105,
+                "cz": -103,
+                "md5": "8ada7fa8b4d9ba3671b731c787c68936"
+            },
+            {
+                "cx": -137,
+                "cz": 40,
+                "md5": "76403763cb1e32818497ebeb9d680522"
+            }
+        ]
+    }
+}

@@ -2,7 +2,7 @@
 
 /*
  *
- *  ____            _        _   __  __ _                  __  __ ____ 
+ *  ____            _        _   __  __ _                  __  __ ____
  * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
  * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
  * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
@@ -25,11 +25,14 @@ namespace pocketmine\network\mcpe\convert;
 
 use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockTypeNames;
+use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\nbt\NbtDataException;
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\network\mcpe\protocol\serializer\NetworkNbtSerializer;
+use pocketmine\utils\Binary;
 use pocketmine\utils\Utils;
-use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use function array_key_first;
 use function array_map;
 use function count;
@@ -38,31 +41,21 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function json_decode;
+use function ksort;
+use function ord;
+use function strlen;
 use const JSON_THROW_ON_ERROR;
+use const SORT_STRING;
 
 /**
  * Handles translation of network block runtime IDs into blockstate data, and vice versa
  */
 final class BlockStateDictionary{
-	/** Blockstate properties clients have from 1.26.50 that the server's block model does not. */
-	private const NETWORK_ONLY_PROPERTIES = [
-		"minecraft:corner" => true,
-		"minecraft:connection_north" => true,
-		"minecraft:connection_south" => true,
-		"minecraft:connection_east" => true,
-		"minecraft:connection_west" => true,
-		"minecraft:connection_up" => true,
-		"minecraft:connection_down" => true,
-	];
-
 	/**
 	 * @var int[][]|int[]
 	 * @phpstan-var array<string, array<string, int>|int>
 	 */
 	private array $stateDataToStateIdLookup = [];
-
-	/** @var array<string, array<string, int>> */
-	private array $networkStateDataToStateIdLookup = [];
 
 	/**
 	 * @var int[][]|null
@@ -71,7 +64,19 @@ final class BlockStateDictionary{
 	private ?array $idMetaToStateIdLookupCache = null;
 
 	/**
-	 * @param BlockStateDictionaryEntry[] $states
+	 * FNV-1a 32-bit parameters, used by the vanilla client to compute hashed block network IDs
+	 * (StartGamePacket::blockNetworkIdsAreHashes).
+	 */
+	private const FNV1_32_OFFSET = 0x811c9dc5;
+	private const FNV1_32_PRIME = 0x01000193;
+
+	/**
+	 * Network ID the vanilla client uses for an unknown block when hashed IDs are in use.
+	 */
+	public const UNKNOWN_BLOCK_NETWORK_ID = -2;
+
+	/**
+	 * @param BlockStateDictionaryEntry[] $states keyed by network runtime ID
 	 *
 	 * @phpstan-param array<int, BlockStateDictionaryEntry> $states
 	 */
@@ -80,15 +85,7 @@ final class BlockStateDictionary{
 	){
 		$table = [];
 		foreach($this->states as $stateId => $stateNbt){
-			$raw = $stateNbt->getRawStateProperties();
-			$networkState = $stateNbt->generateStateData();
-			if(!$networkState->equals($stateNbt->generateCurrentStateData())){
-				$this->networkStateDataToStateIdLookup[$networkState->getName()][BlockStateDictionaryEntry::encodeStateProperties($networkState->getStates())] = $stateId;
-			}
-			if($stateNbt->hasStrippedProperties() && isset($table[$stateNbt->getStateName()][$raw])){
-				continue; //keep the default state (listed first) for server lookups
-			}
-			$table[$stateNbt->getStateName()][$raw] = $stateId;
+			$table[$stateNbt->getStateName()][$stateNbt->getRawStateProperties()] = $stateId;
 		}
 
 		//setup fast path for stateless blocks
@@ -97,20 +94,6 @@ final class BlockStateDictionary{
 				$this->stateDataToStateIdLookup[$name] = $stateIds[array_key_first($stateIds)];
 			}else{
 				$this->stateDataToStateIdLookup[$name] = $stateIds;
-			}
-		}
-
-		$standardSkull = $this->stateDataToStateIdLookup[BlockTypeNames::SKELETON_SKULL];
-		foreach([
-			BlockTypeNames::WITHER_SKELETON_SKULL,
-			BlockTypeNames::ZOMBIE_HEAD,
-			BlockTypeNames::PLAYER_HEAD,
-			BlockTypeNames::CREEPER_HEAD,
-			BlockTypeNames::DRAGON_HEAD,
-			BlockTypeNames::PIGLIN_HEAD
-		] as $skull){
-			if(!isset($this->stateDataToStateIdLookup[$skull])){
-				$this->stateDataToStateIdLookup[$skull] = $standardSkull;
 			}
 		}
 	}
@@ -146,22 +129,12 @@ final class BlockStateDictionary{
 		return ($this->states[$networkRuntimeId] ?? null)?->generateStateData();
 	}
 
-	public function generateCurrentDataFromStateId(int $networkRuntimeId) : ?BlockStateData{
-		return ($this->states[$networkRuntimeId] ?? null)?->generateCurrentStateData();
-	}
-
 	/**
 	 * Searches for the appropriate state ID which matches the given blockstate NBT.
 	 * Returns null if there were no matches.
 	 */
 	public function lookupStateIdFromData(BlockStateData $data) : ?int{
 		$name = $data->getName();
-		if(isset($this->networkStateDataToStateIdLookup[$name])){
-			$networkId = $this->networkStateDataToStateIdLookup[$name][BlockStateDictionaryEntry::encodeStateProperties($data->getStates())] ?? null;
-			if($networkId !== null){
-				return $networkId;
-			}
-		}
 
 		$lookup = $this->stateDataToStateIdLookup[$name] ?? null;
 		return match(true){
@@ -213,10 +186,10 @@ final class BlockStateDictionary{
 	}
 
 	/**
-	 * @param int[]|null $networkIds when set, states are keyed by these (hashed) network ids instead of their index
+	 * @param list<int>|null $networkIds Explicit IDs for palettes using hashed network IDs.
+	 *                           Older palettes use their position in the list instead.
 	 */
-	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null) : self{
-		$upgrader = GlobalBlockStateHandlers::getUpgrader()->getBlockStateUpgrader();
+	public static function loadFromString(string $blockPaletteContents, string $metaMapContents, ?array $networkIds = null, bool $useHashedIds = true) : self{
 		$metaMap = json_decode($metaMapContents, flags: JSON_THROW_ON_ERROR);
 		if(!is_array($metaMap)){
 			throw new \InvalidArgumentException("Invalid metaMap, expected array for root type, got " . get_debug_type($metaMap));
@@ -246,23 +219,51 @@ final class BlockStateDictionary{
 			if(!is_int($meta)){
 				throw new \InvalidArgumentException("Invalid metaMap offset $i, expected int, got " . get_debug_type($meta));
 			}
-			$newState = $upgrader->upgrade($state);
-			$uniqueName = $uniqueNames[$newState->getName()] ??= $newState->getName();
-			$currentStates = $newState->getStates();
-			$stripped = false;
-			foreach($currentStates as $property => $_){
-				if(isset(self::NETWORK_ONLY_PROPERTIES[$property])){
-					unset($currentStates[$property]);
-					$stripped = true;
-				}
+			$uniqueName = $uniqueNames[$state->getName()] ??= $state->getName();
+
+			//Network IDs are hashes of the blockstate NBT rather than positions in the palette. This makes the server
+			//independent of the (unpublished) order of Mojang's internal block registry: the palette file only needs to
+			//contain the right set of states, which can be regenerated from Mojang's public vanilla data.
+			$networkId = $networkIds !== null ? ($networkIds[$i] ?? null) : ($useHashedIds ? self::computeNetworkId($uniqueName, $state->getStates()) : $i);
+			if(!is_int($networkId)){
+				throw new \InvalidArgumentException("Invalid network ID for state $i");
 			}
-			$networkId = $networkIds === null ? $i : ($networkIds[$i] ?? null);
-			if(!is_int($networkId) || isset($entries[$networkId])){
-				throw new \InvalidArgumentException("Invalid or duplicate network id for state $i");
+			if(isset($entries[$networkId])){
+				throw new \InvalidArgumentException("Duplicate network ID $networkId for state $i");
 			}
-			$entries[$networkId] = new BlockStateDictionaryEntry($uniqueName, $currentStates, $meta, $stripped || !$newState->equals($state) ? $state : null, $stripped);
+			$entries[$networkId] = new BlockStateDictionaryEntry($uniqueName, $state->getStates(), $meta);
 		}
 
 		return new self($entries);
+	}
+
+	/**
+	 * Computes the hashed network runtime ID of a blockstate, as the vanilla client does when
+	 * StartGamePacket::blockNetworkIdsAreHashes is true: FNV-1a 32-bit over the little-endian NBT encoding of
+	 * TAG_Compound{name: TAG_String, states: TAG_Compound} with the state properties sorted by name.
+	 * The result is returned as a signed 32-bit integer.
+	 *
+	 * @param Tag[] $stateProperties
+	 * @phpstan-param array<string, Tag> $stateProperties
+	 */
+	public static function computeNetworkId(string $name, array $stateProperties) : int{
+		if($name === BlockTypeNames::UNKNOWN){
+			return self::UNKNOWN_BLOCK_NETWORK_ID;
+		}
+		ksort($stateProperties, SORT_STRING);
+		$statesTag = CompoundTag::create();
+		foreach(Utils::stringifyKeys($stateProperties) as $k => $v){
+			$statesTag->setTag($k, $v);
+		}
+		$nbt = (new LittleEndianNbtSerializer())->write(new TreeRoot(CompoundTag::create()
+			->setString(BlockStateData::TAG_NAME, $name)
+			->setTag(BlockStateData::TAG_STATES, $statesTag)
+		));
+
+		$hash = self::FNV1_32_OFFSET;
+		for($i = 0, $len = strlen($nbt); $i < $len; ++$i){
+			$hash = (($hash ^ ord($nbt[$i])) * self::FNV1_32_PRIME) & 0xffffffff;
+		}
+		return Binary::signInt($hash);
 	}
 }

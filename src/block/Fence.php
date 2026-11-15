@@ -23,35 +23,69 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\FenceConnectionRules;
+use pocketmine\block\utils\HorizontalConnections;
+use pocketmine\block\utils\HorizontalConnectionsTrait;
 use pocketmine\block\utils\SupportType;
+use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\entity\object\LeashKnot;
+use pocketmine\item\Item;
 use pocketmine\math\Axis;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\BlockTransaction;
 use function count;
 
-class Fence extends Transparent{
-	/** @var bool[] facing => dummy */
-	protected array $connections = [];
+class Fence extends Transparent implements HorizontalConnections{
+	use HorizontalConnectionsTrait;
 
 	public function getThickness() : float{
 		return 0.25;
 	}
 
-	public function readStateFromWorld() : Block{
-		parent::readStateFromWorld();
+	/**
+	 * Since 1.26.50 the client no longer infers fence connections from the neighbours: they're real block states
+	 * (minecraft:connection_*), so they have to be part of our state too and kept up to date on block changes.
+	 */
+	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
+		$w->horizontalFacingFlags($this->connections);
+	}
 
-		$this->collisionBoxes = null;
-
-		foreach(Facing::HORIZONTAL as $facing){
-			$block = $this->getSide($facing);
-			if($block instanceof static || $block instanceof FenceGate || $block->getSupportType(Facing::opposite($facing)) === SupportType::FULL){
-				$this->connections[$facing] = true;
-			}else{
-				unset($this->connections[$facing]);
-			}
+	/**
+	 * Fences connect to fences of the same kind (wooden or not, so nether brick and wooden fences don't join), to fence
+	 * gates in line with them and to sturdy faces (Java FenceBlock.connectsTo).
+	 */
+	protected function canConnectTo(Block $block, int $facing) : bool{
+		if($block instanceof Fence){
+			return ($block instanceof WoodenFence) === ($this instanceof WoodenFence);
 		}
+		if($block instanceof FenceGate){
+			return FenceConnectionRules::connectsToGate($block, $facing);
+		}
+		return FenceConnectionRules::connectsToFace($block, $facing);
+	}
 
-		return $this;
+	/**
+	 * Using a fence ties the mobs the player leads to it (see {@link LeashKnot}).
+	 */
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		if($player === null || LeashKnot::getMobsLeashedTo($player, LeashKnot::TIE_RANGE) === []){
+			return false;
+		}
+		return LeashKnot::getOrCreate($this->position->getWorld(), $this->position)->tieMobsOf($player);
+	}
+
+	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
+		$this->recalculateConnections();
+		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
+	}
+
+	public function onNearbyBlockChange() : void{
+		if($this->recalculateConnections()){
+			$this->position->getWorld()->setBlock($this->position, $this);
+		}
 	}
 
 	protected function recalculateCollisionBoxes() : array{

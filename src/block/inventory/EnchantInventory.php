@@ -61,8 +61,9 @@ class EnchantInventory extends SimpleInventory implements BlockInventory, Tempor
 				$event->call();
 				if(!$event->isCancelled() && count($event->getOptions()) > 0){
 					$this->options = array_values($event->getOptions());
-					$viewer->getNetworkSession()->getInvManager()?->syncEnchantingTableOptions($this->options);
 				}
+				//an empty list clears the offers shown for the previous item, like BDS (they stayed on screen)
+				$viewer->getNetworkSession()->getInvManager()?->syncEnchantingTableOptions($this->options);
 			}
 		}
 

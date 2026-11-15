@@ -52,7 +52,10 @@ abstract class Timings{
 	public static TimingsHandler $playerNetworkSendCompress;
 	public static TimingsHandler $playerNetworkSendCompressBroadcast;
 	public static TimingsHandler $playerNetworkSendCompressSessionBuffer;
+	public static TimingsHandler $playerNetworkSendCompressThread;
 	public static TimingsHandler $playerNetworkSendEncrypt;
+	public static TimingsHandler $playerNetworkSendBatch;
+	public static TimingsHandler $playerNetworkSendTransport;
 	public static TimingsHandler $playerNetworkSendInventorySync;
 	public static TimingsHandler $playerNetworkSendPreSpawnGameData;
 	public static TimingsHandler $playerNetworkReceive;
@@ -68,6 +71,8 @@ abstract class Timings{
 	public static TimingsHandler $permissibleCalculationCallback;
 	public static TimingsHandler $entityMove;
 	public static TimingsHandler $entityMoveCollision;
+	public static TimingsHandler $entityMoveChunkTracking;
+	public static TimingsHandler $entityMoveBlockIntersections;
 	public static TimingsHandler $projectileMove;
 	public static TimingsHandler $projectileMoveRayTrace;
 	public static TimingsHandler $playerCheckNearEntities;
@@ -154,7 +159,10 @@ abstract class Timings{
 		self::$playerNetworkSendCompress = new TimingsHandler("Player Network Send - Compression", self::$playerNetworkSend);
 		self::$playerNetworkSendCompressBroadcast = new TimingsHandler("Player Network Send - Compression (Broadcast)", self::$playerNetworkSendCompress);
 		self::$playerNetworkSendCompressSessionBuffer = new TimingsHandler("Player Network Send - Compression (Session Buffer)", self::$playerNetworkSendCompress);
+		self::$playerNetworkSendCompressThread = new TimingsHandler("Player Network Send - Compression (Thread Results)", self::$playerNetworkSendCompress);
 		self::$playerNetworkSendEncrypt = new TimingsHandler("Player Network Send - Encryption", self::$playerNetworkSend);
+		self::$playerNetworkSendBatch = new TimingsHandler("Player Network Send - Batch Assembly", self::$playerNetworkSend);
+		self::$playerNetworkSendTransport = new TimingsHandler("Player Network Send - Transport Handoff", self::$playerNetworkSend);
 		self::$playerNetworkSendInventorySync = new TimingsHandler("Player Network Send - Inventory Sync", self::$playerNetworkSend);
 		self::$playerNetworkSendPreSpawnGameData = new TimingsHandler("Player Network Send - Pre-Spawn Game Data", self::$playerNetworkSend);
 
@@ -178,6 +186,8 @@ abstract class Timings{
 
 		self::$entityMove = new TimingsHandler("Entity Movement");
 		self::$entityMoveCollision = new TimingsHandler("Entity Movement - Collision Checks", self::$entityMove);
+		self::$entityMoveChunkTracking = new TimingsHandler("Entity Movement - Chunk Tracking", self::$entityMove);
+		self::$entityMoveBlockIntersections = new TimingsHandler("Entity Movement - Block Intersections", self::$entityMove);
 
 		self::$projectileMove = new TimingsHandler("Projectile Movement", self::$entityMove);
 		self::$projectileMoveRayTrace = new TimingsHandler("Projectile Movement - Ray Tracing", self::$projectileMove);

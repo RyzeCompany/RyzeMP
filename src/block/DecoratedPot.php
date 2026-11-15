@@ -24,28 +24,30 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\DecoratedPot as TileDecoratedPot;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
+use pocketmine\block\utils\ItemTransfer;
 use pocketmine\block\utils\SupportType;
+use pocketmine\entity\projectile\Projectile;
 use pocketmine\item\Axe;
 use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Hoe;
 use pocketmine\item\Item;
+use pocketmine\item\Mace;
 use pocketmine\item\Pickaxe;
 use pocketmine\item\PotterySherdType;
-use pocketmine\item\PotterySherd;
-use pocketmine\item\ItemIdentifier;
-use pocketmine\item\ItemTypeIds;
-use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\item\Shovel;
 use pocketmine\item\Sword;
 use pocketmine\item\Trident;
 use pocketmine\item\VanillaItems;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\math\RayTraceResult;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\GameRules;
 use pocketmine\world\sound\DecoratedPotInsertSound;
 use pocketmine\world\sound\DecoratedPotShatterSound;
 use function floor;
@@ -54,13 +56,13 @@ use function floor;
  * Decorated pot. The pattern on each side and the stored items are kept in the block entity.
  *
  * - Using an item on it stores one item (one stack of a single item type at most) and makes the pot wobble.
- * - Hopper, dropper and crafter integration requires the later RyzeMP item-transfer adapter.
- * - Broken with a sword, axe, pickaxe, shovel, hoe or trident, it shatters into its
+ * - Hoppers, droppers and crafters put items in the same way, and hoppers take them out (see ItemTransfer).
+ * - Broken with a sword, axe, pickaxe, shovel, hoe, mace or trident, or hit by a projectile, it shatters into its
  *   sherds (bricks for plain sides). Broken by hand, with any other item (spears included) or with silk touch, it
  *   drops itself with its sherds. The stored items always drop.
- * - Comparator integration depends on RyzeMP's later redstone adapter; this class exposes the output value.
+ * - A comparator reads the fullness of the stored stack.
  */
-class DecoratedPot extends Transparent implements HorizontalFacing{
+class DecoratedPot extends Transparent implements HorizontalFacing, ComparatorReadable{
 	use HorizontalFacingTrait;
 
 	protected function recalculateCollisionBoxes() : array{
@@ -112,7 +114,7 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 	private function getShards() : array{
 		$drops = [];
 		foreach($this->getSherds() as $sherd){
-			$drops[] = $sherd === null ? VanillaItems::BRICK() : (new PotterySherd(new ItemIdentifier(ItemTypeIds::POTTERY_SHERD), "Pottery Sherd"))->setSherdType($sherd);
+			$drops[] = $sherd === null ? VanillaItems::BRICK() : VanillaItems::POTTERY_SHERD()->setSherdType($sherd);
 		}
 		return $drops;
 	}
@@ -123,7 +125,7 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 	 */
 	private function shattersWith(Item $item) : bool{
 		return $item instanceof Sword || $item instanceof Axe || $item instanceof Pickaxe || $item instanceof Shovel ||
-			$item instanceof Hoe || $item instanceof Trident;
+			$item instanceof Hoe || $item instanceof Mace || $item instanceof Trident;
 	}
 
 	/**
@@ -136,6 +138,15 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 			return 0;
 		}
 		return (int) floor(14 * $stored->getCount() / $stored->getMaxStackSize()) + 1;
+	}
+
+	private function onContentsChanged() : void{
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$world->getRedstone()?->updateComparatorsReading($x, $y, $z);
+		ItemTransfer::notifyContainerChanged($world, $x, $y, $z);
 	}
 
 	public function getDropsForCompatibleTool(Item $item) : array{
@@ -166,6 +177,20 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 		}
 	}
 
+	public function onProjectileHit(Projectile $projectile, RayTraceResult $hitResult) : void{
+		$world = $this->position->getWorld();
+		if(!GameRules::allowsProjectileBlockBreaking($world)){
+			return;
+		}
+		$center = $this->position->add(0.5, 0.5, 0.5);
+		foreach($this->getShards() as $drop){
+			$world->dropItem($center, $drop);
+		}
+		$this->dropContents();
+		$world->addSound($center, new DecoratedPotShatterSound());
+		$world->setBlock($this->position, VanillaBlocks::AIR());
+	}
+
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		$tile = $this->getTile();
 		if($tile === null){
@@ -180,12 +205,11 @@ class DecoratedPot extends Transparent implements HorizontalFacing{
 				$added->setCount($stored->getCount() + 1);
 			}
 			$tile->setItem($added);
-			$world->broadcastPacketToViewersByTypeConverter($this->position, static fn(TypeConverter $converter) : array =>
-				$tile->canSpawnTo($converter) ? [$tile->createAnimationPacket($converter, TileDecoratedPot::ANIMATION_WOBBLE_SUCCESS)] : []);
+			$this->onContentsChanged();
+			$world->broadcastPacketToViewers($this->position, $tile->createAnimationPacket(TileDecoratedPot::ANIMATION_WOBBLE_SUCCESS));
 			$world->addSound($center, new DecoratedPotInsertSound(true));
 		}else{
-			$world->broadcastPacketToViewersByTypeConverter($this->position, static fn(TypeConverter $converter) : array =>
-				$tile->canSpawnTo($converter) ? [$tile->createAnimationPacket($converter, TileDecoratedPot::ANIMATION_WOBBLE_FAIL)] : []);
+			$world->broadcastPacketToViewers($this->position, $tile->createAnimationPacket(TileDecoratedPot::ANIMATION_WOBBLE_FAIL));
 			$world->addSound($center, new DecoratedPotInsertSound(false));
 		}
 		return true;

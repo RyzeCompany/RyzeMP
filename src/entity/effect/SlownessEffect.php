@@ -28,10 +28,11 @@ use pocketmine\entity\Living;
 class SlownessEffect extends Effect{
 
 	public function add(Living $entity, EffectInstance $instance) : void{
-		$entity->setMovementSpeed($entity->getMovementSpeed() * (1 - 0.15 * $instance->getEffectLevel()), true);
+		//vanilla -15% per level, never below 0 (level 7 and up stops the mob); removing it goes back to the base speed
+		$entity->setMovementSpeedMultiplier(Living::SPEED_MODIFIER_SLOWNESS_EFFECT, 1 - 0.15 * $instance->getEffectLevel());
 	}
 
 	public function remove(Living $entity, EffectInstance $instance) : void{
-		$entity->setMovementSpeed($entity->getMovementSpeed() / (1 - 0.15 * $instance->getEffectLevel()));
+		$entity->setMovementSpeedMultiplier(Living::SPEED_MODIFIER_SLOWNESS_EFFECT, 1.0);
 	}
 }

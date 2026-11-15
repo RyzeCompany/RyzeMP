@@ -57,3 +57,13 @@ Documentation/*
 
 # install-local-protocol.sh
 /composer-local-protocol.*
+
+# GitLab CI (build/ci)
+/.ci-deps/
+/.composer-cache/
+/php-cs-fixer.phar
+/phpunit-report.xml
+/release.env
+/PocketMine-MP.phar.sha256
+/build_info.json
+/core-permissions.rst

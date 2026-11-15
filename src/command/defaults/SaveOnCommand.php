@@ -25,10 +25,11 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 
-class SaveOnCommand extends NativeCommand{
+class SaveOnCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -38,7 +39,11 @@ class SaveOnCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SAVE_ENABLE);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		$sender->getServer()->getWorldManager()->setAutoSave(true);
 
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_save_enabled());

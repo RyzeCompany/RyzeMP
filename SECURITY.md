@@ -1,35 +1,22 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-### Report via GitHub
+**Do not report vulnerabilities in public issues, merge requests or on Discord.** Public reports put live servers at risk.
 
-Send a _**private security report**_ by going to https://github.com/pmmp/PocketMine-MP/security and clicking the "Report a vulnerability" button.
+Open a **confidential issue** in this project instead: create a new issue and tick *This issue is confidential* before submitting it. Anyone can create a confidential issue, and only the VanillaMine team can see it. You don't need to add any label: maintainers triage confidential issues and add the `Category: Security` label themselves.
 
-> [!WARNING]
-> **DO NOT report vulnerabilities on the Issues tab. Report them in the Security tab ONLY.**
-> 
-> The issue tracker is public to view, which means that malicious actors may learn about exploits from a public issue.
->
-> **You may put live PocketMine-MP servers at risk by reporting a vulnerability on the GitHub issue tracker.**
+Include:
 
-### Report via email
-
-If you can't or don't want to use the GitHub system, you can also **contact us** by sending an email to [**security@pmmp.io**](mailto:security@pmmp.io).
-Include the following information:
-
-- Version of PocketMine-MP
-- Detailed description of the vulnerability (e.g. how to exploit it, what the effects are)
-- Your GitHub username, if you wish to be credited for reporting the problem in the security advisory
-
-Please note that we can't guarantee a reply to every email.
+- VanillaMine version and build
+- A detailed description: how to reproduce it and what an attacker can do
+- Whether it also affects PocketMine-MP 5.44.3 (if so we will tell you how to reach the PMMP team too)
+- The name you want to be credited with, if any
 
 ## FAQ
+
 ### Do you offer a bug bounty?
 No.
 
-### How soon can I expect a fix for a vulnerability I've reported?
-This depends on the nature of the problem. We can't provide any general ETA (nor would it be wise to provide one).
-In general, it depends on when developers have time to look into the problem, how complex the problem is to fix, and how many users it impacts.
-
-When a fix for a severe vulnerability is pushed, a patch release for the target version will usually be released within 24 hours so that users can update.
+### Which versions get security fixes?
+The latest release. Fixes ship as a new patch release as soon as they are ready.

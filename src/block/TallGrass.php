@@ -42,8 +42,8 @@ class TallGrass extends Flowable{
 	 * @phpstan-param \Closure() : DoublePlant|null $doublePlantVariant
 	 */
 	public function __construct(BlockIdentifier $idInfo, string $name, BlockTypeInfo $typeInfo, ?\Closure $doublePlantVariant = null){
-		parent::__construct($idInfo, $name, $typeInfo);
 		$this->doublePlantVariant = $doublePlantVariant;
+		parent::__construct($idInfo, $name, $typeInfo);
 	}
 
 	private function canBeSupportedAt(Block $block) : bool{
@@ -73,5 +73,9 @@ class TallGrass extends Flowable{
 
 	private function getDoublePlantVariant() : ?DoublePlant{
 		return $this->doublePlantVariant !== null ? ($this->doublePlantVariant)() : null;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 30;
 	}
 }

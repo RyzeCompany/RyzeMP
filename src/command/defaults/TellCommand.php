@@ -25,6 +25,10 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\CommandTargets;
+use pocketmine\command\selector\TargetSelector;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
@@ -34,7 +38,7 @@ use function array_shift;
 use function count;
 use function implode;
 
-class TellCommand extends NativeCommand{
+class TellCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -45,27 +49,46 @@ class TellCommand extends NativeCommand{
 		);
 		$this->setPermission(DefaultPermissionNames::COMMAND_TELL);
 	}
+	public function getOverloads() : array{
+		return [[CommandParameter::target("target"), CommandParameter::message("message")]];
+	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $sender->getServer()->getPlayerByPrefix(array_shift($args));
-
-		if($player === $sender){
-			$sender->sendMessage(KnownTranslationFactory::commands_message_sameTarget()->prefix(TextFormat::RED));
-			return true;
+		$target = array_shift($args);
+		if(TargetSelector::isSelectorArgument($target)){
+			$players = [];
+			foreach(CommandTargets::players($sender, $target) as $player){
+				if($player !== $sender){
+					$players[] = $player;
+				}
+			}
+			if(count($players) === 0){
+				$sender->sendMessage(KnownTranslationFactory::commands_message_sameTarget()->prefix(TextFormat::RED));
+				return true;
+			}
+		}else{
+			$player = $sender->getServer()->getPlayerByPrefix($target);
+			if($player === $sender){
+				$sender->sendMessage(KnownTranslationFactory::commands_message_sameTarget()->prefix(TextFormat::RED));
+				return true;
+			}
+			if(!$player instanceof Player){
+				$sender->sendMessage(KnownTranslationFactory::commands_generic_player_notFound());
+				return true;
+			}
+			$players = [$player];
 		}
 
-		if($player instanceof Player){
-			$message = implode(" ", $args);
+		$message = CommandTargets::expandSelectors($sender, implode(" ", $args));
+		$name = $sender instanceof Player ? $sender->getDisplayName() : $sender->getName();
+		foreach($players as $player){
 			$sender->sendMessage(KnownTranslationFactory::commands_message_display_outgoing($player->getDisplayName(), $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
-			$name = $sender instanceof Player ? $sender->getDisplayName() : $sender->getName();
 			$player->sendMessage(KnownTranslationFactory::commands_message_display_incoming($name, $message)->prefix(TextFormat::GRAY . TextFormat::ITALIC));
 			Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_message_display_outgoing($player->getDisplayName(), $message), false);
-		}else{
-			$sender->sendMessage(KnownTranslationFactory::commands_generic_player_notFound());
 		}
 
 		return true;

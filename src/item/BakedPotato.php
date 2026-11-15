@@ -30,6 +30,14 @@ class BakedPotato extends Food{
 	}
 
 	public function getSaturationRestore() : float{
-		return 7.2;
+		return 6.0;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 85;
+	}
+
+	public function isCompostable() : bool{
+		return true;
 	}
 }

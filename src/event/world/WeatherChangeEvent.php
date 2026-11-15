@@ -1,9 +1,22 @@
 <?php
 
 /*
- * Adapted from VanillaMine's WeatherChangeEvent.
- * Copyright (c) PocketMine Team and VanillaMine contributors.
- * SPDX-License-Identifier: LGPL-3.0-or-later
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
  */
 
 declare(strict_types=1);
@@ -15,7 +28,8 @@ use pocketmine\event\CancellableTrait;
 use pocketmine\world\World;
 
 /**
- * Fired before a world's weather changes; cancellation preserves the old state.
+ * Called when the weather of a world is about to change (natural cycle, /weather, sleeping through the night or a
+ * plugin). Cancelling it keeps the current weather; the natural cycle then waits for its next change.
  */
 final class WeatherChangeEvent extends WorldEvent implements Cancellable{
 	use CancellableTrait;
@@ -31,7 +45,16 @@ final class WeatherChangeEvent extends WorldEvent implements Cancellable{
 	}
 
 	public function wasRaining() : bool{ return $this->wasRaining; }
+
 	public function wasThundering() : bool{ return $this->wasThundering; }
+
+	/**
+	 * Whether it will be raining (or snowing) after the change.
+	 */
 	public function isRaining() : bool{ return $this->raining; }
+
+	/**
+	 * Whether there will be a thunderstorm after the change (always raining too).
+	 */
 	public function isThundering() : bool{ return $this->thundering; }
 }

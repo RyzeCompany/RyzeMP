@@ -24,6 +24,8 @@ declare(strict_types=1);
 namespace pocketmine\item;
 
 use pocketmine\color\Color;
+use pocketmine\data\bedrock\ArmorTrimMaterialTypeIdMap;
+use pocketmine\data\bedrock\ArmorTrimPatternTypeIdMap;
 use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\inventory\ArmorInventory;
 use pocketmine\item\enchantment\ProtectionEnchantment;
@@ -40,7 +42,13 @@ class Armor extends Durable{
 
 	public const TAG_CUSTOM_COLOR = "customColor"; //TAG_Int
 
+	private const TAG_TRIM = "Trim"; // TAG_Compound
+	private const TAG_TRIM_MATERIAL = "Material"; //TAG_String
+	private const TAG_TRIM_PATTERN = "Pattern"; //TAG_String
+
 	private ArmorTypeInfo $armorInfo;
+
+	private ?ArmorTrim $armorTrim = null;
 
 	protected ?Color $customColor = null;
 
@@ -58,6 +66,21 @@ class Armor extends Durable{
 
 	public function getDefensePoints() : int{
 		return $this->armorInfo->getDefensePoints();
+	}
+
+	/**
+	 * Returns the armour toughness of this piece (diamond 2, netherite 3), which makes the armour hold up better
+	 * against big hits.
+	 */
+	public function getToughness() : int{
+		return $this->armorInfo->getToughness();
+	}
+
+	/**
+	 * Returns the knockback resistance this piece adds while worn (netherite: 0.1 per piece).
+	 */
+	public function getKnockbackResistance() : float{
+		return $this->armorInfo->getKnockbackResistance();
 	}
 
 	/**
@@ -106,6 +129,16 @@ class Armor extends Durable{
 		return $this;
 	}
 
+	public function getTrim() : ?ArmorTrim{
+		return $this->armorTrim;
+	}
+
+	/** @return $this */
+	public function setTrim(?ArmorTrim $trim) : self{
+		$this->armorTrim = $trim;
+		return $this;
+	}
+
 	/**
 	 * Returns the total enchantment protection factor this armour piece offers from all applicable protection
 	 * enchantments on the item.
@@ -120,6 +153,21 @@ class Armor extends Durable{
 			}
 		}
 
+		return $epf;
+	}
+
+	/**
+	 * Returns the Bedrock enchantment protection factor of this armour piece against the damage (see
+	 * {@link ProtectionEnchantment::getBedrockProtectionFactor()}).
+	 */
+	public function getBedrockEnchantmentProtectionFactor(EntityDamageEvent $event) : int{
+		$epf = 0;
+		foreach($this->getEnchantments() as $enchantment){
+			$type = $enchantment->getType();
+			if($type instanceof ProtectionEnchantment && $type->isApplicable($event)){
+				$epf += $type->getBedrockProtectionFactor($enchantment->getLevel());
+			}
+		}
 		return $epf;
 	}
 
@@ -142,6 +190,9 @@ class Armor extends Durable{
 
 	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
 		$existing = $player->getArmorInventory()->getItem($this->getArmorSlot());
+		if($player->hasFiniteResources() && $existing->hasEnchantment(VanillaEnchantments::BINDING())){
+			return ItemUseResult::FAIL; //Curse of Binding
+		}
 		$thisCopy = clone $this;
 		$new = $thisCopy->pop();
 		$player->getArmorInventory()->setItem($this->getArmorSlot(), $new);
@@ -164,6 +215,16 @@ class Armor extends Durable{
 		}else{
 			$this->customColor = null;
 		}
+
+		$trimTag = $tag->getTag(self::TAG_TRIM);
+		if($trimTag instanceof CompoundTag){
+			$material = ArmorTrimMaterialTypeIdMap::getInstance()->fromId($trimTag->getString(self::TAG_TRIM_MATERIAL));
+			$pattern = ArmorTrimPatternTypeIdMap::getInstance()->fromId($trimTag->getString(self::TAG_TRIM_PATTERN));
+
+			if($material !== null && $pattern !== null){
+				$this->armorTrim = new ArmorTrim($material, $pattern);
+			}
+		}
 	}
 
 	protected function serializeCompoundTag(CompoundTag $tag) : void{
@@ -171,5 +232,11 @@ class Armor extends Durable{
 		$this->customColor !== null ?
 			$tag->setInt(self::TAG_CUSTOM_COLOR, Binary::signInt($this->customColor->toARGB())) :
 			$tag->removeTag(self::TAG_CUSTOM_COLOR);
+
+		$this->armorTrim !== null ?
+			$tag->setTag(self::TAG_TRIM, CompoundTag::create()
+				->setString(self::TAG_TRIM_MATERIAL, ArmorTrimMaterialTypeIdMap::getInstance()->toId($this->armorTrim->getMaterial()))
+				->setString(self::TAG_TRIM_PATTERN, ArmorTrimPatternTypeIdMap::getInstance()->toId($this->armorTrim->getPattern()))) :
+			$tag->removeTag(self::TAG_TRIM);
 	}
 }

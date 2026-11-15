@@ -24,8 +24,10 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\block\utils\MinimumCostFlowCalculator;
 use pocketmine\block\utils\SupportType;
+use pocketmine\block\utils\WaterloggedHelper;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\entity\Entity;
 use pocketmine\event\block\BlockSpreadEvent;
@@ -140,6 +142,7 @@ abstract class Liquid extends Transparent{
 	}
 
 	protected function getEffectiveFlowDecay(Block $block) : int{
+		$block = WaterloggedHelper::getHeldLiquid($block, $this) ?? $block;
 		if(!($block instanceof Liquid) || !$block->hasSameTypeId($this)){
 			return -1;
 		}
@@ -281,6 +284,7 @@ abstract class Liquid extends Transparent{
 			$minAdjacentSources = $this->getMinAdjacentSourcesToFormSource();
 			if($minAdjacentSources !== null && $this->adjacentSources >= $minAdjacentSources){
 				$bottomBlock = $world->getBlockAt($x, $y - 1, $z);
+				$bottomBlock = WaterloggedHelper::getHeldLiquid($bottomBlock, $this) ?? $bottomBlock;
 				if($bottomBlock->isSolid() || ($bottomBlock instanceof Liquid && $bottomBlock->hasSameTypeId($this) && $bottomBlock->isSource())){
 					$newDecay = 0;
 					$falling = false;
@@ -343,6 +347,7 @@ abstract class Liquid extends Transparent{
 
 	/** @phpstan-impure */
 	private function getSmallestFlowDecay(Block $block, int $decay) : int{
+		$block = WaterloggedHelper::getHeldLiquid($block, $this) ?? $block;
 		if(!($block instanceof Liquid) || !$block->hasSameTypeId($this)){
 			return $decay;
 		}
@@ -370,9 +375,16 @@ abstract class Liquid extends Transparent{
 	}
 
 	protected function canFlowInto(Block $block) : bool{
-		return
-			$this->position->getWorld()->isInWorld($block->position->x, $block->position->y, $block->position->z) &&
-			$block->canBeFlowedInto() &&
-			!($block instanceof Liquid && $block->isSource()); //TODO: I think this should only be liquids of the same type
+		if(
+			!$this->position->getWorld()->isInWorld($block->position->x, $block->position->y, $block->position->z) ||
+			!$block->canBeFlowedInto()
+		){
+			return false;
+		}
+		if($block instanceof Liquid){
+			return !$block->isSource(); //TODO: I think this should only be liquids of the same type
+		}
+		//a block holding water in the liquid layer is already full of water
+		return $block->getTypeId() === BlockTypeIds::AIR || !LiquidLayer::holdsWater($block);
 	}
 }

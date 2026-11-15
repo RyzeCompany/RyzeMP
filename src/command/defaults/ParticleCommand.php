@@ -26,13 +26,15 @@ namespace pocketmine\command\defaults;
 use pocketmine\block\BlockTypeIds;
 use pocketmine\color\Color;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\utils\CommandCoordinates;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
+use pocketmine\entity\Location;
 use pocketmine\item\StringToItemParser;
 use pocketmine\item\VanillaItems;
 use pocketmine\lang\KnownTranslationFactory;
-use pocketmine\math\Vector3;
 use pocketmine\permission\DefaultPermissionNames;
-use pocketmine\player\Player;
 use pocketmine\utils\Random;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\particle\AngryVillagerParticle;
@@ -55,6 +57,7 @@ use pocketmine\world\particle\ItemBreakParticle;
 use pocketmine\world\particle\LavaDripParticle;
 use pocketmine\world\particle\LavaParticle;
 use pocketmine\world\particle\Particle;
+use pocketmine\world\particle\ParticleEffectParticle;
 use pocketmine\world\particle\PortalParticle;
 use pocketmine\world\particle\RainSplashParticle;
 use pocketmine\world\particle\RedstoneParticle;
@@ -65,15 +68,28 @@ use pocketmine\world\particle\SporeParticle;
 use pocketmine\world\particle\TerrainParticle;
 use pocketmine\world\particle\WaterDripParticle;
 use pocketmine\world\particle\WaterParticle;
-use pocketmine\world\World;
 use function count;
 use function explode;
+use function is_finite;
 use function max;
 use function microtime;
 use function mt_rand;
+use function str_contains;
 use function strtolower;
 
-class ParticleCommand extends NativeCommand{
+/**
+ * Bedrock's /particle <effect> [position] spawns a particle effect by identifier (e.g. minecraft:heart_particle), or
+ * one of PocketMine's particle names once. PocketMine's
+ * /particle <name> <x y z> <xd yd zd> [count] [data] spawns count particles of a PocketMine type spread around a point.
+ */
+class ParticleCommand extends VanillaCommand implements ExhaustiveOverloads{
+	/** PocketMine particle names (see getParticle()). */
+	private const NAMES = [
+		"explode", "hugeexplosion", "hugeexplosionseed", "bubble", "splash", "wake", "water", "crit", "smoke", "spell",
+		"instantspell", "dripwater", "driplava", "townaura", "spore", "portal", "flame", "lava", "reddust",
+		"snowballpoof", "slime", "itembreak", "terrain", "heart", "ink", "droplet", "enchantmenttable", "happyvillager",
+		"angryvillager", "forcefield", "mobflame", "iconcrack", "blockcrack", "blockdust", "sonicexplosion"
+	];
 
 	public function __construct(){
 		parent::__construct(
@@ -84,29 +100,56 @@ class ParticleCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_PARTICLE);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
-		if(count($args) < 7){
+	public function getOverloads() : array{
+		return [
+			[CommandParameter::softEnum("effect", "ParticleName", self::NAMES), CommandParameter::position("position", true)],
+			[
+				CommandParameter::softEnum("name", "ParticleName", self::NAMES),
+				CommandParameter::position("position"),
+				CommandParameter::position("spread"),
+				CommandParameter::int("count", true),
+				CommandParameter::string("data", true)
+			],
+		];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
+		$bedrockSyntax = count($args) === 1 || count($args) === 4;
+		if(!$bedrockSyntax && (count($args) < 7 || count($args) > 9)){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		if($sender instanceof Player){
-			$senderPos = $sender->getPosition();
-			$world = $senderPos->getWorld();
-			$pos = new Vector3(
-				$this->getRelativeDouble($senderPos->getX(), $sender, $args[1]),
-				$this->getRelativeDouble($senderPos->getY(), $sender, $args[2], World::Y_MIN, World::Y_MAX),
-				$this->getRelativeDouble($senderPos->getZ(), $sender, $args[3])
-			);
+		$origin = CommandCoordinates::senderOrigin($sender);
+		if($origin !== null){
+			$world = $origin->getWorld();
 		}else{
 			$world = $sender->getServer()->getWorldManager()->getDefaultWorld();
-			$pos = new Vector3((float) $args[1], (float) $args[2], (float) $args[3]);
+			if($world === null){
+				return true;
+			}
+			$origin = Location::fromObject($world->getSpawnLocation(), $world);
 		}
+		$pos = count($args) >= 4 ? CommandCoordinates::parsePosition($origin, $args[1], $args[2], $args[3]) : $origin->asVector3();
 
 		$name = strtolower($args[0]);
+
+		if($bedrockSyntax){
+			$particle = $this->getParticle($name) ?? (str_contains($name, ":") ? new ParticleEffectParticle($args[0], $world->getDimension()) : null);
+			if($particle === null){
+				$sender->sendMessage(KnownTranslationFactory::commands_particle_notFound($name)->prefix(TextFormat::RED));
+				return true;
+			}
+			$world->addParticle($pos, $particle);
+			$sender->sendMessage(KnownTranslationFactory::commands_particle_success($args[0], "1"));
+			return true;
+		}
 
 		$xd = (float) $args[4];
 		$yd = (float) $args[5];
 		$zd = (float) $args[6];
+		if(!is_finite($xd) || !is_finite($yd) || !is_finite($zd)){
+			throw new InvalidCommandSyntaxException();
+		}
 
 		$count = isset($args[7]) ? max(1, (int) $args[7]) : 1;
 

@@ -116,13 +116,6 @@ function buildPhar(string $pharPath, string $basePath, array $includedPaths, arr
 	$regexIterator = new \RegexIterator($iterator, $regex);
 
 	$count = count($phar->buildFromIterator($regexIterator, $basePath));
-	foreach(['LICENSE', 'COPYING'] as $licenseFile){
-		if(!file_exists($basePath . $licenseFile)){
-			throw new \RuntimeException("Missing distribution license: " . $licenseFile);
-		}
-		$phar->addFile($basePath . $licenseFile, $licenseFile);
-		++$count;
-	}
 	yield "Added $count files";
 
 	if($compression !== null){
@@ -170,8 +163,8 @@ function main() : void{
 		$pharPath,
 		dirname(__DIR__) . DIRECTORY_SEPARATOR,
 		[
-			'lib',
 			'generated',
+			// Native Go and NetherNet executables are provisioned externally by the Egg.
 			'resources',
 			'src',
 			'vendor'
@@ -189,4 +182,3 @@ function main() : void{
 }
 
 main();
-

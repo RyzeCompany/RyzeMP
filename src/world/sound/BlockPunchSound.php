@@ -23,20 +23,29 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
+use pocketmine\block\Block;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 
 /**
  * Played when a player attacks a block in survival, attempting to break it.
  */
-class BlockPunchSound extends BlockSound{
+class BlockPunchSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
+	public function __construct(private Block $block){}
+
 	public function encode(Vector3 $pos) : array{
 		return [LevelSoundEventPacket::nonActorSound(
 			LevelSoundEvent::HIT,
 			$pos,
 			false,
-			$this->toRuntimeId()
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }

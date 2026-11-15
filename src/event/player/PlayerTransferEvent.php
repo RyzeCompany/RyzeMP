@@ -30,6 +30,9 @@ use pocketmine\player\Player;
 
 /**
  * Called when a player attempts to be transferred to another server, e.g. by using /transferserver.
+ *
+ * Clients since Bedrock 1.26.60 only join over NetherNet: the destination must accept NetherNet on its port (TCP
+ * signaling + UDP), a RakNet-only server makes the transfer fail on the client. See Player::transfer().
  */
 class PlayerTransferEvent extends PlayerEvent implements Cancellable{
 	use CancellableTrait;

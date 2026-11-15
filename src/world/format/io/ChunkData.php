@@ -36,12 +36,16 @@ final class ChunkData{
 	 * @phpstan-param array<int, SubChunk> $subChunks
 	 * @phpstan-param list<CompoundTag> $entityNBT
 	 * @phpstan-param list<CompoundTag> $tileNBT
+	 * @param int[][] $scheduledBlockUpdates pending scheduled block updates of the chunk: [x, y, z, ticks left]
+	 *                                       with world coordinates
+	 * @phpstan-param list<array{int, int, int, int}> $scheduledBlockUpdates
 	 */
 	public function __construct(
 		private array $subChunks,
 		private bool $populated,
 		private array $entityNBT,
-		private array $tileNBT
+		private array $tileNBT,
+		private array $scheduledBlockUpdates = []
 	){}
 
 	/**
@@ -63,4 +67,12 @@ final class ChunkData{
 	 * @phpstan-return list<CompoundTag>
 	 */
 	public function getTileNBT() : array{ return $this->tileNBT; }
+
+	/**
+	 * Returns the pending scheduled block updates of the chunk as [x, y, z, ticks left], with world coordinates.
+	 *
+	 * @return int[][]
+	 * @phpstan-return list<array{int, int, int, int}>
+	 */
+	public function getScheduledBlockUpdates() : array{ return $this->scheduledBlockUpdates; }
 }

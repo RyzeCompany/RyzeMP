@@ -23,13 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class SporeParticle extends ProtocolParticle{
+class SporeParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::TOWN_AURA, 0, $pos, $this->protocolId)];
+		return [LevelEventPacket::standardParticle(ParticleIds::TOWN_AURA, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

@@ -74,10 +74,6 @@ abstract class DefaultPermissions{
 		$everyoneRoot = self::registerNoArgsDesc(self::ROOT_USER, [$operatorRoot]);
 
 		self::registerNoArgsDesc(Names::COMMAND_DUMPMEMORY, [$consoleRoot]);
-		self::registerPermission(new Permission(Names::COMMAND_GAMERULE, "Change implemented world game rules"), [$operatorRoot]);
-		self::registerPermission(new Permission(Names::COMMAND_WEATHER, "Change world weather"), [$operatorRoot]);
-
-		self::registerPermission(new Permission(Names::ANTICHEAT_LOG, "Receives anti-cheat detection alerts"), [$operatorRoot]);
 
 		foreach([
 			Names::BROADCAST_ADMIN,
@@ -85,34 +81,44 @@ abstract class DefaultPermissions{
 			Names::COMMAND_BAN_LIST,
 			Names::COMMAND_BAN_PLAYER,
 			Names::COMMAND_CLEAR_OTHER,
+			Names::COMMAND_DAMAGE,
 			Names::COMMAND_DEFAULTGAMEMODE,
 			Names::COMMAND_DIFFICULTY,
 			Names::COMMAND_EFFECT_OTHER,
 			Names::COMMAND_EFFECT_SELF,
 			Names::COMMAND_ENCHANT_OTHER,
 			Names::COMMAND_ENCHANT_SELF,
+			Names::COMMAND_EXECUTE,
+			Names::COMMAND_FILL,
 			Names::COMMAND_GAMEMODE_OTHER,
 			Names::COMMAND_GAMEMODE_SELF,
+			Names::COMMAND_GAMERULE,
 			Names::COMMAND_GC,
 			Names::COMMAND_GIVE_OTHER,
 			Names::COMMAND_GIVE_SELF,
 			Names::COMMAND_KICK,
 			Names::COMMAND_KILL_OTHER,
 			Names::COMMAND_LIST,
+			Names::COMMAND_LOCATE,
 			Names::COMMAND_OP_GIVE,
 			Names::COMMAND_OP_TAKE,
 			Names::COMMAND_PARTICLE,
 			Names::COMMAND_PLUGINS,
+			Names::COMMAND_REPLACEITEM,
+			Names::COMMAND_RIDE,
 			Names::COMMAND_SAVE_DISABLE,
 			Names::COMMAND_SAVE_ENABLE,
 			Names::COMMAND_SAVE_PERFORM,
 			Names::COMMAND_SAY,
 			Names::COMMAND_SEED,
+			Names::COMMAND_SETBLOCK,
 			Names::COMMAND_SETWORLDSPAWN,
 			Names::COMMAND_SPAWNPOINT_OTHER,
 			Names::COMMAND_SPAWNPOINT_SELF,
 			Names::COMMAND_STATUS,
 			Names::COMMAND_STOP,
+			Names::COMMAND_SUMMON,
+			Names::COMMAND_TAG,
 			Names::COMMAND_TELEPORT_OTHER,
 			Names::COMMAND_TELEPORT_SELF,
 			Names::COMMAND_TIME_ADD,
@@ -126,6 +132,7 @@ abstract class DefaultPermissions{
 			Names::COMMAND_TRANSFERSERVER,
 			Names::COMMAND_UNBAN_IP,
 			Names::COMMAND_UNBAN_PLAYER,
+			Names::COMMAND_WEATHER,
 			Names::COMMAND_WHITELIST_ADD,
 			Names::COMMAND_WHITELIST_DISABLE,
 			Names::COMMAND_WHITELIST_ENABLE,

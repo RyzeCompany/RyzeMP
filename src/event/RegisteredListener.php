@@ -24,7 +24,9 @@ declare(strict_types=1);
 namespace pocketmine\event;
 
 use pocketmine\plugin\Plugin;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\timings\TimingsHandler;
+use pocketmine\utils\Utils;
 use function in_array;
 
 /**
@@ -68,9 +70,17 @@ class RegisteredListener{
 		if($event instanceof Cancellable && $event->isCancelled() && !$this->isHandlingCancelled()){
 			return;
 		}
+		if(PluginFaultHandler::isPluginPendingDisable($this->plugin)){
+			//the plugin failed earlier and is about to be disabled - don't call it any more
+			return;
+		}
 		$this->timings->startTiming();
 		try{
 			($this->handler)($event);
+		}catch(\Throwable $e){
+			//a buggy handler must neither crash the server nor prevent the other handlers from running; the event keeps
+			//whatever state the handler left it in
+			PluginFaultHandler::isolate($e, $this->plugin, "event handler " . Utils::getNiceClosureName($this->handler) . "(" . $event->getEventName() . ")");
 		}finally{
 			$this->timings->stopTiming();
 		}

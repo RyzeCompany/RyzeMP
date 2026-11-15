@@ -27,6 +27,7 @@ declare(strict_types=1);
 
 namespace pocketmine\scheduler;
 
+use pocketmine\plugin\Plugin;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\ReversePriorityQueue;
 
@@ -44,8 +45,12 @@ class TaskScheduler{
 
 	protected int $currentTick = 0;
 
+	/**
+	 * @param Plugin|null $ownerPlugin Plugin owning this scheduler, used to attribute failures of its tasks
+	 */
 	public function __construct(
-		private ?string $owner = null
+		private ?string $owner = null,
+		private ?Plugin $ownerPlugin = null
 	){
 		$this->queue = new ReversePriorityQueue();
 		$this->tasks = new ObjectSet();
@@ -129,7 +134,7 @@ class TaskScheduler{
 			$period = 1;
 		}
 
-		return $this->handle(new TaskHandler($task, $delay, $period, $this->owner));
+		return $this->handle(new TaskHandler($task, $delay, $period, $this->owner, $this->ownerPlugin));
 	}
 
 	/**

@@ -39,8 +39,10 @@ use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\particle\CopperWaxParticle;
 use pocketmine\world\sound\DyeUseSound;
 use pocketmine\world\sound\InkSacUseSound;
+use pocketmine\world\sound\SignWaxedInteractFailSound;
 use function abs;
 use function array_map;
 use function assert;
@@ -166,6 +168,8 @@ abstract class BaseSign extends Transparent implements WoodMaterial{
 
 		$this->waxed = true;
 		$this->position->getWorld()->setBlock($this->position, $this);
+		//honeycomb wax sound and particles, the same level event as waxing copper
+		$this->position->getWorld()->addParticle($this->position, new CopperWaxParticle(CopperWaxParticle::WAX_ON));
 		$item->pop();
 
 		return true;
@@ -176,6 +180,7 @@ abstract class BaseSign extends Transparent implements WoodMaterial{
 			return false;
 		}
 		if($this->waxed){
+			$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), new SignWaxedInteractFailSound());
 			return true;
 		}
 

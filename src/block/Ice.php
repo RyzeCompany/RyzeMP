@@ -24,11 +24,11 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\UltraWarmHelper;
 use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Item;
-use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\math\Facing;
 use pocketmine\player\Player;
-use pocketmine\Server;
 
 class Ice extends Transparent{
 
@@ -41,11 +41,14 @@ class Ice extends Transparent{
 	}
 
 	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
-		if(($player === null || $player->isSurvival()) && !$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH())){
-			$world = $this->position->getWorld();
-			$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
-			$world->setBlock($this->position, $dimension === DimensionIds::NETHER ? VanillaBlocks::AIR() : VanillaBlocks::WATER());
-			return true;
+		//Java IceBlock.playerDestroy(): ice broken without silk touch leaves water, unless it evaporates (ultra-warm
+		//dimension) or nothing below would hold the water (a block which isn't solid nor a liquid)
+		if(($player === null || $player->isSurvival()) && !$item->hasEnchantment(VanillaEnchantments::SILK_TOUCH()) && !UltraWarmHelper::isUltraWarm($this->position)){
+			$below = $this->getSide(Facing::DOWN);
+			if($below->isSolid() || $below instanceof Liquid){
+				$this->position->getWorld()->setBlock($this->position, VanillaBlocks::WATER());
+				return true;
+			}
 		}
 		return parent::onBreak($item, $player, $returnedItems);
 	}
@@ -56,9 +59,8 @@ class Ice extends Transparent{
 
 	public function onRandomTick() : void{
 		$world = $this->position->getWorld();
-		if($world->getHighestAdjacentBlockLight($this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ()) >= 12){
-			$dimension = Server::getInstance()->getDimensionManager()->getDimension($world);
-			BlockEventHelper::melt($this, $dimension === DimensionIds::NETHER ? VanillaBlocks::AIR() : VanillaBlocks::WATER());
+		if($world->getHighestAdjacentBlockLight($this->position->x, $this->position->y, $this->position->z) >= 12){
+			BlockEventHelper::melt($this, UltraWarmHelper::getMeltedIceState($this));
 		}
 	}
 

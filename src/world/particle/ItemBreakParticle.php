@@ -23,14 +23,22 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
+use pocketmine\item\Item;
 use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class ItemBreakParticle extends ItemParticle{
+class ItemBreakParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
+	public function __construct(private Item $item){}
+
 	public function encode(Vector3 $pos) : array{
-		[$id, $meta] = $this->toNetworkId();
-		return [LevelEventPacket::standardParticle(ParticleIds::ITEM_BREAK, ($id << 16) | $meta, $pos, ProtocolInfo::CURRENT_PROTOCOL)]; // this particle isn't affected
+		[$id, $meta] = $this->getTypeConverter()->getItemTranslator()->toNetworkId($this->item);
+		return [LevelEventPacket::standardParticle(ParticleIds::ITEM_BREAK, ($id << 16) | $meta, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

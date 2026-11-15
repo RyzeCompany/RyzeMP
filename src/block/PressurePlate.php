@@ -27,11 +27,14 @@ use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\entity\Entity;
 use pocketmine\event\block\PressurePlateUpdateEvent;
+use pocketmine\item\Item;
 use pocketmine\math\Axis;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
+use pocketmine\player\Player;
 use pocketmine\world\sound\PressurePlateActivateSound;
 use pocketmine\world\sound\PressurePlateDeactivateSound;
+use pocketmine\world\vibration\GameEvent;
 use function count;
 
 abstract class PressurePlate extends Transparent{
@@ -45,8 +48,8 @@ abstract class PressurePlate extends Transparent{
 		BlockTypeInfo $typeInfo,
 		int $deactivationDelayTicks = 20 //TODO: make this mandatory in PM6
 	){
-		parent::__construct($idInfo, $name, $typeInfo);
 		$this->deactivationDelayTicks = $deactivationDelayTicks;
+		parent::__construct($idInfo, $name, $typeInfo);
 	}
 
 	public function isSolid() : bool{
@@ -70,7 +73,7 @@ abstract class PressurePlate extends Transparent{
 	}
 
 	public function onEntityInside(Entity $entity) : bool{
-		if(!$this->hasOutputSignal()){
+		if(!$this->hasOutputSignal() && !self::ignoresPlates($entity)){
 			$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 0);
 		}
 		return true;
@@ -97,6 +100,33 @@ abstract class PressurePlate extends Transparent{
 	}
 
 	/**
+	 * Returns the redstone power emitted by the plate in its current state.
+	 */
+	protected function getOutputPower() : int{
+		return $this->hasOutputSignal() ? 15 : 0;
+	}
+
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->getOutputPower();
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $face === Facing::DOWN ? $this->getOutputPower() : 0;
+	}
+
+	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
+		$result = parent::onBreak($item, $player, $returnedItems);
+		if($this->hasOutputSignal()){
+			$this->position->getWorld()->getRedstone()?->updateAroundSide($this->position, Facing::DOWN);
+		}
+		return $result;
+	}
+
+	/**
 	 * TODO: make this abstract in PM6
 	 *
 	 * @param Entity[] $entities
@@ -118,11 +148,23 @@ abstract class PressurePlate extends Transparent{
 		return $entities;
 	}
 
+	/**
+	 * Spectators don't press plates, and don't count for weighted plates (vanilla).
+	 */
+	private static function ignoresPlates(Entity $entity) : bool{
+		return $entity instanceof Player && $entity->isSpectator();
+	}
+
 	public function onScheduledUpdate() : void{
 		$world = $this->position->getWorld();
 
 		$intersectionAABB = $this->getActivationBox();
-		$activatingEntities = $this->filterIrrelevantEntities($world->getNearbyEntities($intersectionAABB));
+		$activatingEntities = [];
+		foreach($this->filterIrrelevantEntities($world->getNearbyEntities($intersectionAABB)) as $entity){
+			if(!self::ignoresPlates($entity)){
+				$activatingEntities[] = $entity;
+			}
+		}
 
 		//if an irrelevant entity is inside the full cube space of the pressure plate but not activating the plate,
 		//it will cause scheduled updates on the plate every tick. We don't want to fire events in this case if the
@@ -138,16 +180,22 @@ abstract class PressurePlate extends Transparent{
 			}
 			if($newState !== null){
 				$world->setBlock($this->position, $newState);
+				$world->getRedstone()?->updateAroundSide($this->position, Facing::DOWN);
 				if($pressedChange !== null){
 					$world->addSound($this->position, $pressedChange ?
 						new PressurePlateActivateSound($this) :
 						new PressurePlateDeactivateSound($this)
 					);
+					$world->addGameEvent($this->position, $pressedChange ? GameEvent::BLOCK_ACTIVATE : GameEvent::BLOCK_DEACTIVATE);
 				}
 			}
 			if($pressedChange ?? $this->hasOutputSignal()){
 				$world->scheduleDelayedBlockUpdate($this->position, $this->deactivationDelayTicks);
 			}
 		}
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
 	}
 }

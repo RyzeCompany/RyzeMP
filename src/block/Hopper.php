@@ -24,16 +24,25 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\tile\Hopper as TileHopper;
+use pocketmine\block\utils\ItemTransfer;
+use pocketmine\block\utils\ItemTransferContainer;
 use pocketmine\block\utils\PoweredByRedstone;
 use pocketmine\block\utils\PoweredByRedstoneTrait;
 use pocketmine\block\utils\SupportType;
 use pocketmine\data\runtime\RuntimeDataDescriber;
+use pocketmine\entity\object\ItemEntity;
+use pocketmine\event\block\BlockItemPickupEvent;
+use pocketmine\inventory\Inventory;
 use pocketmine\item\Item;
+use pocketmine\item\VanillaItems;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\World;
+use function max;
+use function min;
 
 class Hopper extends Transparent implements PoweredByRedstone{
 	use PoweredByRedstoneTrait;
@@ -93,71 +102,238 @@ class Hopper extends Transparent implements PoweredByRedstone{
 	}
 
 	public function onPostPlace() : void{
-		parent::onPostPlace();
-		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
-	}
-
-	public function onNearbyBlockChange() : void{
-		$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, 1);
+		$this->wakeUp();
 	}
 
 	/**
-	 * Detects the direct power sources supported by the current PM5 fork.
-	 * This is intentionally not a general redstone graph solver: indirect
-	 * strong power through an opaque block is not currently implemented.
-	 *
-	 * @param int $directionFromHopper Direction of the neighbour.
+	 * Schedules a transfer attempt as soon as the cooldown allows. Hoppers are not ticked while idle: they are woken up
+	 * when an inventory they use changes, when an item lands above them, when a neighbour changes or when they are
+	 * unlocked.
 	 */
-	public static function isDirectPowerSource(Block $neighbour, int $directionFromHopper) : bool{
-		if($neighbour instanceof Lever){
-			return $neighbour->isActivated();
+	public function wakeUp() : void{
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		if(self::$updating === World::blockHash($x, $y, $z) || $world->isBlockUpdateScheduled($x, $y, $z)){
+			return;
 		}
-		if($neighbour instanceof Button){
-			return $neighbour->isPressed();
-		}
-		if($neighbour instanceof RedstoneTorch){
-			return $neighbour->isLit();
-		}
-		if($neighbour instanceof RedstoneWire){
-			return $neighbour->getOutputSignalStrength() > 0;
-		}
-		if($neighbour instanceof RedstoneRepeater){
-			return $neighbour->isPowered() && $neighbour->getFacing() === Facing::opposite($directionFromHopper);
-		}
-		if($neighbour instanceof RedstoneComparator){
-			return $neighbour->getOutputSignalStrength() > 0 && $neighbour->getFacing() === Facing::opposite($directionFromHopper);
-		}
-		return false;
+		$tile = $world->getTileAt($x, $y, $z);
+		$delay = $tile instanceof TileHopper ? $tile->getTransferCooldown() : 0;
+		$world->scheduleDelayedBlockUpdate($this->position, max(1, $delay));
 	}
 
-	/** Read the current adjacent block states without loading unloaded chunks. */
-	private function hasDirectPower() : bool{
+	/** Block hash of the hopper currently moving items: it decides by itself when to look again. */
+	private static ?int $updating = null;
+
+	public function onScheduledUpdate() : void{
 		$world = $this->position->getWorld();
-		foreach([Facing::UP, Facing::DOWN, Facing::NORTH, Facing::SOUTH, Facing::WEST, Facing::EAST] as $facing){
-			$neighbourPos = $this->position->getSide($facing);
-			if(!$world->isChunkLoaded($neighbourPos->getFloorX() >> 4, $neighbourPos->getFloorZ() >> 4)){
-				continue;
+		$tile = $world->getTile($this->position);
+		if(!$tile instanceof TileHopper || $this->powered){
+			return; //locked hoppers sleep until they are unpowered
+		}
+		$cooldown = $tile->getTransferCooldown();
+		if($cooldown > 0){
+			//woken up early (e.g. a duplicate scheduled update)
+			$world->scheduleDelayedBlockUpdate($this->position, $cooldown);
+			return;
+		}
+
+		self::$updating = World::blockHash($this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
+		try{
+			//Bedrock: pushes are processed before pulls, in the same tick
+			$moved = $this->push($tile);
+			if($this->pull($tile)){
+				$moved = true;
 			}
-			if(self::isDirectPowerSource($world->getBlock($neighbourPos), $facing)){
+		}finally{
+			self::$updating = null;
+		}
+		if($moved){
+			$tile->setNextTransferTick($world->getServer()->getTick() + ItemTransfer::HOPPER_COOLDOWN_TICKS);
+			if(!ItemTransfer::isEmpty($tile->getInventory()) || $this->hasSomethingToPull()){
+				$world->scheduleDelayedBlockUpdate($this->position, ItemTransfer::HOPPER_COOLDOWN_TICKS);
+			}
+		}
+	}
+
+	/**
+	 * Returns whether there may be something to pull from above (an idle empty hopper is woken up when that changes).
+	 */
+	private function hasSomethingToPull() : bool{
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$source = ItemTransfer::getContainerAt($world, $x, $y + 1, $z);
+		if($source !== null){
+			return !ItemTransfer::isEmpty($source->getInventory());
+		}
+		if(ItemTransfer::isBlockTypeAt($world, $x, $y + 1, $z, BlockTypeIds::COMPOSTER)){
+			return true;
+		}
+		$minecart = ItemTransfer::getEntityContainerAt($world, $x, $y + 1, $z);
+		if($minecart !== null){
+			return !ItemTransfer::isEmpty($minecart->getInventory());
+		}
+		foreach($world->getNearbyEntities($this->getCollectionArea()) as $entity){
+			if($entity instanceof ItemEntity && !$entity->isFlaggedForDespawn()){
 				return true;
 			}
 		}
 		return false;
 	}
 
-	public function onScheduledUpdate() : void{
+	/**
+	 * Area in which item entities are collected: the bowl and the whole block space above the hopper.
+	 */
+	public function getCollectionArea() : AxisAlignedBB{
+		return new AxisAlignedBB(
+			$this->position->x, $this->position->y + 0.5, $this->position->z,
+			$this->position->x + 1, $this->position->y + 2, $this->position->z + 1
+		);
+	}
+
+	/**
+	 * Moves one item into the container the hopper faces.
+	 */
+	private function push(TileHopper $tile) : bool{
+		$inventory = $tile->getInventory();
+		[$dx, $dy, $dz] = Facing::OFFSET[$this->facing];
 		$world = $this->position->getWorld();
-		$powered = $this->hasDirectPower();
+		$tx = $this->position->getFloorX() + $dx;
+		$ty = $this->position->getFloorY() + $dy;
+		$tz = $this->position->getFloorZ() + $dz;
+		if(!ItemTransfer::canReceiveItems($world, $tx, $ty, $tz)){
+			//a chest or hopper minecart in front
+			$minecart = ItemTransfer::getEntityContainerAt($world, $tx, $ty, $tz);
+			if($minecart === null){
+				return false;
+			}
+			foreach($inventory->getContents() as $slot => $item){
+				if(ItemTransfer::insertOneIntoEntity($minecart, $item)){
+					$inventory->setItem($slot, $item->setCount($item->getCount() - 1));
+					return true;
+				}
+			}
+			return false;
+		}
+		$targetFace = Facing::opposite($this->facing);
+		foreach($inventory->getContents() as $slot => $item){
+			if(ItemTransfer::insertOne($world, $tx, $ty, $tz, $targetFace, $item)){
+				$inventory->setItem($slot, $item->setCount($item->getCount() - 1));
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Takes one item from the container above, or collects an item entity above the hopper.
+	 */
+	private function pull(TileHopper $tile) : bool{
+		$inventory = $tile->getInventory();
+		$world = $this->position->getWorld();
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$hopperSlots = ItemTransfer::getInsertSlots($tile, $inventory, Facing::UP, VanillaItems::AIR());
+
+		$source = ItemTransfer::getContainerAt($world, $x, $y + 1, $z);
+		if($source !== null){
+			if($source instanceof ItemTransferContainer && $source->getKind() === ItemTransferContainer::JUKEBOX && $world->isBlockPowered($this->position)){
+				//a playing jukebox powers (locks) the hopper below, but this hopper may not have seen the change yet
+				return false;
+			}
+			$sourceInventory = $source->getInventory();
+			foreach(ItemTransfer::getExtractSlots($source, $sourceInventory, Facing::DOWN) as $slot){
+				$item = $sourceInventory->getItem($slot);
+				if(!$item->isNull() && ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item)){
+					$sourceInventory->setItem($slot, $item->setCount($item->getCount() - 1));
+					return true;
+				}
+			}
+			return false;
+		}
+
+		$above = ItemTransfer::isBlockTypeAt($world, $x, $y + 1, $z, BlockTypeIds::COMPOSTER) ? $world->getBlockAt($x, $y + 1, $z) : null;
+		if($above instanceof Composter){
+			$boneMeal = $inventory->canAddItem(VanillaItems::BONE_MEAL()) ? ItemTransfer::extractFromComposter($above) : null;
+			if($boneMeal !== null){
+				$inventory->addItem($boneMeal);
+				return true;
+			}
+			return false;
+		}
+
+		$minecart = ItemTransfer::getEntityContainerAt($world, $x, $y + 1, $z);
+		if($minecart !== null){
+			//a chest or hopper minecart on a rail above
+			$sourceInventory = $minecart->getInventory();
+			foreach($sourceInventory->getContents() as $slot => $item){
+				if(ItemTransfer::addOneToSlots($inventory, $hopperSlots, $item)){
+					$sourceInventory->setItem($slot, $item->setCount($item->getCount() - 1));
+					return true;
+				}
+			}
+			return false;
+		}
+
+		return $this->collectItemEntity($inventory);
+	}
+
+	private function collectItemEntity(Inventory $inventory) : bool{
+		$world = $this->position->getWorld();
+		$bb = $this->getCollectionArea();
+		foreach($world->getNearbyEntities($bb) as $entity){
+			if(!$entity instanceof ItemEntity || $entity->isFlaggedForDespawn() || $entity->isClosed()){
+				continue;
+			}
+			$pos = $entity->getPosition();
+			if(!$bb->isVectorInside($pos)){
+				continue;
+			}
+			$stack = $entity->getItem();
+			$count = min($stack->getCount(), $inventory->getAddableItemQuantity($stack));
+			if($count <= 0){
+				continue;
+			}
+
+			$ev = new BlockItemPickupEvent($this, $entity, (clone $stack)->setCount($count), $inventory);
+			$ev->call();
+			if($ev->isCancelled()){
+				continue;
+			}
+			$target = $ev->getInventory() ?? $inventory;
+			$taken = $ev->getItem();
+			$leftover = 0;
+			foreach($target->addItem($taken) as $notAdded){
+				$leftover += $notAdded->getCount();
+			}
+			$remaining = $stack->getCount() - ($taken->getCount() - $leftover);
+			if($remaining <= 0){
+				$entity->flagForDespawn();
+			}else{
+				$entity->setStackSize($remaining);
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * A powered hopper is locked (toggle_bit).
+	 */
+	public function onNearbyBlockChange() : void{
+		$world = $this->position->getWorld();
+		$powered = $world->isBlockPowered($this->position);
 		if($powered !== $this->powered){
 			$this->powered = $powered;
 			$world->setBlock($this->position, $this);
 		}
-		$tile = $world->getTile($this->position);
-		if(!$tile instanceof TileHopper){
-			return;
+		if(!$powered){
+			//a container may have been placed above or in front
+			$this->wakeUp();
 		}
-		$tile->tickHopper($this);
-		$world->scheduleDelayedBlockUpdate($this->position, TileHopper::TRANSFER_INTERVAL_TICKS);
 	}
-
 }

@@ -27,9 +27,14 @@ use pocketmine\item\Item;
 
 class FurnaceRecipe{
 
+	/**
+	 * @param float $experience Experience a furnace stores for each item smelted with this recipe, paid out as orbs
+	 *                          when a player takes the result.
+	 */
 	public function __construct(
 		private Item $result,
-		private RecipeIngredient $ingredient
+		private RecipeIngredient $ingredient,
+		private float $experience = 0.0
 	){
 		$this->result = clone $result;
 	}
@@ -40,5 +45,12 @@ class FurnaceRecipe{
 
 	public function getResult() : Item{
 		return clone $this->result;
+	}
+
+	/**
+	 * Returns the experience a furnace stores for each item smelted with this recipe.
+	 */
+	public function getExperience() : float{
+		return $this->experience;
 	}
 }

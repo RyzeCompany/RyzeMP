@@ -25,22 +25,30 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
+use pocketmine\command\selector\TargetSelector;
+use pocketmine\command\utils\CommandItemParser;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
-use pocketmine\item\LegacyStringToItemParser;
 use pocketmine\item\LegacyStringToItemParserException;
-use pocketmine\item\StringToItemParser;
 use pocketmine\lang\KnownTranslationFactory;
-use pocketmine\nbt\JsonNbtParser;
-use pocketmine\nbt\NbtDataException;
-use pocketmine\nbt\NbtException;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\utils\TextFormat;
 use function array_slice;
 use function count;
 use function implode;
+use function is_numeric;
 
-class GiveCommand extends NativeCommand{
-
+/**
+ * /give <player: target> <itemName> [amount] [data] [components]: gives the item to every target (1 by default, like
+ * Bedrock); what does not fit in the inventory is dropped at the player's feet.
+ *
+ * The item may be any PocketMine item name or vanilla item ID. [data] selects a variant (e.g. the potion type).
+ * [components] is Bedrock's JSON ({"minecraft:can_destroy":{"blocks":["stone"]}}, minecraft:can_place_on,
+ * minecraft:keep_on_death, minecraft:item_lock), or PocketMine's JSON NBT tags, which may also directly follow the
+ * amount.
+ */
+class GiveCommand extends VanillaCommand implements ExhaustiveOverloads{
 	public function __construct(){
 		parent::__construct(
 			"give",
@@ -53,25 +61,35 @@ class GiveCommand extends NativeCommand{
 		]);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[
+			CommandParameter::target("player"),
+			CommandParameter::item("itemName"),
+			CommandParameter::int("amount", true),
+			CommandParameter::int("data", true),
+			CommandParameter::json("components", true)
+		]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 2){
 			throw new InvalidCommandSyntaxException();
 		}
 
-		$player = $this->fetchPermittedPlayerTarget($sender, $args[0], DefaultPermissionNames::COMMAND_GIVE_SELF, DefaultPermissionNames::COMMAND_GIVE_OTHER);
-		if($player === null){
+		$players = $this->fetchPermittedPlayerTargets($sender, $args[0], DefaultPermissionNames::COMMAND_GIVE_SELF, DefaultPermissionNames::COMMAND_GIVE_OTHER);
+		if(count($players) === 0){
 			return true;
 		}
 
 		try{
-			$item = StringToItemParser::getInstance()->parse($args[1]) ?? LegacyStringToItemParser::getInstance()->parse($args[1]);
+			$item = CommandItemParser::parse($args[1]);
 		}catch(LegacyStringToItemParserException $e){
 			$sender->sendMessage(KnownTranslationFactory::commands_give_item_notFound($args[1])->prefix(TextFormat::RED));
 			return true;
 		}
 
 		if(!isset($args[2])){
-			$item->setCount($item->getMaxStackSize());
+			$item->setCount(1);
 		}else{
 			$count = $this->getBoundedInt($sender, $args[2], 1, 32767);
 			if($count === null){
@@ -80,30 +98,39 @@ class GiveCommand extends NativeCommand{
 			$item->setCount($count);
 		}
 
-		if(isset($args[3])){
-			$data = implode(" ", array_slice($args, 3));
-			try{
-				$tags = JsonNbtParser::parseJson($data);
-			}catch(NbtDataException $e){
-				$sender->sendMessage(KnownTranslationFactory::commands_give_tagError($e->getMessage()));
+		$tagsStart = 3;
+		if(isset($args[3]) && is_numeric($args[3])){
+			$data = $this->getBoundedInt($sender, $args[3], 0, 32767);
+			if($data === null){
 				return true;
 			}
+			$variant = CommandItemParser::withData($item, $data);
+			if($variant === null){
+				$sender->sendMessage(KnownTranslationFactory::commands_give_item_notFound($args[1] . ":" . $args[3])->prefix(TextFormat::RED));
+				return true;
+			}
+			$item = $variant;
+			$tagsStart = 4;
+		}
 
-			try{
-				$item->setNamedTag($tags);
-			}catch(NbtException $e){
-				$sender->sendMessage(KnownTranslationFactory::commands_give_tagError($e->getMessage()));
+		if(isset($args[$tagsStart])){
+			$error = CommandItemParser::applyTags($item, implode(" ", array_slice($args, $tagsStart)));
+			if($error !== null){
+				$sender->sendMessage(KnownTranslationFactory::commands_give_tagError($error));
 				return true;
 			}
 		}
 
-		//TODO: overflow
-		$player->getInventory()->addItem($item);
+		foreach($players as $player){
+			foreach($player->getInventory()->addItem(clone $item) as $leftover){
+				$player->getWorld()->dropItem($player->getPosition(), $leftover);
+			}
+		}
 
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_give_success(
 			$item->getName() . " (" . $args[1] . ")",
 			(string) $item->getCount(),
-			$player->getName()
+			TargetSelector::joinNames($players)
 		));
 		return true;
 	}

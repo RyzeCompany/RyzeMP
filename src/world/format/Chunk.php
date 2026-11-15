@@ -64,8 +64,26 @@ class Chunk{
 	 */
 	protected array $tiles = [];
 
-	/** @var array<int, CompoundTag> Generated block entities awaiting installation on the world thread. */
+	/**
+	 * Block entity data waiting to become tiles (see {@link Chunk::addPendingTileNBT()}).
+	 * @var CompoundTag[]
+	 * @phpstan-var array<int, CompoundTag>
+	 */
 	private array $pendingTileNBT = [];
+
+	/** Pending entity data: Bedrock entity identifier (string). */
+	public const PENDING_ENTITY_IDENTIFIER = "identifier";
+	/** Pending entity data: position in the world (list of 3 doubles). */
+	public const PENDING_ENTITY_POS = "Pos";
+	/** Pending entity data: yaw and pitch (list of 2 floats, optional). */
+	public const PENDING_ENTITY_ROTATION = "Rotation";
+
+	/**
+	 * Entities waiting to be spawned (see {@link Chunk::addPendingEntityNBT()}).
+	 * @var CompoundTag[]
+	 * @phpstan-var list<CompoundTag>
+	 */
+	private array $pendingEntityNBT = [];
 
 	protected HeightArray $heightMap;
 
@@ -205,7 +223,7 @@ class Chunk{
 
 		$pos = $tile->getPosition();
 		if(isset($this->tiles[$index = Chunk::blockHash($pos->x, $pos->y, $pos->z)]) && $this->tiles[$index] !== $tile){
-			$this->tiles[$index]->close(); // close the previous tile
+			throw new \InvalidArgumentException("Another tile is already at this location");
 		}
 		$this->tiles[$index] = $tile;
 	}
@@ -234,34 +252,69 @@ class Chunk{
 		return $this->tiles[Chunk::blockHash($x, $y, $z)] ?? null;
 	}
 
-	/** @internal */
+	/**
+	 * Adds block entity data that becomes a tile when the chunk is set in a world (World::setChunk()). This is how
+	 * world generators, which run without a world and cannot create tiles, give blocks their data (dungeon chests,
+	 * spawners, bee nests...). The tag is the tile's saved data: it must hold the tile id and the world coordinates of
+	 * a block of this chunk. A pending tile at the same position is replaced.
+	 */
 	public function addPendingTileNBT(CompoundTag $nbt) : void{
-		$hash = self::blockHash($nbt->getInt(Tile::TAG_X), $nbt->getInt(Tile::TAG_Y), $nbt->getInt(Tile::TAG_Z));
-		$this->pendingTileNBT[$hash] = clone $nbt;
-		$this->terrainDirtyFlags |= self::DIRTY_FLAG_BLOCKS;
-	}
-
-	/** @internal */
-	public function getPendingTileNBTAt(int $x, int $y, int $z) : ?CompoundTag{
-		return $this->pendingTileNBT[self::blockHash($x, $y, $z)] ?? null;
-	}
-
-	/** @internal */
-	public function removePendingTileNBT(int $x, int $y, int $z) : void{
-		unset($this->pendingTileNBT[self::blockHash($x, $y, $z)]);
+		$this->pendingTileNBT[Chunk::blockHash($nbt->getInt(Tile::TAG_X), $nbt->getInt(Tile::TAG_Y), $nbt->getInt(Tile::TAG_Z))] = $nbt;
 	}
 
 	/**
-	 * @internal
-	 * @return array<int, CompoundTag>
+	 * Removes the pending block entity data at the given chunk block coordinates, if any.
+	 *
+	 * @param int $x 0-15
+	 * @param int $z 0-15
+	 */
+	public function removePendingTileNBT(int $x, int $y, int $z) : void{
+		unset($this->pendingTileNBT[Chunk::blockHash($x, $y, $z)]);
+	}
+
+	/**
+	 * Returns the pending block entity data at the given chunk block coordinates, or null.
+	 *
+	 * @param int $x 0-15
+	 * @param int $z 0-15
+	 */
+	public function getPendingTileNBTAt(int $x, int $y, int $z) : ?CompoundTag{
+		return $this->pendingTileNBT[Chunk::blockHash($x, $y, $z)] ?? null;
+	}
+
+	/**
+	 * @return CompoundTag[]
+	 * @phpstan-return array<int, CompoundTag>
 	 */
 	public function getPendingTileNBT() : array{
 		return $this->pendingTileNBT;
 	}
 
-	/** @internal */
 	public function clearPendingTileNBT() : void{
 		$this->pendingTileNBT = [];
+	}
+
+	/**
+	 * Adds an entity that is spawned when the chunk is set in a world (World::setChunk()), the way world generators
+	 * (which run without a world) add the mobs of generated structures (villagers, iron golems...). The tag holds
+	 * the Bedrock entity identifier ({@link Chunk::PENDING_ENTITY_IDENTIFIER}), the world position
+	 * ({@link Chunk::PENDING_ENTITY_POS}) and optionally the rotation ({@link Chunk::PENDING_ENTITY_ROTATION}).
+	 * Entities PocketMine-MP cannot create are skipped.
+	 */
+	public function addPendingEntityNBT(CompoundTag $nbt) : void{
+		$this->pendingEntityNBT[] = $nbt;
+	}
+
+	/**
+	 * @return CompoundTag[]
+	 * @phpstan-return list<CompoundTag>
+	 */
+	public function getPendingEntityNBT() : array{
+		return $this->pendingEntityNBT;
+	}
+
+	public function clearPendingEntityNBT() : void{
+		$this->pendingEntityNBT = [];
 	}
 
 	/**
@@ -334,6 +387,17 @@ class Chunk{
 
 		$this->subChunks[$y - self::MIN_SUBCHUNK_INDEX] = $subChunk ?? new SubChunk(Block::EMPTY_STATE_ID, [], new PalettedBlockArray(BiomeIds::OCEAN));
 		$this->terrainDirtyFlags |= self::DIRTY_FLAG_BLOCKS;
+	}
+
+	/**
+	 * The subchunk storage itself, index 0 = subchunk MIN_SUBCHUNK_INDEX (no copy, unlike getSubChunks(): read every
+	 * tick for every ticking chunk). Do not modify it.
+	 *
+	 * @internal
+	 * @phpstan-return \SplFixedArray<SubChunk>
+	 */
+	public function getSubChunkStorage() : \SplFixedArray{
+		return $this->subChunks;
 	}
 
 	/**

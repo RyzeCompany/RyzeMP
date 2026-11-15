@@ -34,6 +34,7 @@ use pocketmine\utils\AssumptionFailedError;
 use pocketmine\world\BlockTransaction;
 use pocketmine\world\sound\RedstonePowerOffSound;
 use pocketmine\world\sound\RedstonePowerOnSound;
+use pocketmine\world\vibration\GameEvent;
 
 class Lever extends Flowable{
 	protected LeverFacing $facing = LeverFacing::UP_AXIS_X;
@@ -94,16 +95,43 @@ class Lever extends Flowable{
 		$this->activated = !$this->activated;
 		$world = $this->position->getWorld();
 		$world->setBlock($this->position, $this);
+		$world->getRedstone()?->updateAroundSide($this->position, $this->getSupportFace());
 		$world->addSound(
 			$this->position->add(0.5, 0.5, 0.5),
 			$this->activated ? new RedstonePowerOnSound() : new RedstonePowerOffSound()
 		);
+		$world->addGameEvent($this->position, $this->activated ? GameEvent::BLOCK_ACTIVATE : GameEvent::BLOCK_DEACTIVATE, $player);
 		return true;
+	}
+
+	public function onBreak(Item $item, ?Player $player = null, array &$returnedItems = []) : bool{
+		$result = parent::onBreak($item, $player, $returnedItems);
+		if($this->activated){
+			$this->position->getWorld()->getRedstone()?->updateAroundSide($this->position, $this->getSupportFace());
+		}
+		return $result;
 	}
 
 	private function canBeSupportedAt(Block $block, int $face) : bool{
 		return $block->getAdjacentSupportType($face)->hasCenterSupport();
 	}
 
-	//TODO
+	/**
+	 * Returns the side of the lever where the block it is attached to is.
+	 */
+	public function getSupportFace() : int{
+		return Facing::opposite($this->facing->getFacing());
+	}
+
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->activated ? 15 : 0;
+	}
+
+	public function getStrongPower(int $face) : int{
+		return $this->activated && $face === $this->getSupportFace() ? 15 : 0;
+	}
 }

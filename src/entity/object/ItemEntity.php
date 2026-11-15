@@ -23,15 +23,19 @@ declare(strict_types=1);
 
 namespace pocketmine\entity\object;
 
+use pocketmine\block\utils\ItemTransfer;
 use pocketmine\entity\animation\ItemEntityStackSizeChangeAnimation;
 use pocketmine\entity\Entity;
 use pocketmine\entity\EntitySizeInfo;
 use pocketmine\entity\Location;
+use pocketmine\event\entity\EntityDamageEvent;
 use pocketmine\event\entity\EntityItemPickupEvent;
 use pocketmine\event\entity\ItemDespawnEvent;
 use pocketmine\event\entity\ItemMergeEvent;
 use pocketmine\event\entity\ItemSpawnEvent;
+use pocketmine\item\Bundle;
 use pocketmine\item\Item;
+use pocketmine\item\ItemTypeIds;
 use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\network\mcpe\EntityEventBroadcaster;
@@ -41,7 +45,11 @@ use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\inventory\ItemStackWrapper;
 use pocketmine\player\Player;
 use pocketmine\timings\Timings;
+use function abs;
+use function floatval;
+use function floor;
 use function max;
+use const PHP_INT_MIN;
 
 class ItemEntity extends Entity{
 
@@ -64,6 +72,10 @@ class ItemEntity extends Entity{
 	protected int $pickupDelay = 0;
 	protected int $despawnDelay = self::DEFAULT_DESPAWN_DELAY;
 	protected Item $item;
+	/** Block of the last position checked for a hopper below (no block until the first check) */
+	private int $lastBlockX = 0;
+	private int $lastBlockY = PHP_INT_MIN;
+	private int $lastBlockZ = 0;
 
 	public function __construct(Location $location, Item $item, ?CompoundTag $nbt = null){
 		if($item->isNull()){
@@ -96,6 +108,30 @@ class ItemEntity extends Entity{
 		$this->thrower = $nbt->getString(self::TAG_THROWER, $this->thrower);
 	}
 
+	/**
+	 * Hoppers don't look for items on their own: wake up a hopper when the item enters its bowl or the block above it.
+	 */
+	private function checkHopperBelow() : void{
+		if($this->isFlaggedForDespawn()){
+			return;
+		}
+		//every tick for every item, mostly lying still: compare block coordinates, no block hash (which doesn't exist
+		//either for positions far below the world, where items fall into the void)
+		$x = (int) floor($this->location->x);
+		$y = (int) floor($this->location->y);
+		$z = (int) floor($this->location->z);
+		if($y === $this->lastBlockY && $x === $this->lastBlockX && $z === $this->lastBlockZ){
+			return;
+		}
+		$this->lastBlockX = $x;
+		$this->lastBlockY = $y;
+		$this->lastBlockZ = $z;
+		//positions outside the world have no hopper: wakeHopperAt() checks that first
+		$world = $this->getWorld();
+		ItemTransfer::wakeHopperAt($world, $x, $y, $z);
+		ItemTransfer::wakeHopperAt($world, $x, $y - 1, $z);
+	}
+
 	protected function onFirstUpdate(int $currentTick) : void{
 		(new ItemSpawnEvent($this))->call(); //this must be called before EntitySpawnEvent, to maintain backwards compatibility
 		parent::onFirstUpdate($currentTick);
@@ -110,6 +146,7 @@ class ItemEntity extends Entity{
 		try{
 
 			$hasUpdate = parent::entityBaseTick($tickDiff);
+			$this->updateFloatDepth();
 
 			if($this->isFlaggedForDespawn()){
 				return $hasUpdate;
@@ -144,6 +181,8 @@ class ItemEntity extends Entity{
 					}
 				}
 			}
+
+			$this->checkHopperBelow();
 
 			if(!$this->isFlaggedForDespawn() && $this->despawnDelay !== self::NEVER_DESPAWN){
 				$hasUpdate = true;
@@ -203,9 +242,99 @@ class ItemEntity extends Entity{
 		return true;
 	}
 
+	/**
+	 * How deep the item is in the liquid it floats in (water, or lava for a fire-proof item) and whether that is lava,
+	 * worked out at the end of each tick (see updateFloatDepth()).
+	 */
+	private float $floatDepth = 0.0;
+	private bool $floatsInLava = false;
+	/**
+	 * The item stopped at the surface of the liquid (see restsOnLiquidSurface()) and nothing changed since: its float
+	 * depth stays the same until its next movement update (a push, a current, a block change nearby, a teleport).
+	 */
+	private bool $restingOnLiquid = false;
+
+	/**
+	 * Called each tick after the block intersection check: works out how the item floats during the next tick.
+	 */
+	private function updateFloatDepth() : void{
+		if($this->restingOnLiquid){
+			return;
+		}
+		if($this->blocksAround === []){
+			//nothing with entity actions around (the usual case): no liquid
+			$this->floatDepth = 0.0;
+			return;
+		}
+		//vanilla ItemEntity.tick(): items float up in water, and fire-proof ones in lava (the others burn there)
+		$depth = $this->getBoundingBoxLiquidDepth();
+		$inLava = false;
+		if($depth <= self::FLOAT_MIN_LIQUID_DEPTH){
+			$lavaDepth = $this->getBoundingBoxLiquidDepth(true);
+			if($lavaDepth > $depth && $this->isFireProof()){
+				$depth = $lavaDepth;
+				$inLava = true;
+			}
+		}
+		$this->floatDepth = $depth;
+		$this->floatsInLava = $inLava;
+		if($depth > self::FLOAT_MIN_LIQUID_DEPTH){
+			//an item lying at the bottom of a pool floats up (a movement update here instead of an override of
+			//hasMovementUpdate(), which is called several times a tick for every item)
+			$this->forceMovementUpdate = true;
+		}elseif($depth > 0.0 && $this->onGround && floatval($this->motion->x) === 0.0 && floatval($this->motion->y) === 0.0 && floatval($this->motion->z) === 0.0){
+			$this->restingOnLiquid = true;
+		}
+	}
+
 	protected function tryChangeMovement() : void{
+		$this->restingOnLiquid = false;
 		$this->checkObstruction($this->location->x, $this->location->y, $this->location->z);
-		parent::tryChangeMovement();
+
+		$depth = $this->floatDepth;
+		if($depth <= self::FLOAT_MIN_LIQUID_DEPTH){
+			if($depth > 0.0 && $this->restsOnLiquidSurface()){
+				return;
+			}
+			parent::tryChangeMovement();
+			return;
+		}
+
+		$horizontal = $this->floatsInLava ? self::LAVA_FLOAT_HORIZONTAL_KEPT : self::WATER_FLOAT_HORIZONTAL_KEPT;
+		$friction = 1 - $this->drag;
+		$mY = $this->motion->y;
+		$this->motion = new Vector3(
+			$this->motion->x * $horizontal * $friction,
+			($mY < self::FLOAT_MAX_RISE_SPEED ? $mY + self::FLOAT_RISE_ACCELERATION : $mY) * $friction,
+			$this->motion->z * $horizontal * $friction
+		);
+	}
+
+	/** Items float when their bottom is deeper than this in the liquid (vanilla ItemEntity.tick()). */
+	private const FLOAT_MIN_LIQUID_DEPTH = 0.1;
+	/** Vertical speed gained each tick while floating up, up to FLOAT_MAX_RISE_SPEED (vanilla setFluidMovement()). */
+	private const FLOAT_RISE_ACCELERATION = 0.0005;
+	private const FLOAT_MAX_RISE_SPEED = 0.06;
+	/** Horizontal speed kept each tick while floating in water and in lava (vanilla setUnderwaterMovement(), setUnderLavaMovement()). */
+	private const WATER_FLOAT_HORIZONTAL_KEPT = 0.99;
+	private const LAVA_FLOAT_HORIZONTAL_KEPT = 0.95;
+	/** Below this speed an item that reached the surface of still water stops there, see restsOnLiquidSurface(). */
+	private const FLOAT_REST_MAX_SPEED = 0.05;
+
+	/**
+	 * Called when the item touches water at the surface (not deep enough to float up any more): an item that floated up
+	 * slowly to the surface of still water stops there, like an item lying on the ground, instead of bobbing up and down
+	 * every tick (vanilla bobs; this saves moving every floating item each tick). A current, a block change nearby or
+	 * a push wakes it up again.
+	 */
+	private function restsOnLiquidSurface() : bool{
+		$motion = $this->motion;
+		if(abs($motion->y) >= self::FLOAT_REST_MAX_SPEED || $motion->x * $motion->x + $motion->z * $motion->z > 1.0e-4){
+			return false;
+		}
+		$this->motion = Vector3::zero();
+		$this->onGround = true;
+		return true;
 	}
 
 	protected function applyDragBeforeGravity() : bool{
@@ -237,8 +366,28 @@ class ItemEntity extends Entity{
 		return $this->item;
 	}
 
+	protected function onDeath() : void{
+		parent::onDeath();
+		//a destroyed bundle (fire, lava, cactus...) spills its contents, like a shulker box in Java
+		if($this->item instanceof Bundle){
+			$world = $this->getWorld();
+			$position = $this->location->asVector3();
+			foreach($this->item->getContents() as $content){
+				$world->dropItem($position, $content);
+			}
+		}
+	}
+
 	public function isFireProof() : bool{
 		return $this->item->isFireProof();
+	}
+
+	public function attack(EntityDamageEvent $source) : void{
+		$cause = $source->getCause();
+		if(($cause === EntityDamageEvent::CAUSE_ENTITY_EXPLOSION || $cause === EntityDamageEvent::CAUSE_BLOCK_EXPLOSION) && $this->item->getTypeId() === ItemTypeIds::NETHER_STAR){
+			$source->cancel(); //vanilla: a nether star survives explosions
+		}
+		parent::attack($source);
 	}
 
 	public function canCollideWith(Entity $entity) : bool{

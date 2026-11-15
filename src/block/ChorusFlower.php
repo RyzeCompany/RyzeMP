@@ -34,6 +34,7 @@ use pocketmine\math\Facing;
 use pocketmine\math\RayTraceResult;
 use pocketmine\math\Vector3;
 use pocketmine\world\BlockTransaction;
+use pocketmine\world\GameRules;
 use pocketmine\world\sound\ChorusFlowerDieSound;
 use pocketmine\world\sound\ChorusFlowerGrowSound;
 use pocketmine\world\World;
@@ -81,6 +82,9 @@ final class ChorusFlower extends Flowable implements Ageable{
 	}
 
 	public function onProjectileHit(Projectile $projectile, RayTraceResult $hitResult) : void{
+		if(!GameRules::allowsProjectileBlockBreaking($this->position->getWorld())){
+			return;
+		}
 		$this->position->getWorld()->useBreakOn($this->position);
 	}
 

@@ -113,7 +113,7 @@ class CocoaBlock extends Flowable implements Ageable, HorizontalFacing{
 
 	public function getDropsForCompatibleTool(Item $item) : array{
 		return [
-			VanillaItems::COCOA_BEANS()->setCount($this->age === self::MAX_AGE ? mt_rand(2, 3) : 1)
+			VanillaItems::COCOA_BEANS()->setCount($this->age === self::MAX_AGE ? 3 : 1)
 		];
 	}
 

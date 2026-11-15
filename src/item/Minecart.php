@@ -23,11 +23,56 @@ declare(strict_types=1);
 
 namespace pocketmine\item;
 
-class Minecart extends Item{
+use pocketmine\block\Block;
+use pocketmine\entity\Location;
+use pocketmine\entity\vehicle\AbstractMinecart;
+use pocketmine\entity\vehicle\MinecartType;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\world\vibration\GameEvent;
+use pocketmine\world\World;
 
-	public function getMaxStackSize() : int{
-		return 1;
+/**
+ * A minecart item (plain, with chest, hopper, TNT or command block): used on a rail, it places the cart on it.
+ */
+class Minecart extends UnstackableItem{
+
+	/**
+	 * @param string[] $enchantmentTags
+	 */
+	public function __construct(
+		ItemIdentifier $identifier,
+		string $name = "Unknown",
+		array $enchantmentTags = [],
+		private MinecartType $minecartType = MinecartType::NORMAL
+	){
+		parent::__construct($identifier, $name, $enchantmentTags);
 	}
 
-	//TODO
+	public function getMinecartType() : MinecartType{
+		return $this->minecartType;
+	}
+
+	/**
+	 * Creates and spawns the cart of this item at the given position. Does not consume the item.
+	 */
+	public function spawnMinecart(World $world, Vector3 $pos, float $yaw = 0.0) : AbstractMinecart{
+		$cart = $this->minecartType->createEntity(Location::fromObject($pos, $world, $yaw, 0.0));
+		if($this->hasCustomName()){
+			$cart->setNameTag($this->getCustomName());
+		}
+		$cart->spawnToAll();
+		return $cart;
+	}
+
+	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
+		$pos = AbstractMinecart::getPlacementPosition($blockClicked);
+		if($pos === null){
+			return ItemUseResult::NONE;
+		}
+		$this->spawnMinecart($player->getWorld(), $pos, AbstractMinecart::getRailYaw($blockClicked));
+		$player->getWorld()->addGameEvent($pos, GameEvent::ENTITY_PLACE, $player);
+		$this->pop();
+		return ItemUseResult::SUCCESS;
+	}
 }

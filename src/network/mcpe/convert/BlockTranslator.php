@@ -23,7 +23,6 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\convert;
 
-use pocketmine\data\bedrock\BedrockDataFiles;
 use pocketmine\data\bedrock\block\BlockStateData;
 use pocketmine\data\bedrock\block\BlockStateSerializeException;
 use pocketmine\data\bedrock\block\BlockStateSerializer;
@@ -32,7 +31,6 @@ use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\Filesystem;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
-use function str_replace;
 use function json_decode;
 use const JSON_THROW_ON_ERROR;
 
@@ -40,141 +38,36 @@ use const JSON_THROW_ON_ERROR;
  * @internal
  */
 final class BlockTranslator{
-	public const CANONICAL_BLOCK_STATES_PATH = 0;
-	public const BLOCK_STATE_META_MAP_PATH = 1;
-
-	private const PATHS = [
-		// Prepared 2225 data; not enabled in session negotiation until validated.
-		2225 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.60',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.60',
-		],
-		ProtocolInfo::PROTOCOL_1_26_51 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.50',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.50',
-		],
-		ProtocolInfo::PROTOCOL_1_26_45 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '',
-			self::BLOCK_STATE_META_MAP_PATH => '',
-		],
-		ProtocolInfo::PROTOCOL_1_26_40 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '',
-			self::BLOCK_STATE_META_MAP_PATH => '',
-		],
-		ProtocolInfo::PROTOCOL_1_26_30 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.30',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.30',
-		],
-		ProtocolInfo::PROTOCOL_1_26_20 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.20',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.20',
-		],
-		ProtocolInfo::PROTOCOL_1_26_10 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.10',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.10',
-		],
-		ProtocolInfo::PROTOCOL_1_26_0 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.0',
-		],
-		ProtocolInfo::PROTOCOL_1_21_130 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.0',
-		],
-		ProtocolInfo::PROTOCOL_1_21_124 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.0',
-		],
-		ProtocolInfo::PROTOCOL_1_21_120 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.0',
-		],
-		ProtocolInfo::PROTOCOL_1_21_111 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.26.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.26.0',
-		],
-		ProtocolInfo::PROTOCOL_1_21_100 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.100',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.100',
-		],
-		ProtocolInfo::PROTOCOL_1_21_93 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.93',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.93',
-		],
-		ProtocolInfo::PROTOCOL_1_21_90 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.93',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.93',
-		],
-		ProtocolInfo::PROTOCOL_1_21_80 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.93',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.93',
-		],
-		ProtocolInfo::PROTOCOL_1_21_70 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.70',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.70',
-		],
-		ProtocolInfo::PROTOCOL_1_21_60 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.60',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.60',
-		],
-		ProtocolInfo::PROTOCOL_1_21_50 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.50',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.50',
-		],
-		ProtocolInfo::PROTOCOL_1_21_40 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.40',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.40',
-		],
-		ProtocolInfo::PROTOCOL_1_21_30 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.30',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.30',
-		],
-		ProtocolInfo::PROTOCOL_1_21_20 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.20',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.20',
-		],
-		ProtocolInfo::PROTOCOL_1_21_2 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.2',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.2',
-		],
-		ProtocolInfo::PROTOCOL_1_21_0 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.21.2',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.21.2',
-		],
-		ProtocolInfo::PROTOCOL_1_20_80 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.80',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.80',
-		],
-		ProtocolInfo::PROTOCOL_1_20_70 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.70',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.70',
-		],
-		ProtocolInfo::PROTOCOL_1_20_60 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.60',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.60',
-		],
-		ProtocolInfo::PROTOCOL_1_20_50 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.50',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.50',
-		],
-		ProtocolInfo::PROTOCOL_1_20_40 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.40',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.40',
-		],
-		ProtocolInfo::PROTOCOL_1_20_30 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.30',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.30',
-		],
-		ProtocolInfo::PROTOCOL_1_20_10 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.10',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.10',
-		],
-		ProtocolInfo::PROTOCOL_1_20_0 => [
-			self::CANONICAL_BLOCK_STATES_PATH => '-1.20.0',
-			self::BLOCK_STATE_META_MAP_PATH => '-1.20.0',
-		]
-	];
-
+	public static function loadFromProtocolId(int $protocolId) : self{
+		[$suffix, $networkIdsFile] = match($protocolId){
+			ProtocolInfo::PROTOCOL_1_26_60 => ["-1.26.60", "block_network_ids-1.26.60.json"],
+			ProtocolInfo::PROTOCOL_1_26_52 => ["-1.26.50", "block_network_ids-1.26.50.json"],
+			ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45 => ["", null],
+			default => throw new \InvalidArgumentException("Unsupported block palette protocol $protocolId")
+		};
+		$path = \pocketmine\BEDROCK_DATA_PATH;
+		$networkIds = $networkIdsFile === null ? null : json_decode(Filesystem::fileGetContents($path . $networkIdsFile), true, flags: JSON_THROW_ON_ERROR);
+		if($networkIds !== null){
+			if(!is_array($networkIds) || !array_is_list($networkIds)){
+				throw new \UnexpectedValueException("Invalid block network ID list for protocol $protocolId");
+			}
+			foreach($networkIds as $networkId){
+				if(!is_int($networkId)){
+					throw new \UnexpectedValueException("Invalid block network ID for protocol $protocolId");
+				}
+			}
+		}
+		return new self(
+			BlockStateDictionary::loadFromString(
+				Filesystem::fileGetContents($path . "canonical_block_states$suffix.nbt"),
+				Filesystem::fileGetContents($path . "block_state_meta_map$suffix.json"),
+				$networkIds,
+				$networkIdsFile !== null
+			),
+			GlobalBlockStateHandlers::getSerializer(),
+			$protocolId < ProtocolInfo::CURRENT_PROTOCOL
+		);
+	}
 	/**
 	 * @var int[]
 	 * @phpstan-var array<int, int>
@@ -185,23 +78,10 @@ final class BlockTranslator{
 	private BlockStateData $fallbackStateData;
 	private int $fallbackStateId;
 
-	public static function loadFromProtocolId(int $protocolId) : BlockTranslator{
-		$canonicalBlockStatesRaw = Filesystem::fileGetContents(str_replace(".nbt", self::PATHS[$protocolId][self::CANONICAL_BLOCK_STATES_PATH] . ".nbt", BedrockDataFiles::CANONICAL_BLOCK_STATES_NBT));
-		$metaMappingRaw = Filesystem::fileGetContents(str_replace(".json", self::PATHS[$protocolId][self::BLOCK_STATE_META_MAP_PATH] . ".json", BedrockDataFiles::BLOCK_STATE_META_MAP_JSON));
-		$translator = new self(
-			BlockStateDictionary::loadFromString(
-				$canonicalBlockStatesRaw,
-				$metaMappingRaw,
-				$protocolId >= ProtocolInfo::PROTOCOL_1_26_50 ? json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . ($protocolId >= 2225 ? "block_network_ids-1.26.60.json" : "block_network_ids-1.26.50.json")), flags: JSON_THROW_ON_ERROR) : null
-			),
-			GlobalBlockStateHandlers::getSerializer(),
-		);
-		return $translator;
-	}
-
 	public function __construct(
 		private BlockStateDictionary $blockStateDictionary,
-		private BlockStateSerializer $blockStateSerializer
+		private BlockStateSerializer $blockStateSerializer,
+		private bool $allowMissingStates = false
 	){
 		$this->fallbackStateData = BlockStateData::current(BlockTypeNames::INFO_UPDATE, []);
 		$this->fallbackStateId = $this->blockStateDictionary->lookupStateIdFromData($this->fallbackStateData) ??
@@ -215,7 +95,14 @@ final class BlockTranslator{
 
 		try{
 			$blockStateData = $this->blockStateSerializer->serialize($internalStateId);
-			$networkId = $this->internalStateDataToNetworkId($blockStateData);
+
+			$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
+			if($networkId === null){
+				if(!$this->allowMissingStates){
+					throw new AssumptionFailedError("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
+				}
+				$networkId = $this->fallbackStateId;
+			}
 		}catch(BlockStateSerializeException){
 			//TODO: this will swallow any error caused by invalid block properties; this is not ideal, but it should be
 			//covered by unit tests, so this is probably a safe assumption.
@@ -225,58 +112,16 @@ final class BlockTranslator{
 		return $this->networkIdCache[$internalStateId] = $networkId;
 	}
 
-	private function internalStateDataToNetworkId(BlockStateData $blockStateData) : int{
-		$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
-		if($networkId === null){
-			throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
-		}
-		return $networkId;
-	}
-
-	/**
-	 * Converts network blockstate data to the runtime network ID.
-	 *
-	 * All consumers use the same dictionary, including protocols with hashed IDs.
-	 */
-	public function networkStateDataToNetworkId(BlockStateData $blockStateData) : int{
-		return $this->internalStateDataToNetworkId($blockStateData);
-	}
-
 	/**
 	 * Looks up the network state data associated with the given internal state ID.
 	 */
-	private function getCanonicalNetworkId(int $internalStateId) : int{
-		try{
-			$blockStateData = $this->blockStateSerializer->serialize($internalStateId);
-			$networkId = $this->blockStateDictionary->lookupStateIdFromData($blockStateData);
-			if($networkId === null){
-				throw new BlockStateSerializeException("Unmapped blockstate returned by blockstate serializer: " . $blockStateData->toNbt());
-			}
-			return $networkId;
-		}catch(BlockStateSerializeException){
-			return $this->fallbackStateId;
-		}
-	}
-
 	public function internalIdToNetworkStateData(int $internalStateId) : BlockStateData{
 		//we don't directly use the blockstate serializer here - we can't assume that the network blockstate NBT is the
 		//same as the disk blockstate NBT, in case we decide to have different world version than network version (or in
 		//case someone wants to implement multi version).
-		$networkRuntimeId = $this->getCanonicalNetworkId($internalStateId);
+		$networkRuntimeId = $this->internalIdToNetworkId($internalStateId);
 
 		return $this->blockStateDictionary->generateDataFromStateId($networkRuntimeId) ?? throw new AssumptionFailedError("We just looked up this state ID, so it must exist");
-	}
-
-	/**
-	 * Looks up the current network state data associated with the given internal state ID.
-	 */
-	public function internalIdToCurrentNetworkStateData(int $internalStateId) : BlockStateData{
-		//we don't directly use the blockstate serializer here - we can't assume that the network blockstate NBT is the
-		//same as the disk blockstate NBT, in case we decide to have different world version than network version (or in
-		//case someone wants to implement multi version).
-		$networkRuntimeId = $this->getCanonicalNetworkId($internalStateId);
-
-		return $this->blockStateDictionary->generateCurrentDataFromStateId($networkRuntimeId) ?? throw new AssumptionFailedError("We just looked up this state ID, so it must exist");
 	}
 
 	public function getBlockStateDictionary() : BlockStateDictionary{ return $this->blockStateDictionary; }

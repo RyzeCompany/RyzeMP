@@ -28,6 +28,9 @@ use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\vanilla\BiomeMapping;
 use pocketmine\world\generator\vanilla\feature\block\BlockSurvival;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
+use pocketmine\world\generator\vanilla\native\NativeBackendException;
+use pocketmine\world\generator\vanilla\native\NativeDecorator;
+use pocketmine\world\generator\vanilla\native\NativeTerrainClient;
 use pocketmine\world\generator\vanilla\random\PositionalRandomFactory;
 use pocketmine\world\generator\vanilla\structure\StructureManager;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
@@ -47,7 +50,7 @@ use function unpack;
  * region: for every decoration step, every feature of the biomes present in the region is placed in the global
  * feature order, each with its random seeded by WorldgenRandom.setFeatureSeed(decorationSeed, featureIndex, step).
  *
- * The PHP feature-placement order follows Java Edition 26.3 for the same seed (Bedrock's own decoration is different code inside
+ * Decoration follows Java Edition 26.3 exactly for the same seed (Bedrock's own decoration is different code inside
  * the game and is not public); the blocks are mapped to their Bedrock equivalents.
  */
 final class FeatureDecorator{
@@ -70,7 +73,6 @@ final class FeatureDecorator{
 
 	/** Structures placed at the start of each decoration step (null: no structures). */
 	public ?StructureManager $structures = null;
-
 	/** Whether the decoration features are placed (structures can be generated without them). */
 	public bool $featuresEnabled = true;
 	/**
@@ -78,11 +80,15 @@ final class FeatureDecorator{
 	 * being decorated is this factory at the chunk's origin (null: not set by the generator).
 	 */
 	public ?PositionalRandomFactory $regionRandomFactory = null;
+	private ?StructurePlaceContext $structureContext = null;
 	/**
 	 * Nanoseconds spent per placed feature id (null: not profiled). Development aid for tools/.
 	 * @phpstan-var array<string, int>|null
 	 */
 	public ?array $profile = null;
+	/** Native placement of the features the native core implements (null: everything in PHP). */
+	private ?NativeDecorator $native = null;
+
 	/**
 	 * @param string[] $treeBiomeNames biome names of the climate tree (index = terrain biome index)
 	 * @phpstan-param list<string> $treeBiomeNames
@@ -100,10 +106,9 @@ final class FeatureDecorator{
 		array $treeBiomeNames,
 		\Closure $sampleTreeBiome,
 		?\Closure $logger = null,
-		?array $possibleBiomes = null,
-		bool $enableStructureContent = false
+		?array $possibleBiomes = null
 	){
-		$this->blocks = JavaBlocks::get($data->getRoot(), $enableStructureContent);
+		$this->blocks = JavaBlocks::get($data->getRoot());
 		$this->registry = new FeatureRegistry($data, $this->blocks, $logger, $possibleBiomes);
 		foreach($treeBiomeNames as $treeIndex => $name){
 			$registryIndex = $this->registry->biomeIndex[$name] ?? throw new \RuntimeException("Biome $name has no feature data");
@@ -141,17 +146,43 @@ final class FeatureDecorator{
 	public function decorate(ChunkManager $world, int $chunkX, int $chunkZ) : void{
 		$level = $this->level;
 		$structures = $this->structures;
-		$starts = $structures?->getStartsAffecting($chunkX, $chunkZ) ?? [];
-		$structureContext = $structures !== null && $starts !== [] ? new StructurePlaceContext($this->context, $structures->env) : null;
+		$start = $this->profile !== null ? hrtime(true) : 0;
+		$starts = $structures !== null ? $structures->getStartsAffecting($chunkX, $chunkZ) : [];
+		if($this->profile !== null){
+			$this->profile["(structure starts)"] = ($this->profile["(structure starts)"] ?? 0) + (hrtime(true) - $start);
+		}
 		$level->begin($world, $chunkX, $chunkZ);
 		$level->regionRandom = $this->regionRandomFactory?->at($chunkX << 4, 0, $chunkZ << 4);
 		try{
 			$decorationSeed = $this->random->setDecorationSeed($this->seed, $chunkX << 4, $chunkZ << 4);
 			$biomes = $this->featuresEnabled ? $this->collectBiomes($world, $chunkX, $chunkZ) : [];
 			$registry = $this->registry;
+			$native = $this->featuresEnabled ? $this->native : null;
+			if($native !== null){
+				try{
+					$native->begin($level, $chunkX, $chunkZ, $this->recordedHeights($chunkX, $chunkZ));
+					$level->logWrites = true;
+				}catch(NativeBackendException $e){
+					$native = $this->disableNative($e);
+				}
+			}
+			$structureContext = null;
+			if($structures !== null && count($starts) > 0){
+				$structureContext = $this->structureContext ??= new StructurePlaceContext($this->context, $structures->env);
+			}
+			//consecutive native features go in one request, across steps too unless PHP places something in between
+			$batch = [];
 			for($step = 0; $step < self::DECORATION_STEPS; ++$step){
 				if($structures !== null && $structureContext !== null){
+					if(count($batch) > 0 && $structures->placesInStep($starts, $step)){
+						$native = $this->placeNative($native, $batch, $decorationSeed);
+						$batch = [];
+					}
+					$start = $this->profile !== null ? hrtime(true) : 0;
 					$structures->placeStep($structureContext, $starts, $step, $chunkX, $chunkZ, $decorationSeed, $this->random);
+					if($this->profile !== null){
+						$this->profile["(structures)"] = ($this->profile["(structures)"] ?? 0) + (hrtime(true) - $start);
+					}
 				}
 				$features = $registry->stepFeatures[$step] ?? null;
 				if($features === null || !$this->featuresEnabled){
@@ -169,12 +200,28 @@ final class FeatureDecorator{
 				$indexes = array_keys($indexes);
 				sort($indexes);
 				foreach($indexes as $index){
+					if($native !== null && $native->isNative($step, $index)){
+						$batch[] = [$step, $index];
+						continue;
+					}
+					if(count($batch) > 0){
+						$native = $this->placeNative($native, $batch, $decorationSeed);
+						$batch = [];
+					}
 					$this->placePhp($step, $index, $decorationSeed);
 				}
 			}
+			if(count($batch) > 0){
+				$native = $this->placeNative($native, $batch, $decorationSeed);
+			}
 			$structureContext?->postProcess();
 		}finally{
+			$level->logWrites = false;
+			$level->writeLog = [];
 			$level->finish();
+			if($this->structureContext !== null){
+				$this->structureContext->postProcess = [];
+			}
 		}
 	}
 
@@ -188,6 +235,94 @@ final class FeatureDecorator{
 			return;
 		}
 		$this->registry->placed($id)->placeWithBiomeCheck($this->context, $this->level->centerChunkX << 4, $this->level->minY, $this->level->centerChunkZ << 4);
+	}
+
+	/**
+	 * Places a batch of consecutive features natively; if the native core fails, it is disabled and the batch is
+	 * placed by PHP. Returns the native decorator to keep using (null once disabled).
+	 *
+	 * @param int[][] $batch
+	 * @phpstan-param list<array{int, int}> $batch
+	 */
+	private function placeNative(?NativeDecorator $native, array $batch, int $decorationSeed) : ?NativeDecorator{
+		if($native !== null){
+			try{
+				$start = $this->profile !== null ? hrtime(true) : 0;
+				$native->place($this->level, $this->random, $decorationSeed, $batch);
+				if($this->profile !== null){
+					$this->profile["(native)"] = ($this->profile["(native)"] ?? 0) + (hrtime(true) - $start);
+				}
+				return $native;
+			}catch(NativeBackendException $e){
+				$native = $this->disableNative($e);
+			}
+		}
+		foreach($batch as [$step, $index]){
+			$this->placePhp($step, $index, $decorationSeed);
+		}
+		return $native;
+	}
+
+	private function disableNative(NativeBackendException $e) : null{
+		\GlobalLogger::get()->warning("Vanilla generator: native decoration failed, using the PHP implementation: " . $e->getMessage());
+		$this->native = null;
+		$this->level->logWrites = false;
+		$this->level->writeLog = [];
+		return null;
+	}
+
+	/**
+	 * The packed terrain heights recorded for a chunk (recordTerrain() / recordTerrainHeights()), if still cached.
+	 */
+	public function getRecordedTerrainHeights(int $chunkX, int $chunkZ) : ?string{
+		return $this->terrainHeights[World::chunkHash($chunkX, $chunkZ)] ?? null;
+	}
+
+	/**
+	 * Recorded terrain heightmaps of the 3x3 chunks (see recordTerrain()), by region chunk index.
+	 * @phpstan-return array<int, string|null>
+	 */
+	private function recordedHeights(int $chunkX, int $chunkZ) : array{
+		$result = [];
+		for($dx = -1; $dx <= 1; ++$dx){
+			for($dz = -1; $dz <= 1; ++$dz){
+				$result[($dx + 1) * 3 + ($dz + 1)] = $this->terrainHeights[World::chunkHash($chunkX + $dx, $chunkZ + $dz)] ?? null;
+			}
+		}
+		return $result;
+	}
+
+	/**
+	 * Lets the native core place the features it implements, on the connection of the native terrain client.
+	 * Returns false (and logs why) if it cannot be used.
+	 */
+	public function enableNative(NativeTerrainClient $client) : bool{
+		$bedrockToJava = [];
+		foreach($this->bedrockToJava as $id => $list){
+			$bedrockToJava[$id] = $list;
+		}
+		try{
+			$this->native = new NativeDecorator(
+				$client,
+				$this->blocks,
+				$this->level->minY,
+				$this->level->height,
+				$this->level->seaLevel,
+				$this->registry->biomeNames,
+				$bedrockToJava,
+				$this->treeToRegistry,
+				$this->registry->stepFeatures
+			);
+		}catch(NativeBackendException $e){
+			\GlobalLogger::get()->warning("Vanilla generator: native decoration unavailable, using the PHP implementation: " . $e->getMessage());
+			$this->native = null;
+			return false;
+		}
+		return true;
+	}
+
+	public function getNative() : ?NativeDecorator{
+		return $this->native;
 	}
 
 	/**

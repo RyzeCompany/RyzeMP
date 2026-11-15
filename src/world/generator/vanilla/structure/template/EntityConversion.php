@@ -23,9 +23,17 @@ declare(strict_types=1);
 
 namespace pocketmine\world\generator\vanilla\structure\template;
 
+use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\nbt\tag\DoubleTag;
+use pocketmine\nbt\tag\FloatTag;
+use pocketmine\nbt\tag\ListTag;
+use pocketmine\world\format\Chunk;
 use pocketmine\world\generator\vanilla\feature\block\JavaBlocks;
 
-/** Java entity IDs stored in structure spawners, converted to Bedrock identifiers. */
+/**
+ * Entities of structure templates (villagers, iron golems, cats, farm animals...): Java entity data to the data of a
+ * pending entity (see {@link Chunk::addPendingEntityNBT()}).
+ */
 final class EntityConversion{
 	/** Java entity ids whose Bedrock identifier differs. */
 	private const BEDROCK_IDS = [
@@ -45,4 +53,32 @@ final class EntityConversion{
 		return self::BEDROCK_IDS[$javaId] ?? $javaId;
 	}
 
+	/**
+	 * Pending entity data (Bedrock identifier, position, rotation) for a Java entity placed at the given position.
+	 */
+	public static function pendingEntity(CompoundTag $java, float $x, float $y, float $z, float $yaw, float $pitch) : ?CompoundTag{
+		$id = $java->getString("id", "");
+		if($id === ""){
+			return null;
+		}
+		return CompoundTag::create()
+			->setString(Chunk::PENDING_ENTITY_IDENTIFIER, self::bedrockId($id))
+			->setTag(Chunk::PENDING_ENTITY_POS, new ListTag([new DoubleTag($x), new DoubleTag($y), new DoubleTag($z)]))
+			->setTag(Chunk::PENDING_ENTITY_ROTATION, new ListTag([new FloatTag($yaw), new FloatTag($pitch)]));
+	}
+
+	/**
+	 * Yaw and pitch of Java entity data ("Rotation" list).
+	 * @phpstan-return array{float, float}
+	 */
+	public static function rotation(CompoundTag $java) : array{
+		$rotation = $java->getListTag("Rotation");
+		$values = [];
+		foreach($rotation ?? [] as $tag){
+			if($tag instanceof FloatTag){
+				$values[] = $tag->getValue();
+			}
+		}
+		return [$values[0] ?? 0.0, $values[1] ?? 0.0];
+	}
 }

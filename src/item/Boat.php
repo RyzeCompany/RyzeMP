@@ -23,7 +23,14 @@ declare(strict_types=1);
 
 namespace pocketmine\item;
 
+use pocketmine\entity\vehicle\BoatVariant;
+
+/**
+ * A wooden boat: used on water or a block, it places a minecraft:boat of its wood.
+ */
 class Boat extends Item{
+	use BoatPlacementTrait;
+
 	private BoatType $boatType;
 
 	public function __construct(ItemIdentifier $identifier, string $name, BoatType $boatType){
@@ -35,6 +42,14 @@ class Boat extends Item{
 		return $this->boatType;
 	}
 
+	public function getBoatVariant() : BoatVariant{
+		return BoatVariant::fromBoatType($this->boatType);
+	}
+
+	public function placesChestBoat() : bool{
+		return false;
+	}
+
 	public function getFuelTime() : int{
 		return 1200; //400 in PC
 	}
@@ -42,6 +57,4 @@ class Boat extends Item{
 	public function getMaxStackSize() : int{
 		return 1;
 	}
-
-	//TODO
 }

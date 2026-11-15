@@ -23,9 +23,11 @@ declare(strict_types=1);
 
 namespace pocketmine\inventory\transaction\action;
 
+use pocketmine\inventory\ArmorInventory;
 use pocketmine\inventory\Inventory;
 use pocketmine\inventory\SlotValidatedInventory;
 use pocketmine\inventory\transaction\TransactionValidationException;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Item;
 use pocketmine\player\Player;
 
@@ -81,6 +83,9 @@ class SlotChangeAction extends InventoryAction{
 					throw new TransactionValidationException("Target item is not accepted by the inventory at slot #" . $this->inventorySlot . ": " . $ret->getMessage(), 0, $ret);
 				}
 			}
+		}
+		if($this->inventory instanceof ArmorInventory && $source->hasFiniteResources() && $this->sourceItem->hasEnchantment(VanillaEnchantments::BINDING()) && !$this->targetItem->equalsExact($this->sourceItem)){
+			throw new TransactionValidationException("Items with Curse of Binding can't be taken off outside creative");
 		}
 	}
 

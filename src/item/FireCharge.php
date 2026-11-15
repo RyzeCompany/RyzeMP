@@ -35,6 +35,7 @@ class FireCharge extends Item{
 	public function onInteractBlock(Player $player, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, array &$returnedItems) : ItemUseResult{
 		if($blockReplace->getTypeId() === BlockTypeIds::AIR){
 			$world = $player->getWorld();
+			//fire in an empty obsidian frame lights the portal (see NetherPortalShape::onFirePlaced())
 			$world->setBlock($blockReplace->getPosition(), VanillaBlocks::FIRE());
 			$world->addSound($blockReplace->getPosition()->add(0.5, 0.5, 0.5), new BlazeShootSound());
 

@@ -25,9 +25,11 @@ namespace pocketmine\block;
 
 use pocketmine\block\tile\ChiseledBookshelf as TileChiseledBookshelf;
 use pocketmine\block\utils\ChiseledBookshelfSlot;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\FacesOppositePlacingPlayerTrait;
 use pocketmine\block\utils\HorizontalFacing;
 use pocketmine\block\utils\HorizontalFacingTrait;
+use pocketmine\block\utils\ItemTransfer;
 use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\item\Book;
 use pocketmine\item\EnchantedBook;
@@ -37,9 +39,11 @@ use pocketmine\math\Axis;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
+use pocketmine\world\sound\ChiseledBookshelfInsertSound;
+use pocketmine\world\sound\ChiseledBookshelfPickupSound;
 use function spl_object_id;
 
-class ChiseledBookshelf extends Opaque implements HorizontalFacing{
+class ChiseledBookshelf extends Opaque implements HorizontalFacing, ComparatorReadable{
 	use HorizontalFacingTrait;
 	use FacesOppositePlacingPlayerTrait;
 
@@ -143,6 +147,13 @@ class ChiseledBookshelf extends Opaque implements HorizontalFacing{
 		return $this;
 	}
 
+	/**
+	 * Last slot a book was put into or taken from, 1-6 (0 if none), like vanilla.
+	 */
+	public function getComparatorOutput() : int{
+		return $this->lastInteractedSlot !== null ? $this->lastInteractedSlot->value + 1 : 0;
+	}
+
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
 		if($face !== $this->facing){
 			return false;
@@ -160,20 +171,26 @@ class ChiseledBookshelf extends Opaque implements HorizontalFacing{
 
 		$inventory = $tile->getInventory();
 		if(!$inventory->isSlotEmpty($slot->value)){
-			$returnedItems[] = $inventory->getItem($slot->value);
+			$book = $inventory->getItem($slot->value);
+			$returnedItems[] = $book;
 			$inventory->clear($slot->value);
 			$this->setSlot($slot, false);
 			$this->lastInteractedSlot = $slot;
+			$sound = new ChiseledBookshelfPickupSound($this, $book instanceof EnchantedBook);
 		}elseif($item instanceof WritableBookBase || $item instanceof Book || $item instanceof EnchantedBook){
 			//TODO: type tags like blocks would be better for this
 			$inventory->setItem($slot->value, $item->pop());
 			$this->setSlot($slot, true);
 			$this->lastInteractedSlot = $slot;
+			$sound = new ChiseledBookshelfInsertSound($this, $item instanceof EnchantedBook);
 		}else{
 			return true;
 		}
 
 		$this->position->getWorld()->setBlock($this->position, $this);
+		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), $sound);
+		//hoppers move books in and out (vanilla Container)
+		ItemTransfer::notifyContainerChanged($this->position->getWorld(), $this->position->getFloorX(), $this->position->getFloorY(), $this->position->getFloorZ());
 		return true;
 	}
 
@@ -183,5 +200,9 @@ class ChiseledBookshelf extends Opaque implements HorizontalFacing{
 
 	public function isAffectedBySilkTouch() : bool{
 		return true;
+	}
+
+	public function getFuelTime() : int{
+		return 300;
 	}
 }

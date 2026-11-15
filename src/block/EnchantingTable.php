@@ -50,4 +50,8 @@ class EnchantingTable extends Transparent{
 
 		return true;
 	}
+
+	public function getLightLevel() : int{
+		return 7;
+	}
 }

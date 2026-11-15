@@ -42,6 +42,9 @@ class Cactus extends Transparent implements Ageable{
 	public const MAX_AGE = 15;
 	public const MAX_HEIGHT = 3;
 
+	/** Age at which a cactus with room above may grow a flower */
+	private const FLOWER_AGE = 8;
+
 	public function hasEntityCollision() : bool{
 		return true;
 	}
@@ -95,8 +98,13 @@ class Cactus extends Transparent implements Ageable{
 		while($height < self::MAX_HEIGHT && $this->getSide(Facing::DOWN, $height)->hasSameTypeId($this)){
 			$height++;
 		}
+		if($height >= self::MAX_HEIGHT && $this->age === self::MAX_AGE){
+			//a full-height column stops ageing (vanilla CactusBlock)
+			return;
+		}
 
-		if($this->age === 9){
+		if($this->age === self::FLOWER_AGE){
+			//flower chance once per growth cycle; the age keeps counting either way (vanilla CactusBlock)
 			$canGrowFlower = true;
 			foreach(Facing::HORIZONTAL as $side){
 				if($up->getSide($side)->isSolid()){
@@ -105,27 +113,23 @@ class Cactus extends Transparent implements Ageable{
 				}
 			}
 
-			if($canGrowFlower){
-				$chance = $height >= self::MAX_HEIGHT ? 25 : 10;
-				if(mt_rand(1, 100) <= $chance){
-					if(BlockEventHelper::grow($up, VanillaBlocks::CACTUS_FLOWER(), null)){
-						$this->age = 0;
-						$world->setBlock($this->position, $this, update: false);
-					}
-					return;
-				}
+			if($canGrowFlower && mt_rand(1, 100) <= ($height >= self::MAX_HEIGHT ? 25 : 10)){
+				BlockEventHelper::grow($up, VanillaBlocks::CACTUS_FLOWER(), null);
 			}
-		}
-
-		if($this->age === self::MAX_AGE){
+		}elseif($this->age === self::MAX_AGE && $height < self::MAX_HEIGHT){
+			BlockEventHelper::grow($up, VanillaBlocks::CACTUS(), null);
 			$this->age = 0;
-
-			if($height < self::MAX_HEIGHT){
-				BlockEventHelper::grow($up, VanillaBlocks::CACTUS(), null);
-			}
-		}else{
-			++$this->age;
+			$world->setBlock($this->position, $this, update: false);
+			return;
 		}
-		$world->setBlock($this->position, $this, update: false);
+
+		if($this->age < self::MAX_AGE){
+			++$this->age;
+			$world->setBlock($this->position, $this, update: false);
+		}
+	}
+
+	public function getCompostabilityChance() : int{
+		return 50;
 	}
 }

@@ -25,10 +25,11 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 
-class StopCommand extends NativeCommand{
+class StopCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -38,7 +39,11 @@ class StopCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_STOP);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::commands_stop_start());
 
 		$sender->getServer()->shutdown();

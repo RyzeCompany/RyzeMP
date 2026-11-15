@@ -24,8 +24,6 @@ declare(strict_types=1);
 namespace pocketmine\block\tile;
 
 use pocketmine\nbt\tag\CompoundTag;
-use pocketmine\network\mcpe\convert\TypeConverter;
-use function max;
 
 class EnderChest extends Spawnable{
 
@@ -36,7 +34,10 @@ class EnderChest extends Spawnable{
 	}
 
 	public function setViewerCount(int $viewerCount) : void{
-		$this->viewerCount = max($viewerCount, 0);
+		if($viewerCount < 0){
+			throw new \InvalidArgumentException('Viewer count cannot be negative');
+		}
+		$this->viewerCount = $viewerCount;
 	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
@@ -47,7 +48,7 @@ class EnderChest extends Spawnable{
 
 	}
 
-	protected function addAdditionalSpawnData(CompoundTag $nbt, TypeConverter $typeConverter) : void{
+	protected function addAdditionalSpawnData(CompoundTag $nbt) : void{
 
 	}
 }

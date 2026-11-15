@@ -41,6 +41,7 @@ use function json_decode;
 use function md5;
 use function pack;
 use function sort;
+use function sys_get_temp_dir;
 use const JSON_THROW_ON_ERROR;
 use const M_PI;
 
@@ -95,13 +96,14 @@ class CarverTest extends TestCase{
 		}
 		/** @phpstan-var array{seeds: array<string, list<array{cx: int, cz: int, maskSize: int, mask: string, blocks: string}>>} $json */
 		$json = json_decode(Filesystem::fileGetContents(__DIR__ . "/carver-fixtures.json"), true, 512, JSON_THROW_ON_ERROR);
+		$kernels = sys_get_temp_dir() . "/pmmp-vanilla-kernels";
 		foreach(Utils::stringifyKeys($json["seeds"]) as $seed => $chunks){
 			$seed = (int) $seed;
 			$router = new NoiseRouter($data, $seed);
 			$tree = ClimateBiomeTree::fromData($data);
-			$filler = new InterpretedTerrainFiller($router, $tree);
-			$materials = new MaterialSystem($data, $router, $tree, $seed);
-			$carvers = CarverSystem::create($data, $router, $tree, $seed, $materials, null);
+			$filler = new CompiledTerrainFiller($router, $tree, $kernels);
+			$materials = new MaterialSystem($data, $router, $tree, $seed, $kernels, $filler->getKernel());
+			$carvers = CarverSystem::create($data, $router, $tree, $seed, $materials, $filler->getKernel());
 			self::assertNotNull($carvers);
 			$names = $materials->palette->getNames();
 			foreach($chunks as $chunk){

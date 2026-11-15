@@ -1,0 +1,25 @@
+# RyzeMP integration mirror checks. Release publishing is intentionally disabled.
+# GitHub Actions is the authoritative PHPunit/PHAR workflow for this branch.
+stages:
+  - check
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+php-syntax:
+  stage: check
+  image: php:8.4-cli
+  script:
+    - php -v
+    - find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /tmp/ryzemp-php-lint.log
+
+composer-metadata:
+  stage: check
+  image: composer:2
+  script:
+    - composer validate --no-check-publish --no-interaction
+
+# No GitLab release jobs, no downloads from VanillaMine's update service,
+# and no automatic PHAR deployment. See .github/workflows/ryzemp-integration.yml.

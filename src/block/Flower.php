@@ -23,8 +23,15 @@ declare(strict_types=1);
 
 namespace pocketmine\block;
 
+use pocketmine\block\utils\BoneMealSpread;
 use pocketmine\block\utils\StaticSupportTrait;
+use pocketmine\item\Fertilizer;
+use pocketmine\item\Item;
 use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
+use pocketmine\player\Player;
+use pocketmine\utils\Random;
+use function mt_rand;
 
 class Flower extends Flowable{
 	use StaticSupportTrait;
@@ -34,11 +41,26 @@ class Flower extends Flowable{
 		return $supportBlock->hasTypeTag(BlockTypeTags::DIRT) || $supportBlock->hasTypeTag(BlockTypeTags::MUD);
 	}
 
+	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
+		//Bedrock only: bone meal makes copies of the flower grow on the grass around it (not torchflowers and golden
+		//dandelions, checked on BDS 1.26.52; wither roses are not Flowers)
+		if($item instanceof Fertilizer && !$this instanceof TorchFlower && $this->getTypeId() !== BlockTypeIds::GOLDEN_DANDELION){
+			$item->pop();
+			BoneMealSpread::spreadFlower($this->position->getWorld(), $this, new Random(mt_rand()));
+			return true;
+		}
+		return false;
+	}
+
 	public function getFlameEncouragement() : int{
 		return 60;
 	}
 
 	public function getFlammability() : int{
 		return 100;
+	}
+
+	public function getCompostabilityChance() : int{
+		return 65;
 	}
 }

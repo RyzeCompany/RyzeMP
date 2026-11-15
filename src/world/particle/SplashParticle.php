@@ -23,13 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class SplashParticle extends ProtocolParticle{
+class SplashParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::WATER_SPLASH, 0, $pos, $this->protocolId)];
+		return [LevelEventPacket::standardParticle(ParticleIds::WATER_SPLASH, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

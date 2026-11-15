@@ -26,6 +26,7 @@ namespace pocketmine\inventory;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
 use pocketmine\player\Player;
+use pocketmine\plugin\PluginFaultHandler;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\Utils;
 use function array_slice;
@@ -368,7 +369,12 @@ abstract class BaseInventory implements Inventory, SlotValidatedInventory{
 
 	protected function onSlotChange(int $index, Item $before) : void{
 		foreach($this->listeners as $listener){
-			$listener->onSlotChange($this, $index, $before);
+			try{
+				$listener->onSlotChange($this, $index, $before);
+			}catch(\Throwable $e){
+				//inventory listeners are mostly provided by plugins; rethrown if no plugin is to blame
+				PluginFaultHandler::isolate($e, null, "InventoryListener::onSlotChange()", $listener);
+			}
 		}
 		foreach($this->viewers as $viewer){
 			$invManager = $viewer->getNetworkSession()->getInvManager();
@@ -385,7 +391,11 @@ abstract class BaseInventory implements Inventory, SlotValidatedInventory{
 	 */
 	protected function onContentChange(array $itemsBefore) : void{
 		foreach($this->listeners as $listener){
-			$listener->onContentChange($this, $itemsBefore);
+			try{
+				$listener->onContentChange($this, $itemsBefore);
+			}catch(\Throwable $e){
+				PluginFaultHandler::isolate($e, null, "InventoryListener::onContentChange()", $listener);
+			}
 		}
 
 		foreach($this->getViewers() as $viewer){

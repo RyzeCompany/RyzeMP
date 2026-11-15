@@ -41,6 +41,7 @@ final class WorldCreationOptions{
 	private int $difficulty = World::DIFFICULTY_NORMAL;
 	private string $generatorOptions = "";
 	private Vector3 $spawnPosition;
+	private bool $bonusChest = false;
 
 	public function __construct(){
 		$this->seed = random_int(Limits::INT32_MIN, Limits::INT32_MAX);
@@ -93,6 +94,18 @@ final class WorldCreationOptions{
 	/** @return $this */
 	public function setSpawnPosition(Vector3 $spawnPosition) : self{
 		$this->spawnPosition = $spawnPosition;
+		return $this;
+	}
+
+	/**
+	 * Whether a chest with starting items (loot table chests/spawn_bonus_chest) is placed near the spawn of the new
+	 * world, like the "bonus chest" world option of Bedrock. Only overworlds get one.
+	 */
+	public function hasBonusChest() : bool{ return $this->bonusChest; }
+
+	/** @return $this */
+	public function setBonusChest(bool $bonusChest) : self{
+		$this->bonusChest = $bonusChest;
 		return $this;
 	}
 }

@@ -82,12 +82,32 @@ class BigDripleafHead extends BaseBigDripleaf{
 			$intersection = AxisAlignedBB::one()
 				->offset($this->position->x, $this->position->y, $this->position->z)
 				->trim(Facing::DOWN, 1 - $this->getLeafTopOffset());
-			if($entity->getBoundingBox()->intersectsWith($intersection)){
+			//a powered leaf never tilts (vanilla)
+			if($entity->getBoundingBox()->intersectsWith($intersection) && !$this->position->getWorld()->isBlockPowered($this->position)){
 				$this->setTiltAndScheduleTick(DripleafState::UNSTABLE);
 				return false;
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Puts a tilted leaf back up, like vanilla does as soon as it is powered.
+	 */
+	private function resetTilt() : void{
+		$world = $this->position->getWorld();
+		$world->setBlock($this->position, $this->setLeafState(DripleafState::STABLE));
+		$world->addSound($this->position, new DripleafTiltUpSound());
+	}
+
+	public function onNearbyBlockChange() : void{
+		parent::onNearbyBlockChange();
+		if($this->leafState !== DripleafState::STABLE){
+			$world = $this->position->getWorld();
+			if($world->getBlock($this->position)->isSameState($this) && $world->isBlockPowered($this->position)){
+				$this->resetTilt();
+			}
+		}
 	}
 
 	public function onProjectileHit(Projectile $projectile, RayTraceResult $hitResult) : void{
@@ -99,9 +119,8 @@ class BigDripleafHead extends BaseBigDripleaf{
 
 	public function onScheduledUpdate() : void{
 		if($this->leafState !== DripleafState::STABLE){
-			if($this->leafState === DripleafState::FULL_TILT){
-				$this->position->getWorld()->setBlock($this->position, $this->setLeafState(DripleafState::STABLE));
-				$this->position->getWorld()->addSound($this->position, new DripleafTiltUpSound());
+			if($this->leafState === DripleafState::FULL_TILT || $this->position->getWorld()->isBlockPowered($this->position)){
+				$this->resetTilt();
 			}else{
 				$this->setTiltAndScheduleTick(match($this->leafState){
 					DripleafState::UNSTABLE => DripleafState::PARTIAL_TILT,

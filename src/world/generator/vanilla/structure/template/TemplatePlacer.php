@@ -122,7 +122,7 @@ final class TemplatePlacer{
 			return false;
 		}
 		$paletteIndex = self::paletteIndex($template, $settings, $x, $y, $z);
-		if(($template->palettes[$paletteIndex] ?? "") === "" || $template->sizeX < 1 || $template->sizeY < 1 || $template->sizeZ < 1){
+		if((($template->palettes[$paletteIndex] ?? "") === "" && ($settings->ignoreEntities || count($template->entities) === 0)) || $template->sizeX < 1 || $template->sizeY < 1 || $template->sizeZ < 1){
 			return false;
 		}
 		$level = $c->level;
@@ -191,7 +191,32 @@ final class TemplatePlacer{
 		if(!$settings->knownShape && count($placed) > 0){
 			$c->shapeUpdates()->afterTemplatePlacement($level, $placed);
 		}
+		if(!$settings->ignoreEntities){
+			self::placeEntities($c, $template, $x, $y, $z, $settings);
+		}
 		return true;
+	}
+
+	/**
+	 * StructureTemplate.placeEntities()
+	 */
+	private static function placeEntities(StructurePlaceContext $c, TemplateData $template, int $x, int $y, int $z, PlaceSettings $settings) : void{
+		$box = $settings->box;
+		foreach($template->entities as [$ex, $ey, $ez, $bx, $by, $bz, $java]){
+			[$tbx, $tbz] = Rotations::transform($bx, $bz, $settings->mirror, $settings->rotation, $settings->pivotX, $settings->pivotZ);
+			$wbx = $tbx + $x;
+			$wby = $by + $y;
+			$wbz = $tbz + $z;
+			if($box !== null && !$box->isInside($wbx, $wby, $wbz)){
+				continue;
+			}
+			[$tx, $tz] = Rotations::transformExact($ex, $ez, $settings->mirror, $settings->rotation, $settings->pivotX, $settings->pivotZ);
+			[$yaw, $pitch] = EntityConversion::rotation($java);
+			$nbt = EntityConversion::pendingEntity($java, $tx + $x, $ey + $y, $tz + $z, Rotations::transformYaw($yaw, $settings->mirror, $settings->rotation), $pitch);
+			if($nbt !== null){
+				$c->level->addEntity($wbx, $wbz, $nbt);
+			}
+		}
 	}
 
 	/**

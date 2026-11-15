@@ -42,26 +42,40 @@ class Stair extends Transparent implements HorizontalFacing{
 	protected bool $upsideDown = false;
 	protected StairShape $shape = StairShape::STRAIGHT;
 
+	/**
+	 * Since 1.26.50 the stair shape is a real block state (minecraft:corner) which the client no longer computes from
+	 * the neighbours, so it's part of our state too and gets recomputed on block changes.
+	 */
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->horizontalFacing($this->facing);
 		$w->bool($this->upsideDown);
+		$w->enum($this->shape);
 	}
 
-	public function readStateFromWorld() : Block{
-		parent::readStateFromWorld();
-
-		$this->collisionBoxes = null;
-
+	/**
+	 * Recomputes the shape from the neighbouring stairs. Returns true if it changed.
+	 */
+	protected function recalculateShape() : bool{
 		$clockwise = Facing::rotateY($this->facing, true);
 		if(($backFacing = $this->getPossibleCornerFacing(false)) !== null){
-			$this->shape = $backFacing === $clockwise ? StairShape::OUTER_RIGHT : StairShape::OUTER_LEFT;
+			$shape = $backFacing === $clockwise ? StairShape::OUTER_RIGHT : StairShape::OUTER_LEFT;
 		}elseif(($frontFacing = $this->getPossibleCornerFacing(true)) !== null){
-			$this->shape = $frontFacing === $clockwise ? StairShape::INNER_RIGHT : StairShape::INNER_LEFT;
+			$shape = $frontFacing === $clockwise ? StairShape::INNER_RIGHT : StairShape::INNER_LEFT;
 		}else{
-			$this->shape = StairShape::STRAIGHT;
+			$shape = StairShape::STRAIGHT;
 		}
+		if($shape !== $this->shape){
+			$this->shape = $shape;
+			$this->collisionBoxes = null;
+			return true;
+		}
+		return false;
+	}
 
-		return $this;
+	public function onNearbyBlockChange() : void{
+		if($this->recalculateShape()){
+			$this->position->getWorld()->setBlock($this->position, $this);
+		}
 	}
 
 	public function isUpsideDown() : bool{ return $this->upsideDown; }
@@ -132,6 +146,7 @@ class Stair extends Transparent implements HorizontalFacing{
 			$this->facing = $player->getHorizontalFacing();
 		}
 		$this->upsideDown = (($clickVector->y > 0.5 && $face !== Facing::UP) || $face === Facing::DOWN);
+		$this->recalculateShape();
 
 		return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
 	}

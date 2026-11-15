@@ -26,6 +26,7 @@ namespace pocketmine\block;
 use pocketmine\block\utils\Ageable;
 use pocketmine\block\utils\AgeableTrait;
 use pocketmine\block\utils\BlockEventHelper;
+use pocketmine\block\utils\LiquidLayer;
 use pocketmine\block\utils\StaticSupportTrait;
 use pocketmine\item\Fertilizer;
 use pocketmine\item\Item;
@@ -42,6 +43,9 @@ class Sugarcane extends Flowable implements Ageable{
 	}
 
 	public const MAX_AGE = 15;
+
+	/** Natural growth stops once the column is this tall */
+	private const MAX_GROWTH_HEIGHT = 3;
 
 	private function seekToBottom() : Position{
 		$world = $this->position->getWorld();
@@ -100,20 +104,35 @@ class Sugarcane extends Flowable implements Ageable{
 	}
 
 	public function onRandomTick() : void{
+		$world = $this->position->getWorld();
 		$down = $this->getSide(Facing::DOWN);
-		if(!$down->hasSameTypeId($this)){
-			if(!$this->hasNearbyWater($down)){
-				$this->position->getWorld()->useBreakOn($this->position, createParticles: true);
-				return;
-			}
-
-			if($this->age === self::MAX_AGE){
-				$this->grow($this->position);
-			}else{
-				++$this->age;
-				$this->position->getWorld()->setBlock($this->position, $this);
-			}
+		if(!$down->hasSameTypeId($this) && !$this->hasNearbyWater($down)){
+			$world->useBreakOn($this->position, createParticles: true);
+			return;
 		}
+
+		//only the top cane of a column shorter than 3 grows: it ages 0-15 and adds ONE cane above at 15 (vanilla)
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		if(!$world->isInWorld($x, $y + 1, $z) || $world->getBlockAt($x, $y + 1, $z)->getTypeId() !== BlockTypeIds::AIR){
+			return;
+		}
+		$height = 1;
+		while($height < self::MAX_GROWTH_HEIGHT && $world->getBlockAt($x, $y - $height, $z)->hasSameTypeId($this)){
+			++$height;
+		}
+		if($height >= self::MAX_GROWTH_HEIGHT){
+			return;
+		}
+
+		if($this->age === self::MAX_AGE){
+			BlockEventHelper::grow($world->getBlockAt($x, $y + 1, $z), VanillaBlocks::SUGARCANE(), null);
+			$this->age = 0;
+		}else{
+			++$this->age;
+		}
+		$world->setBlock($this->position, $this, update: false);
 	}
 
 	public function place(BlockTransaction $tx, Item $item, Block $blockReplace, Block $blockClicked, int $face, Vector3 $clickVector, ?Player $player = null) : bool{
@@ -123,20 +142,19 @@ class Sugarcane extends Flowable implements Ageable{
 		}
 
 		//support criteria are checked by FixedSupportTrait, but this part applies to placement only
-		foreach(Facing::HORIZONTAL as $side){
-			$sideBlock = $down->getSide($side);
-			if($sideBlock instanceof Water || $sideBlock instanceof FrostedIce){
-				return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
-			}
+		if($this->hasNearbyWater($down)){
+			return parent::place($tx, $item, $blockReplace, $blockClicked, $face, $clickVector, $player);
 		}
 
 		return false;
 	}
 
+	/**
+	 * Water (including waterlogged blocks) or frosted ice next to the block the sugar cane stands on.
+	 */
 	private function hasNearbyWater(Block $down) : bool{
 		foreach($down->getHorizontalSides() as $sideBlock){
-			$blockId = $sideBlock->getTypeId();
-			if($blockId === BlockTypeIds::WATER || $blockId === BlockTypeIds::FROSTED_ICE){
+			if($sideBlock->getTypeId() === BlockTypeIds::FROSTED_ICE || LiquidLayer::isWater($sideBlock)){
 				return true;
 			}
 		}
@@ -150,5 +168,9 @@ class Sugarcane extends Flowable implements Ageable{
 		}else{
 			$this->onSupportBlockChange();
 		}
+	}
+
+	public function getCompostabilityChance() : int{
+		return 50;
 	}
 }

@@ -26,25 +26,31 @@ namespace pocketmine\network\mcpe;
 use pmmp\encoding\ByteBufferReader;
 use pmmp\encoding\ByteBufferWriter;
 use pmmp\encoding\DataDecodeException;
+use pocketmine\data\SavedDataLoadingException;
 use pocketmine\entity\effect\EffectInstance;
+use pocketmine\entity\EntityDataHelper;
 use pocketmine\event\player\PlayerDuplicateLoginEvent;
 use pocketmine\event\player\PlayerResourcePackOfferEvent;
-use pocketmine\event\player\SessionDisconnectEvent;
 use pocketmine\event\server\DataPacketDecodeEvent;
 use pocketmine\event\server\DataPacketReceiveEvent;
 use pocketmine\event\server\DataPacketSendEvent;
 use pocketmine\form\Form;
 use pocketmine\item\Item;
 use pocketmine\lang\KnownTranslationFactory;
+use pocketmine\lang\Language;
 use pocketmine\lang\Translatable;
 use pocketmine\math\Vector3;
+use pocketmine\nbt\NbtException;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\FilterNoisyPacketException;
 use pocketmine\network\mcpe\cache\ChunkCache;
+use pocketmine\network\mcpe\cache\ChunkRequestWorkers;
 use pocketmine\network\mcpe\compression\CompressBatchPromise;
 use pocketmine\network\mcpe\compression\Compressor;
 use pocketmine\network\mcpe\compression\DecompressionException;
+use pocketmine\network\mcpe\compression\ZlibCompressor;
+use pocketmine\network\mcpe\convert\CommandOverloadMapper;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\encryption\DecryptionException;
 use pocketmine\network\mcpe\encryption\EncryptionContext;
@@ -60,38 +66,36 @@ use pocketmine\network\mcpe\handler\PreSpawnPacketHandler;
 use pocketmine\network\mcpe\handler\ResourcePacksPacketHandler;
 use pocketmine\network\mcpe\handler\SessionStartPacketHandler;
 use pocketmine\network\mcpe\handler\SpawnResponsePacketHandler;
-use pocketmine\network\mcpe\protocol\AvailableCommandsPacket;
-use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
-use pocketmine\event\player\PlayerDimensionChangeEvent;
-use pocketmine\network\mcpe\protocol\types\hud\LoadingScreenType;
+use pocketmine\network\mcpe\protocol\ActorEventPacket;
 use pocketmine\network\mcpe\protocol\ChangeDimensionPacket;
-use pocketmine\network\mcpe\protocol\LevelEventPacket;
+use pocketmine\network\mcpe\protocol\ChunkRadiusUpdatedPacket;
 use pocketmine\network\mcpe\protocol\ClientboundCloseFormPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\DataPacket;
-use pocketmine\network\mcpe\protocol\PacketViolationWarningPacket;
 use pocketmine\network\mcpe\protocol\DisconnectPacket;
+use pocketmine\network\mcpe\protocol\GameRulesChangedPacket;
+use pocketmine\network\mcpe\protocol\LevelChunkPacket;
+use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\ModalFormRequestPacket;
+use pocketmine\network\mcpe\protocol\MovementEffectPacket;
 use pocketmine\network\mcpe\protocol\MovePlayerPacket;
 use pocketmine\network\mcpe\protocol\NetworkChunkPublisherUpdatePacket;
 use pocketmine\network\mcpe\protocol\OpenSignPacket;
 use pocketmine\network\mcpe\protocol\Packet;
 use pocketmine\network\mcpe\protocol\PacketDecodeException;
 use pocketmine\network\mcpe\protocol\PacketPool;
-use pocketmine\network\mcpe\protocol\PlayerListPacket;
 use pocketmine\network\mcpe\protocol\PlayerActionPacket;
+use pocketmine\network\mcpe\protocol\PlayerListPacket;
 use pocketmine\network\mcpe\protocol\PlayerStartItemCooldownPacket;
 use pocketmine\network\mcpe\protocol\PlayStatusPacket;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketAssembler;
-use pocketmine\network\mcpe\protocol\serializer\AvailableCommandsPacketDisassembler;
 use pocketmine\network\mcpe\protocol\serializer\PacketBatch;
 use pocketmine\network\mcpe\protocol\ServerboundPacket;
 use pocketmine\network\mcpe\protocol\ServerToClientHandshakePacket;
 use pocketmine\network\mcpe\protocol\SetDifficultyPacket;
 use pocketmine\network\mcpe\protocol\SetPlayerGameTypePacket;
 use pocketmine\network\mcpe\protocol\SetSpawnPositionPacket;
-use pocketmine\network\mcpe\protocol\SpawnParticleEffectPacket;
 use pocketmine\network\mcpe\protocol\SetTimePacket;
 use pocketmine\network\mcpe\protocol\SetTitlePacket;
 use pocketmine\network\mcpe\protocol\TextPacket;
@@ -99,20 +103,30 @@ use pocketmine\network\mcpe\protocol\ToastRequestPacket;
 use pocketmine\network\mcpe\protocol\TransferPacket;
 use pocketmine\network\mcpe\protocol\types\AbilitiesData;
 use pocketmine\network\mcpe\protocol\types\AbilitiesLayer;
+use pocketmine\network\mcpe\protocol\types\ActorEvent;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
+use pocketmine\network\mcpe\protocol\types\BoolGameRule;
+use pocketmine\network\mcpe\protocol\types\ChunkPosition;
 use pocketmine\network\mcpe\protocol\types\command\CommandData;
 use pocketmine\network\mcpe\protocol\types\command\CommandHardEnum;
-use pocketmine\network\mcpe\protocol\types\command\CommandOverload;
-use pocketmine\network\mcpe\protocol\types\command\CommandParameter;
 use pocketmine\network\mcpe\protocol\types\command\CommandPermissions;
 use pocketmine\network\mcpe\protocol\types\CompressionAlgorithm;
 use pocketmine\network\mcpe\protocol\types\DimensionIds;
+use pocketmine\network\mcpe\protocol\types\DisconnectFailReason;
+use pocketmine\network\mcpe\protocol\types\GameRule as ProtocolGameRule;
+use pocketmine\network\mcpe\protocol\types\IntGameRule;
 use pocketmine\network\mcpe\protocol\types\LevelEvent;
+use pocketmine\network\mcpe\protocol\types\MovementEffectType;
+use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\types\PlayerListEntry;
 use pocketmine\network\mcpe\protocol\types\PlayerPermissions;
-use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\UpdateAbilitiesPacket;
 use pocketmine\network\mcpe\protocol\UpdateAdventureSettingsPacket;
+use pocketmine\network\mcpe\protocol\UpdatePlayerGameTypePacket;
+use pocketmine\network\mcpe\proxy\ProxyPacketSender;
+use pocketmine\network\mcpe\proxy\ProxyTicket;
+use pocketmine\network\mcpe\proxy\ProxyTransferStyle;
+use pocketmine\network\mcpe\serializer\ChunkSerializer;
 use pocketmine\network\NetworkSessionManager;
 use pocketmine\network\PacketHandlingException;
 use pocketmine\permission\DefaultPermissionNames;
@@ -124,31 +138,49 @@ use pocketmine\player\UsedChunkStatus;
 use pocketmine\player\XboxLivePlayerInfo;
 use pocketmine\promise\Promise;
 use pocketmine\promise\PromiseResolver;
+use pocketmine\scheduler\AsyncPool;
 use pocketmine\Server;
 use pocketmine\timings\Timings;
 use pocketmine\utils\AssumptionFailedError;
+use pocketmine\utils\Binary;
 use pocketmine\utils\ObjectSet;
 use pocketmine\utils\TextFormat;
-use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\dimension\Dimension;
 use pocketmine\world\format\Chunk;
+use pocketmine\world\format\io\GlobalItemDataHandlers;
+use pocketmine\world\GameRules;
 use pocketmine\world\Position;
 use pocketmine\world\World;
 use pocketmine\YmlServerProperties;
 use function array_map;
 use function array_slice;
+use function array_unshift;
 use function array_values;
+use function base64_decode;
 use function base64_encode;
 use function bin2hex;
+use function chunk_split;
+use function class_exists;
 use function count;
 use function get_class;
+use function hash;
 use function implode;
 use function in_array;
+use function is_array;
+use function is_bool;
+use function is_int;
 use function is_string;
 use function json_encode;
-use function microtime;
+use function max;
+use function method_exists;
+use function min;
+use function openssl_pkey_get_details;
+use function openssl_pkey_get_public;
 use function ord;
 use function random_bytes;
+use function str_ends_with;
 use function str_split;
+use function str_starts_with;
 use function strcasecmp;
 use function strlen;
 use function strtolower;
@@ -156,8 +188,15 @@ use function substr;
 use function time;
 use function ucfirst;
 use const JSON_THROW_ON_ERROR;
+use const M_PI;
 
 class NetworkSession{
+	/**
+	 * Most parameters a client accepts in a translated TextPacket (1.26.x clients disconnect with "Too many input
+	 * elements, expected no more than 4" otherwise). Messages with more are translated by the server.
+	 */
+	private const MAX_CLIENT_TRANSLATION_PARAMETERS = 4;
+
 	private const INCOMING_PACKET_BATCH_PER_TICK = 2; //usually max 1 per tick, but transactions arrive separately
 	private const INCOMING_PACKET_BATCH_BUFFER_TICKS = 100; //enough to account for a 5-second lag spike
 
@@ -166,22 +205,22 @@ class NetworkSession{
 
 	private const INCOMING_PACKET_BATCH_HARD_LIMIT = 300;
 
+	/** Radius of empty chunks sent around the player in the detour dimension of a same-dimension world switch. */
+	private const DETOUR_CHUNK_RADIUS = 3;
+
+	/**
+	 * Payload of an empty chunk per dimension network ID, for the detour of same-dimension world switches.
+	 * @var string[]
+	 * @phpstan-var array<int, string>
+	 */
+	private static array $emptyChunkPayloads = [];
+
 	private PacketRateLimiter $packetBatchLimiter;
 	private PacketRateLimiter $gamePacketLimiter;
 
 	private \PrefixedLogger $logger;
-	/** Temporary: trace the first command synchronization only, per session. */
-	private bool $crateCommandTraceCompleted = false;
 	private ?Player $player = null;
-	/** @phpstan-var DimensionIds::* */
-	private int $clientDimension = DimensionIds::OVERWORLD;
-	private bool $pendingDimensionChangeAck = false;
-	/** @var array{world: World, chunks: array<int, true>, centerX: int, centerZ: int, startedAt: float}|null */
-	private ?array $dimensionChangeTerrain = null;
-	private ?DimensionTransition $dimensionTransition = null;
-	private int $dimensionTransitionSequence = 0;
-	private ?string $clientWorldName = null;
-	protected ?PlayerInfo $info = null;
+	private ?PlayerInfo $info = null;
 	private ?int $ping = null;
 
 	private ?PacketHandler $handler = null;
@@ -192,16 +231,38 @@ class NetworkSession{
 	private ?array $handlerActions = null;
 
 	private bool $connected = true;
+	/** connected sessions with a non-standard broadcaster or compressor, see hasOnlyStandardSessions() */
+	private static int $nonStandardSessions = 0;
+	private ?int $protocolId = null;
+	private ?string $gameVersion = null;
+	private bool $standardSession;
+
+	/** the send buffers of every session, in C++ (chunkutils2 >= 0.3.9), null = PHP arrays */
+	private static ?NativeSendBuffers $nativeSendBuffers = null;
+	private static bool $nativeSendBuffersChecked = false;
+	private static int $nextSendId = 1;
+	/** whether the native send buffers have openNew() (chunkutils2 >= 0.3.10); null = not checked yet */
+	private static ?bool $nativeOpenNew = null;
+	/**
+	 * id of this session's native send buffer; never reused by its NativeSendBuffers instance ($sendBuffers), so stale
+	 * viewer lists cannot reach another session
+	 */
+	private int $sendId;
+	/**
+	 * the native send buffers which gave $sendId and hold this session's packets (those of getNativeSendBuffers() when
+	 * the session was made), null = the PHP array $sendBuffer. Always the same instance outside tests; when a test swaps
+	 * it (setNativeSendBuffersEnabled()), the session keeps its own: ids are unique only within one instance (openNew()
+	 * gives the same ids in a new one), so the new instance may have another session under this id.
+	 */
+	private ?NativeSendBuffers $sendBuffers = null;
 	private bool $disconnectGuard = false;
-	protected bool $loggedIn = false;
+	private bool $loggedIn = false;
 	private bool $authenticated = false;
 	private int $connectTime;
 	private ?CompoundTag $cachedOfflinePlayerData = null;
+	private ?SpawnTerrainPrefetch $spawnTerrainPrefetch = null;
 
 	private ?EncryptionContext $cipher = null;
-	/** Verified identity public key from NetherNet signaling. Null on RakNet. */
-	private ?string $netherNetIdentityPublicKey = null;
-	private ?string $netherNetIdentityXuid = null;
 
 	/**
 	 * @var string[]
@@ -214,12 +275,14 @@ class NetworkSession{
 	 */
 	private array $sendBufferAckPromises = [];
 
-	/** @phpstan-var \SplQueue<array{CompressBatchPromise|string, list<PromiseResolver<true>>, bool}> */
+	/**
+	 * Batches waiting to be sent, in order, and actions that must run once every batch queued before them was sent
+	 * (enabling encryption).
+	 * @phpstan-var \SplQueue<array{CompressBatchPromise|string|\Closure() : void, list<PromiseResolver<true>>, bool}>
+	 */
 	private \SplQueue $compressedQueue;
 	private bool $forceAsyncCompression = true;
-	private ?int $protocolId = null;
-	private ?string $gameVersion = null;
-	protected bool $enableCompression = false; //disabled until handshake completed
+	private bool $enableCompression = false; //disabled until handshake completed
 
 	private int $nextAckReceiptId = 0;
 	/**
@@ -230,6 +293,12 @@ class NetworkSession{
 
 	private ?InventoryManager $invManager = null;
 
+	/** Dimension the client currently renders, dimension changes in progress and pending world switches. */
+	private ClientDimensionTracker $dimensionTracker;
+	private int $dimensionChangeStartTick = 0;
+	/** Server tick at which the server-side dimension change ack must be sent at the latest, or null if none pending. */
+	private ?int $dimensionChangeAckDeadline = null;
+
 	/**
 	 * @var \Closure[]|ObjectSet
 	 * @phpstan-var ObjectSet<\Closure() : void>
@@ -239,11 +308,14 @@ class NetworkSession{
 	private string $noisyPacketBuffer = "";
 	private int $noisyPacketsDropped = 0;
 
+	/** Most recent PlayerAuthInput tick processed, echoed back in client-predicted packets such as MovementEffect. */
+	private int $lastPlayerInputTick = 0;
+
 	public function __construct(
 		private Server $server,
 		private NetworkSessionManager $manager,
 		private PacketPool $packetPool,
-		protected PacketSender $sender,
+		private PacketSender $sender,
 		private PacketBroadcaster $broadcaster,
 		private EntityEventBroadcaster $entityEventBroadcaster,
 		private Compressor $compressor,
@@ -253,9 +325,26 @@ class NetworkSession{
 	){
 		$this->logger = new \PrefixedLogger($this->server->getLogger(), $this->getLogPrefix());
 
+		$this->standardSession = $this->isStandardSession();
+		if(!$this->standardSession){
+			self::$nonStandardSessions++;
+		}
+		$native = $this->sendBuffers = self::getNativeSendBuffers();
+		//chunkutils2 >= 0.3.10 picks the id itself: a slot of a dense table plus a generation, never valid twice, found
+		//by an array index instead of a hash lookup on every append (every broadcast appends to many sessions)
+		/** @phpstan-ignore function.alreadyNarrowedType (older chunkutils2 versions lack it; the PHPStan stub always has it) */
+		if($native !== null && (self::$nativeOpenNew ??= method_exists($native, "openNew"))){
+			$this->sendId = $native->openNew();
+		}else{
+			$this->sendId = self::$nextSendId++;
+			$native?->open($this->sendId);
+		}
+
 		$this->compressedQueue = new \SplQueue();
 
 		$this->disposeHooks = new ObjectSet();
+
+		$this->dimensionTracker = new ClientDimensionTracker($this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::PLAYER_CLEAR_TERRAIN_ON_WORLD_CHANGE, true));
 
 		$this->connectTime = time();
 		$this->packetBatchLimiter = new PacketRateLimiter("Packet Batches", self::INCOMING_PACKET_BATCH_PER_TICK, self::INCOMING_PACKET_BATCH_BUFFER_TICKS);
@@ -272,19 +361,6 @@ class NetworkSession{
 
 	private function getLogPrefix() : string{
 		return "NetworkSession: " . $this->getDisplayName();
-	}
-
-	/**
-	 * Only the authenticated WebRTC adapter may call this, before Bedrock login.
-	 * NetherNet is already DTLS encrypted: the extra RakNet AES handshake is
-	 * not performed, but the Bedrock login public key MUST match signaling.
-	 */
-	public function useNetherNetTransport(string $identityPublicKeyDer, ?string $verifiedXuid = null) : void{
-		if($this->netherNetIdentityPublicKey !== null || strlen($identityPublicKeyDer) < 64 || strlen($identityPublicKeyDer) > 4096 || $this->protocolId !== null){
-			throw new \InvalidArgumentException("Invalid NetherNet transport identity initialization");
-		}
-		$this->netherNetIdentityPublicKey = $identityPublicKeyDer;
-		$this->netherNetIdentityXuid = $verifiedXuid;
 	}
 
 	public function getLogger() : \Logger{
@@ -354,6 +430,8 @@ class NetworkSession{
 		$this->disposeHooks->add(static function() use ($permissionHooks, $permHook) : void{
 			$permissionHooks->remove($permHook);
 		});
+		//a new player's spawn spot is known now (and a plugin may have chosen another place)
+		$this->prefetchSpawnTerrain($player->getPosition());
 		$this->beginSpawnSequence();
 	}
 
@@ -369,12 +447,107 @@ class NetworkSession{
 		return $this->connected && !$this->disconnectGuard;
 	}
 
+	/**
+	 * Returns whether every connected session uses the standard packet broadcaster and the server's compressor. Then a
+	 * broadcast does not need to look at each recipient's broadcaster and compressor (two calls per recipient of every
+	 * broadcast: thousands per tick with many players close together).
+	 *
+	 * @internal
+	 */
+	public static function hasOnlyStandardSessions() : bool{
+		return self::$nonStandardSessions === 0;
+	}
+
+	public function getProtocolId() : int{
+		return $this->protocolId ?? ProtocolInfo::CURRENT_PROTOCOL;
+	}
+
+	/** Called once after RequestNetworkSettings, before login or compressed packets. */
+	public function setProtocolId(int $protocolId) : void{
+		if($this->protocolId !== null){
+			throw new \LogicException("Protocol was already negotiated");
+		}
+		$this->typeConverter = TypeConverter::getInstance($protocolId);
+		$this->protocolId = $protocolId;
+		if($protocolId !== ProtocolInfo::CURRENT_PROTOCOL && $this->standardSession){
+			//Native broadcast buffers assume identical encodings for every session.
+			$this->standardSession = false;
+			self::$nonStandardSessions++;
+		}
+		if($this->entityEventBroadcaster instanceof StandardEntityEventBroadcaster){
+			$this->entityEventBroadcaster = new StandardEntityEventBroadcaster($this->broadcaster, $this->typeConverter);
+		}
+	}
+
+	public function setGameVersion(string $gameVersion) : void{
+		$this->gameVersion = $gameVersion;
+		if($gameVersion !== ProtocolInfo::MINECRAFT_VERSION_NETWORK && $this->standardSession){
+			$this->standardSession = false;
+			self::$nonStandardSessions++;
+		}
+	}
+
+	public function getGameVersion() : ?string{
+		return $this->gameVersion;
+	}
+
+	private function isStandardSession() : bool{
+		return $this->broadcaster instanceof StandardPacketBroadcaster && $this->compressor === ZlibCompressor::getInstance();
+	}
+
+	/**
+	 * The native send buffers of the sessions (chunkutils2 >= 0.3.9), or null when the extension doesn't provide them.
+	 * A packet for many sessions is appended to all of them in one call, see {@link NetworkBroadcastUtils}.
+	 *
+	 * @internal
+	 */
+	public static function getNativeSendBuffers() : ?NativeSendBuffers{
+		if(!self::$nativeSendBuffersChecked){
+			self::$nativeSendBuffersChecked = true;
+			if(class_exists(NativeSendBuffers::class)){
+				self::$nativeSendBuffers = new NativeSendBuffers();
+			}
+		}
+		return self::$nativeSendBuffers;
+	}
+
+	/**
+	 * @internal for tests whose fake sessions bypass the constructor: disables (or enables again, with a new instance)
+	 * the native send buffers. Sessions made before keep the native send buffers which gave their send id for their own
+	 * packets (direct sends, flushes, closing), but their send ids mean nothing to the new instance (it may give the same
+	 * ids to other sessions): broadcasts with their ids (Entity::$viewerSendIds of their players, getSendId()) must not
+	 * reach the new instance, so such sessions must not receive broadcasts after the call.
+	 */
+	public static function setNativeSendBuffersEnabled(bool $enabled) : void{
+		self::$nativeSendBuffersChecked = true;
+		self::$nativeSendBuffers = $enabled && class_exists(NativeSendBuffers::class) ? new NativeSendBuffers() : null;
+	}
+
+	/**
+	 * Id of this session's native send buffer (see getNativeSendBuffers()); valid for the session's lifetime and never
+	 * given to another session by the same NativeSendBuffers instance (there is only one outside tests, see
+	 * setNativeSendBuffersEnabled()).
+	 *
+	 * @internal
+	 */
+	public function getSendId() : int{
+		return $this->sendId;
+	}
+
 	public function getIp() : string{
 		return $this->ip;
 	}
 
 	public function getPort() : int{
 		return $this->port;
+	}
+
+	/**
+	 * @internal
+	 * The identity ticket of a session that came through pm-proxy (network.proxy), or null.
+	 */
+	public function getProxyTicket() : ?ProxyTicket{
+		return $this->sender instanceof ProxyPacketSender ? $this->sender->getTicket() : null;
 	}
 
 	public function getDisplayName() : string{
@@ -384,6 +557,22 @@ class NetworkSession{
 	/**
 	 * Returns the last recorded ping measurement for this session, in milliseconds, or null if a ping measurement has not yet been recorded.
 	 */
+	/**
+	 * Returns the name of the transport carrying this session ("raknet", "nethernet"...), or "unknown" if the
+	 * packet sender does not say.
+	 */
+	public function getTransportName() : string{
+		return $this->sender instanceof TransportAwarePacketSender ? $this->sender->getTransportName() : "unknown";
+	}
+
+	/**
+	 * Whether the transport already encrypts the traffic, in which case the Minecraft-level encryption handshake is
+	 * skipped (NetherNet uses DTLS and vanilla clients do not perform the handshake on it).
+	 */
+	public function isTransportEncrypted() : bool{
+		return $this->sender instanceof TransportAwarePacketSender && $this->sender->isTransportEncrypted();
+	}
+
 	public function getPing() : ?int{
 		return $this->ping;
 	}
@@ -425,34 +614,6 @@ class NetworkSession{
 		return false;
 	}
 
-	public function setProtocolId(int $protocolId) : void{
-		$this->protocolId = $protocolId;
-
-		$this->typeConverter = TypeConverter::getInstance($protocolId);
-		$this->broadcaster = $this->server->getPacketBroadcaster($protocolId);
-		$this->entityEventBroadcaster = $this->server->getEntityEventBroadcaster($this->broadcaster, $this->typeConverter);
-	}
-
-	public function getProtocolId() : int{
-		return $this->protocolId ?? ProtocolInfo::CURRENT_PROTOCOL;
-	}
-
-	public function setGameVersion(string $gameVersion) : void{
-		$this->gameVersion = $gameVersion;
-	}
-
-	public function getGameVersion() : ?string{
-		return $this->gameVersion;
-	}
-
-	/**
-	 * @return \Closure[]|ObjectSet
-	 * @phpstan-return ObjectSet<\Closure() : void>
-	 */
-	public function getDisposeHooks() : ObjectSet{
-		return $this->disposeHooks;
-	}
-
 	/**
 	 * @throws PacketHandlingException
 	 */
@@ -482,34 +643,22 @@ class NetworkSession{
 			}
 
 			if($this->enableCompression){
-				if($this->protocolId >= ProtocolInfo::PROTOCOL_1_20_60){
-					$compressionType = ord($payload[0]);
-					$compressed = substr($payload, 1);
-					if($compressionType === CompressionAlgorithm::NONE){
-						$decompressed = $compressed;
-					}elseif($compressionType === $this->compressor->getNetworkId()){
-						try{
-							Timings::$playerNetworkReceiveDecompress->startTiming();
-							$decompressed = $this->compressor->decompress($compressed);
-						}catch(DecompressionException $e){
-							$this->logger->debug("Failed to decompress packet: " . base64_encode($compressed));
-							throw PacketHandlingException::wrap($e, "Compressed packet batch decode error");
-						}finally{
-							Timings::$playerNetworkReceiveDecompress->stopTiming();
-						}
-					}else{
-						throw new PacketHandlingException("Packet compressed with unexpected compression type $compressionType");
-					}
-				}else{
+				$compressionType = ord($payload[0]);
+				$compressed = substr($payload, 1);
+				if($compressionType === CompressionAlgorithm::NONE){
+					$decompressed = $compressed;
+				}elseif($compressionType === $this->compressor->getNetworkId()){
+					Timings::$playerNetworkReceiveDecompress->startTiming();
 					try{
-						Timings::$playerNetworkReceiveDecompress->startTiming();
-						$decompressed = $this->compressor->decompress($payload);
+						$decompressed = $this->compressor->decompress($compressed);
 					}catch(DecompressionException $e){
-						$this->logger->debug("Failed to decompress packet: " . base64_encode($payload));
+						$this->logger->debug("Failed to decompress packet: " . base64_encode($compressed));
 						throw PacketHandlingException::wrap($e, "Compressed packet batch decode error");
 					}finally{
 						Timings::$playerNetworkReceiveDecompress->stopTiming();
 					}
+				}else{
+					throw new PacketHandlingException("Packet compressed with unexpected compression type $compressionType");
 				}
 			}else{
 				$decompressed = $payload;
@@ -554,6 +703,13 @@ class NetworkSession{
 				$this->logger->logException($e);
 				throw PacketHandlingException::wrap($e, "Packet batch decode error");
 			}
+
+			//send the replies to this batch now instead of at the end of the server tick: otherwise every response
+			//(item stack responses, block corrections, chat...) waits up to 50ms (25ms on average) before leaving,
+			//on top of the network latency. Only in-game, so the login sequence keeps its exact flush points.
+			if($this->player !== null && $this->isConnected()){
+				$this->flushGamePacketQueue();
+			}
 		}finally{
 			Timings::$playerNetworkReceive->stopTiming();
 		}
@@ -574,26 +730,6 @@ class NetworkSession{
 	public function handleDataPacket(Packet $packet, string $buffer) : void{
 		if(!($packet instanceof ServerboundPacket)){
 			throw new PacketHandlingException("Unexpected non-serverbound packet");
-		}
-
-		//TEMP DEBUG: the Bedrock client sends this packet right before it disconnects because something we
-		//sent was malformed/unexpected. Decode and log it unconditionally (regardless of the current handler's
-		//allowed-packet list) so we don't lose it to a silent "Discarded without decoding".
-		if($packet instanceof PacketViolationWarningPacket){
-			try{
-				$debugStream = new ByteBufferReader($buffer);
-				$packet->decode($debugStream, $this->getProtocolId(), $this->gameVersion);
-				$this->logger->warning(sprintf(
-					"[PacketViolationWarning] type=%d severity=%d packetId=%d (0x%s) message=%s",
-					$packet->getType(),
-					$packet->getSeverity(),
-					$packet->getPacketId(),
-					dechex($packet->getPacketId()),
-					$packet->getMessage()
-				));
-			}catch(\Throwable $e){
-				$this->logger->warning("[PacketViolationWarning] raw=" . base64_encode($buffer) . " (decode failed: " . $e->getMessage() . ")");
-			}
 		}
 
 		$timings = Timings::getReceiveDataPacketTimings($packet);
@@ -685,9 +821,10 @@ class NetworkSession{
 	}
 
 	/**
+	 * @param string|null $encoded the packet already encoded (see {@link NetworkSession::sendEncodedDataPacket()})
 	 * @phpstan-param PromiseResolver<true>|null $ackReceiptResolver
 	 */
-	private function sendDataPacketInternal(ClientboundPacket $packet, bool $immediate, ?PromiseResolver $ackReceiptResolver) : bool{
+	private function sendDataPacketInternal(ClientboundPacket $packet, bool $immediate, ?PromiseResolver $ackReceiptResolver, ?string $encoded = null) : bool{
 		if(!$this->connected){
 			return false;
 		}
@@ -708,6 +845,17 @@ class NetworkSession{
 				$packets = $ev->getPackets();
 			}else{
 				$packets = [$packet];
+				if($encoded !== null){
+					//nothing could see or change the packet: its known encoding is what encoding it would give
+					if($ackReceiptResolver !== null){
+						$this->sendBufferAckPromises[] = $ackReceiptResolver;
+					}
+					$this->addToSendBuffer($encoded);
+					if($immediate){
+						$this->flushGamePacketQueue();
+					}
+					return true;
+				}
 			}
 
 			if($ackReceiptResolver !== null){
@@ -715,29 +863,8 @@ class NetworkSession{
 			}
 			$writer = new ByteBufferWriter();
 			foreach($packets as $evPacket){
-				if($evPacket instanceof SpawnParticleEffectPacket && $this->player !== null && $this->player->getPosition()->isValid()){
-					$evPacket->dimensionId = $this->server->getDimensionManager()->getDimension($this->player->getWorld());
-				}
 				$writer->clear(); //memory reuse let's gooooo
-				$encoded = self::encodePacketTimed($writer, $this->getProtocolId(), $evPacket, $this->gameVersion);
-				// Read only the first outgoing AvailableCommandsPacket of this session.
-				// DataPacketSendEvent has already run, so these are the final bytes.
-				if($evPacket instanceof AvailableCommandsPacket && !$this->crateCommandTraceCompleted){
-					$this->crateCommandTraceCompleted = true; // Avoid duplicate logs on later refreshes.
-					try{
-						$decoded = new AvailableCommandsPacket();
-						$decoded->decode(new ByteBufferReader($encoded), $this->getProtocolId(), $this->gameVersion);
-						$wireCommands = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
-						$this->logger->info("[CrateCommandTrace] stage=wire protocol=" . $this->getProtocolId() . " commands=" . count($wireCommands));
-						foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads($wireCommands) as $line){
-							$this->logger->info("[CrateCommandTrace] stage=wire " . $line);
-						}
-					}catch(\Throwable $e){
-						// Diagnostics must never interrupt a valid connection.
-						$this->logger->warning("[CrateCommandTrace] stage=wire_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
-					}
-				}
-				$this->addToSendBuffer($encoded);
+				$this->addToSendBuffer(self::encodePacketTimed($writer, $evPacket, $this->getProtocolId(), $this->gameVersion));
 			}
 			if($immediate){
 				$this->flushGamePacketQueue();
@@ -754,19 +881,23 @@ class NetworkSession{
 	}
 
 	/**
-	 * @phpstan-return Promise<true>
+	 * Same as {@link NetworkSession::sendDataPacket()} for a packet whose encoding is already known (a cached packet
+	 * sent to every player, e.g. CraftingDataPacket): $encoded must be what {@link NetworkSession::encodePacketTimed()}
+	 * gives for $packet. It is only used when no DataPacketSendEvent handler is registered; otherwise the handlers get
+	 * $packet as usual and whatever they leave is encoded.
+	 *
+	 * @internal
 	 */
-	public function supportsTransportReceipts() : bool{
-		return $this->netherNetIdentityPublicKey === null;
+	public function sendEncodedDataPacket(ClientboundPacket $packet, string $encoded, bool $immediate = false) : bool{
+		return $this->sendDataPacketInternal($packet, $immediate, null, $encoded);
 	}
 
+	/**
+	 * @phpstan-return Promise<true>
+	 */
 	public function sendDataPacketWithReceipt(ClientboundPacket $packet, bool $immediate = false) : Promise{
 		/** @phpstan-var PromiseResolver<true> $resolver */
 		$resolver = new PromiseResolver();
-		if(!$this->supportsTransportReceipts()){
-			$resolver->reject();
-			return $resolver->getPromise();
-		}
 
 		if(!$this->sendDataPacketInternal($packet, $immediate, $resolver)){
 			$resolver->reject();
@@ -778,7 +909,7 @@ class NetworkSession{
 	/**
 	 * @internal
 	 */
-	public static function encodePacketTimed(ByteBufferWriter $serializer, int $protocolId, ClientboundPacket $packet, ?string $gameVersion = null) : string{
+	public static function encodePacketTimed(ByteBufferWriter $serializer, ClientboundPacket $packet, int $protocolId = ProtocolInfo::CURRENT_PROTOCOL, ?string $gameVersion = null) : string{
 		$timings = Timings::getEncodeDataPacketTimings($packet);
 		$timings->startTiming();
 		try{
@@ -794,30 +925,71 @@ class NetworkSession{
 	}
 
 	/**
+	 * Returns the packet buffer with the varint length prefix it carries inside a packet batch (what
+	 * {@link PacketBatch::encodeRaw()} writes for it). Packets sent to many sessions are prefixed once.
+	 *
+	 * @internal
+	 */
+	public static function prefixPacketBuffer(string $buffer) : string{
+		return Binary::writeUnsignedVarInt(strlen($buffer)) . $buffer;
+	}
+
+	/**
 	 * @internal
 	 */
 	public function addToSendBuffer(string $buffer) : void{
-		$this->sendBuffer[] = $buffer;
+		$this->addPrefixedToSendBuffer(self::prefixPacketBuffer($buffer));
 	}
 
-	private function flushGamePacketQueue() : void{
-		if(count($this->sendBuffer) > 0){
+	/**
+	 * Same as {@link NetworkSession::addToSendBuffer()} for a buffer already prefixed with its length (see
+	 * {@link NetworkSession::prefixPacketBuffer()}).
+	 *
+	 * @internal
+	 */
+	public function addPrefixedToSendBuffer(string $prefixedBuffer) : void{
+		$native = $this->sendBuffers;
+		if($native !== null){
+			$native->append($this->sendId, $prefixedBuffer);
+		}else{
+			$this->sendBuffer[] = $prefixedBuffer;
+		}
+	}
+
+	/**
+	 * @param bool $forceSync compress on the main thread, so that the batch is on its way before the session closes
+	 */
+	private function flushGamePacketQueue(bool $forceSync = false) : void{
+		//the buffers carry their length prefix already: the batch is their concatenation
+		Timings::$playerNetworkSendBatch->startTiming();
+		$native = $this->sendBuffers;
+		if($native !== null){
+			$batchBuffer = $native->take($this->sendId);
+		}elseif(count($this->sendBuffer) > 0){
+			$batchBuffer = implode("", $this->sendBuffer);
+			$this->sendBuffer = [];
+		}else{
+			$batchBuffer = "";
+		}
+		Timings::$playerNetworkSendBatch->stopTiming();
+		if($batchBuffer !== ""){
 			Timings::$playerNetworkSend->startTiming();
 			try{
 				$syncMode = null; //automatic
-				if($this->forceAsyncCompression){
+				if($forceSync){
+					$syncMode = true;
+				}elseif($this->forceAsyncCompression && self::hasIdleAsyncWorker($this->server->getAsyncPool())){
+					//when every running worker is busy (e.g. preparing this player's chunks), the batch (StartGamePacket
+					//and the other spawn data) would wait behind their tasks or for a new worker to start (and its
+					//memory), which is much longer than compressing it here (~5 ms): then the usual setting decides
 					$syncMode = false;
 				}
 
-				$stream = new ByteBufferWriter();
-				PacketBatch::encodeRaw($stream, $this->sendBuffer);
-
 				if($this->enableCompression){
-					$batch = $this->server->prepareBatch($stream->getData(), $this->getProtocolId(), $this->compressor, $syncMode, Timings::$playerNetworkSendCompressSessionBuffer);
+					$batch = $this->server->prepareBatch($batchBuffer, $this->compressor, $syncMode, Timings::$playerNetworkSendCompressSessionBuffer);
 				}else{
-					$batch = $stream->getData();
+					$batch = $batchBuffer;
 				}
-				$this->sendBuffer = [];
 				$ackPromises = $this->sendBufferAckPromises;
 				$this->sendBufferAckPromises = [];
 				//these packets were already potentially buffered for up to 50ms - make sure the transport layer doesn't
@@ -827,6 +999,15 @@ class NetworkSession{
 				Timings::$playerNetworkSend->stopTiming();
 			}
 		}
+	}
+
+	private static function hasIdleAsyncWorker(AsyncPool $pool) : bool{
+		foreach($pool->getTaskQueueSizes() as $queueSize){
+			if($queueSize === 0){
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public function getBroadcaster() : PacketBroadcaster{ return $this->broadcaster; }
@@ -878,9 +1059,12 @@ class NetworkSession{
 		Timings::$playerNetworkSend->startTiming();
 		try{
 			while(!$this->compressedQueue->isEmpty()){
-				/** @var CompressBatchPromise|string $current */
 				[$current, $ackPromises, $networkFlush] = $this->compressedQueue->bottom();
-				if(is_string($current)){
+				if($current instanceof \Closure){
+					$this->compressedQueue->dequeue();
+					$current();
+
+				}elseif(is_string($current)){
 					$this->compressedQueue->dequeue();
 					$this->sendEncoded($current, $networkFlush, $ackPromises);
 
@@ -915,7 +1099,9 @@ class NetworkSession{
 		}else{
 			$ackReceiptId = null;
 		}
+		Timings::$playerNetworkSendTransport->startTiming();
 		$this->sender->send($payload, $immediate, $ackReceiptId);
+		Timings::$playerNetworkSendTransport->stopTiming();
 	}
 
 	/**
@@ -924,23 +1110,21 @@ class NetworkSession{
 	private function tryDisconnect(\Closure $func, Translatable|string $reason) : void{
 		if($this->connected && !$this->disconnectGuard){
 			$this->disconnectGuard = true;
-			$this->finishDimensionTransition(PlayerDimensionChangeEvent::DISCONNECTED);
-			$this->pendingDimensionChangeAck = false;
-			$this->dimensionChangeTerrain = null;
 			$func();
-
-			$event = new SessionDisconnectEvent($this);
-			$event->call();
-
 			$this->disconnectGuard = false;
-			$this->flushGamePacketQueue();
+			$this->flushGamePacketQueue(forceSync: true);
 			$this->sender->close("");
 			foreach($this->disposeHooks as $callback){
 				$callback();
 			}
 			$this->disposeHooks->clear();
+			$this->releaseSpawnTerrainPrefetch();
 			$this->setHandler(null);
 			$this->connected = false;
+			if(!$this->standardSession){
+				self::$nonStandardSessions--;
+			}
+			$this->sendBuffers?->close($this->sendId);
 
 			$ackPromisesByReceiptId = $this->ackPromisesByReceiptId;
 			$this->ackPromisesByReceiptId = [];
@@ -967,13 +1151,17 @@ class NetworkSession{
 		$this->invManager = null;
 	}
 
-	private function sendDisconnectPacket(Translatable|string $message) : void{
+	/**
+	 * @param int $failReason DisconnectFailReason::* (the client picks the title of its disconnection screen from it)
+	 */
+	private function sendDisconnectPacket(Translatable|string $message, int $failReason = DisconnectFailReason::UNKNOWN) : void{
 		if($message instanceof Translatable){
-			$translated = $this->server->getLanguage()->translate($message);
+			$language = $this->player?->getLanguage() ?? ($this->info !== null ? $this->server->getLanguageForLocale($this->info->getLocale()) : $this->server->getLanguage());
+			$translated = $language->translate($message);
 		}else{
 			$translated = $message;
 		}
-		$this->sendDataPacket(DisconnectPacket::create(0, $translated, ""));
+		$this->sendDataPacket(DisconnectPacket::create($failReason, $translated, ""));
 	}
 
 	/**
@@ -1012,7 +1200,10 @@ class NetworkSession{
 	}
 
 	/**
-	 * Instructs the remote client to connect to a different server.
+	 * Instructs the remote client to connect to a different server: sends a TransferPacket (reload world off, no
+	 * gatherings data, like BDS) and closes the session without a DisconnectPacket, which would make the client show
+	 * an error instead of switching. Clients since 1.26.60 only join over NetherNet, so the target must accept NetherNet
+	 * (signaling on TCP $port, see Player::transfer()).
 	 */
 	public function transfer(string $ip, int $port, Translatable|string|null $reason = null) : void{
 		$reason ??= KnownTranslationFactory::pocketmine_disconnect_transfer();
@@ -1026,10 +1217,12 @@ class NetworkSession{
 
 	/**
 	 * Called by the Player when it is closed (for example due to getting kicked).
+	 *
+	 * @param int $failReason DisconnectFailReason::* sent to the client (Player::kick() uses KICKED, like BDS)
 	 */
-	public function onPlayerDestroyed(Translatable|string $reason, Translatable|string $disconnectScreenMessage) : void{
-		$this->tryDisconnect(function() use ($disconnectScreenMessage) : void{
-			$this->sendDisconnectPacket($disconnectScreenMessage);
+	public function onPlayerDestroyed(Translatable|string $reason, Translatable|string $disconnectScreenMessage, int $failReason = DisconnectFailReason::UNKNOWN) : void{
+		$this->tryDisconnect(function() use ($disconnectScreenMessage, $failReason) : void{
+			$this->sendDisconnectPacket($disconnectScreenMessage, $failReason);
 		}, $reason);
 	}
 
@@ -1045,6 +1238,67 @@ class NetworkSession{
 		}, $reason);
 	}
 
+	/**
+	 * On encrypted transports (NetherNet) the Minecraft encryption handshake is skipped, and what proves that the login
+	 * was sent by the owner of its key (and not replayed by someone who captured it) is the identity assertion of the
+	 * transport: the client signed its DTLS fingerprints with the key in the "cpk" claim of its authentication token,
+	 * which must be the key of the login. Only matters for Xbox-authenticated sessions: anyone can claim any name
+	 * without authentication anyway.
+	 *
+	 * @return bool false if the session was disconnected
+	 */
+	private function checkTransportIdentity(string $clientPubKey) : bool{
+		if(!$this->sender instanceof TransportAwarePacketSender){
+			return true;
+		}
+		$peerKey = $this->sender->getPeerPublicKey();
+		$peerDer = $peerKey !== null ? base64_decode($peerKey, true) : false;
+		if($peerDer !== false && self::publicKeysEqual($peerDer, $clientPubKey)){
+			$this->logger->debug("Transport identity key matches the login key");
+			return true;
+		}
+		$problem = $peerDer === false ? "No transport identity assertion" : "Transport identity key does not match the login key";
+		if(!$this->authenticated){
+			$this->logger->debug("$problem (not authenticated, ignored)");
+			return true;
+		}
+		if(!$this->server->getConfigGroup()->getPropertyBool(YmlServerProperties::NETWORK_NETHERNET_VERIFY_IDENTITY, true)){
+			$this->logger->warning("$problem (network.nethernet.verify-identity is off, allowed)");
+			return true;
+		}
+		if($peerDer !== false){
+			$this->logger->debug("Transport key SHA-256 " . hash("sha256", $peerDer) . ", login key SHA-256 " . hash("sha256", $clientPubKey));
+		}
+		$this->disconnectWithError(
+			reason: KnownTranslationFactory::pocketmine_disconnect_invalidSession($problem),
+			disconnectScreenMessage: KnownTranslationFactory::pocketmine_disconnect_error_authentication()
+		);
+		return false;
+	}
+
+	/**
+	 * Compares two DER-encoded public keys, also when they encode the same key differently (e.g. compressed points).
+	 */
+	private static function publicKeysEqual(string $derA, string $derB) : bool{
+		if($derA === $derB){
+			return true;
+		}
+		$toPem = fn(string $der) : string => "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
+		$a = @openssl_pkey_get_public($toPem($derA));
+		$b = @openssl_pkey_get_public($toPem($derB));
+		if($a === false || $b === false){
+			return false;
+		}
+		$da = openssl_pkey_get_details($a);
+		$db = openssl_pkey_get_details($b);
+		if($da === false || $db === false || !isset($da["ec"], $db["ec"]) || !is_array($da["ec"]) || !is_array($db["ec"])){
+			return false;
+		}
+		return ($da["ec"]["curve_name"] ?? null) === ($db["ec"]["curve_name"] ?? null) &&
+			($da["ec"]["x"] ?? null) === ($db["ec"]["x"] ?? null) &&
+			($da["ec"]["y"] ?? null) === ($db["ec"]["y"] ?? null);
+	}
+
 	private function setAuthenticationStatus(bool $authenticated, bool $authRequired, Translatable|string|null $error, ?string $clientPubKey) : void{
 		if(!$this->connected){
 			return;
@@ -1054,11 +1308,6 @@ class NetworkSession{
 				$error = "Expected XUID but none found";
 			}elseif($clientPubKey === null){
 				$error = "Missing client public key"; //failsafe
-			}elseif($this->netherNetIdentityPublicKey !== null && !hash_equals($this->netherNetIdentityPublicKey, $clientPubKey)){
-				$error = "NetherNet identity does not match Bedrock login public key";
-			}elseif($this->netherNetIdentityPublicKey !== null && (!$authenticated ||
-				($this->netherNetIdentityXuid !== null && (!($this->info instanceof XboxLivePlayerInfo) || $this->info->getXuid() !== $this->netherNetIdentityXuid)))){
-				$error = "NetherNet authenticated XUID does not match Bedrock login";
 			}
 		}
 
@@ -1132,14 +1381,27 @@ class NetworkSession{
 			}
 		}
 
-		if(EncryptionContext::$ENABLED && $this->netherNetIdentityPublicKey === null){
+		if($this->isTransportEncrypted() && $this->sender instanceof TransportAwarePacketSender && !$this->checkTransportIdentity($clientPubKey ?? "")){
+			return;
+		}
+
+		//the player will spawn: what it needs for that is prepared from now on, while the client finishes logging in
+		$this->startSpawnTerrainPrefetch();
+
+		if($this->isTransportEncrypted()){
+			$this->logger->debug("Transport is encrypted (" . $this->getTransportName() . "), skipping encryption handshake");
+			$this->onServerLoginSuccess();
+		}elseif(EncryptionContext::$ENABLED){
 			$this->server->getAsyncPool()->submitTask(new PrepareEncryptionTask($clientPubKey, function(string $encryptionKey, string $handshakeJwt) : void{
 				if(!$this->connected){
 					return;
 				}
-				$this->sendDataPacket(ServerToClientHandshakePacket::create($handshakeJwt), true); //make sure this gets sent before encryption is enabled
+				$this->sendDataPacket(ServerToClientHandshakePacket::create($handshakeJwt), true);
 
-				$this->cipher = EncryptionContext::fakeGCM($encryptionKey);
+				//the handshake may still be compressing (compression thread): encryption starts right after it was sent
+				$cipher = EncryptionContext::fakeGCM($encryptionKey);
+				$this->compressedQueue->enqueue([function() use ($cipher) : void{ $this->cipher = $cipher; }, [], false]);
+				$this->flushCompressedQueue();
 
 				$this->setHandler(new HandshakePacketHandler($this->onServerLoginSuccess(...)));
 				$this->logger->debug("Enabled encryption");
@@ -1147,10 +1409,71 @@ class NetworkSession{
 		}else{
 			$this->onServerLoginSuccess();
 		}
+		//after the encryption task, which gets an idle worker first
+		ChunkRequestWorkers::get($this->server->getAsyncPool())->warmUp();
+	}
+
+	/**
+	 * Starts preparing the chunks a returning player needs before it spawns (see {@link SpawnTerrainPrefetch}), around
+	 * its saved position, which {@link Server::createPlayer()} will use. A new player gets that once its spawn spot is
+	 * found (see {@link NetworkSession::onPlayerCreated()}): its random spot near the world spawn may need generation,
+	 * which chunks prepared around the world spawn would only delay.
+	 */
+	private function startSpawnTerrainPrefetch() : void{
+		$data = $this->cachedOfflinePlayerData;
+		if($data === null){
+			return;
+		}
+		try{
+			$world = $this->server->getWorldManager()->getWorldByName($data->getString(Player::TAG_LEVEL, ""));
+			if($world !== null){
+				$this->prefetchSpawnTerrain(EntityDataHelper::parseLocation($data, $world));
+			}
+		}catch(SavedDataLoadingException | NbtException){
+			//the player is created at the world spawn (or kicked) then
+		}
+	}
+
+	private function prefetchSpawnTerrain(Position $position) : void{
+		$config = $this->server->getConfigGroup();
+		if(!$config->getPropertyBool(YmlServerProperties::CHUNK_SENDING_FAST_SPAWN, true)){
+			return;
+		}
+		$world = $position->getWorld();
+		$chunkX = $position->getFloorX() >> Chunk::COORD_BIT_SIZE;
+		$chunkZ = $position->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+		if($this->spawnTerrainPrefetch !== null){
+			if($this->spawnTerrainPrefetch->isAround($world, $chunkX, $chunkZ)){
+				return;
+			}
+			$this->releaseSpawnTerrainPrefetch();
+		}
+		$radius = min($this->server->getAllowedViewDistance($this->server->getViewDistance()), $config->getPropertyInt(YmlServerProperties::CHUNK_SENDING_SPAWN_RADIUS, 4));
+		//Player::$spawnThreshold + 1: the number of chunks the player waits for before it spawns
+		$count = (int) ($radius ** 2 * M_PI) + 1;
+		$this->spawnTerrainPrefetch = new SpawnTerrainPrefetch($world, $this->compressor, $chunkX, $chunkZ, $radius, $count);
+	}
+
+	private function releaseSpawnTerrainPrefetch() : void{
+		$this->spawnTerrainPrefetch?->release();
+		$this->spawnTerrainPrefetch = null;
 	}
 
 	private function onServerLoginSuccess() : void{
 		$this->loggedIn = true;
+
+		if($this->isProxyTransfer()){
+			//the client is in game on another server of the network: it already has its resource packs
+			$this->logger->debug("Player transferred by the proxy, skipping the resource packs phase");
+			$this->createPlayer();
+			return;
+		}
+		if($this->getProxyTicket()?->packs === true){
+			//the proxy already sent LOGIN_SUCCESS and the network's resource packs
+			$this->logger->debug("Resource packs sent by the proxy, skipping the resource packs phase");
+			$this->createPlayer();
+			return;
+		}
 
 		$this->sendDataPacket(PlayStatusPacket::create(PlayStatusPacket::LOGIN_SUCCESS));
 
@@ -1179,20 +1502,22 @@ class NetworkSession{
 		$this->logger->debug("Waiting for chunk radius request");
 	}
 
-	private bool $spawnResponseReceivedEarly = false;
-
-	public function notifyEarlySpawnResponse() : void{
-		$this->spawnResponseReceivedEarly = true;
-	}
-
 	public function notifyTerrainReady() : void{
-		$this->logger->debug("Sending spawn notification, waiting for spawn response");
-		$this->sendDataPacket(PlayStatusPacket::create(PlayStatusPacket::PLAYER_SPAWN));
-		if($this->spawnResponseReceivedEarly){
+		//the player holds the chunks it uses now
+		$this->releaseSpawnTerrainPrefetch();
+		if($this->isProxyTransfer()){
+			//the client spawned long ago, on its first server: it would not answer a spawn notification
+			$this->logger->debug("Terrain ready for a transferred player, entering in-game phase");
 			$this->onClientSpawnResponse();
-		}else{
-			$this->setHandler(new SpawnResponsePacketHandler($this->onClientSpawnResponse(...)));
+			if($this->sender instanceof ProxyPacketSender){
+				$this->sender->getInterface()->onTransferSpawned($this, $this->sender->getTicket());
+			}
+			return;
 		}
+		$this->logger->debug("Sending spawn notification, waiting for spawn response");
+		//right away, behind the chunks already on their way, instead of at the end of the tick
+		$this->sendDataPacket(PlayStatusPacket::create(PlayStatusPacket::PLAYER_SPAWN), true);
+		$this->setHandler(new SpawnResponsePacketHandler($this->onClientSpawnResponse(...), $this->player));
 	}
 
 	private function onClientSpawnResponse() : void{
@@ -1220,17 +1545,6 @@ class NetworkSession{
 
 	public function syncMovement(Vector3 $pos, ?float $yaw = null, ?float $pitch = null, int $mode = MovePlayerPacket::MODE_NORMAL) : void{
 		if($this->player !== null){
-			if($mode === MovePlayerPacket::MODE_TELEPORT && $this->dimensionChangeTerrain !== null &&
-				(($pos->getFloorX() >> Chunk::COORD_BIT_SIZE) !== $this->dimensionChangeTerrain["centerX"] ||
-				($pos->getFloorZ() >> Chunk::COORD_BIT_SIZE) !== $this->dimensionChangeTerrain["centerZ"])
-			){
-				// An external teleport must replace the footprint whose old requests Player will cancel.
-				$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
-				$this->beginDimensionTerrain($this->player->getWorld());
-			}
-			if($mode === MovePlayerPacket::MODE_TELEPORT && $this->dimensionChangeTerrain === null){
-				$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
-			}
 			$location = $this->player->getLocation();
 			$yaw = $yaw ?? $location->getYaw();
 			$pitch = $pitch ?? $location->getPitch();
@@ -1253,15 +1567,6 @@ class NetworkSession{
 		}
 	}
 
-	/** @phpstan-param DimensionIds::* $dimension */
-	public function setClientDimension(int $dimension) : void{
-		$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
-		$this->clientWorldName = $this->player?->getWorld()->getFolderName();
-		$this->clientDimension = $dimension;
-		$this->pendingDimensionChangeAck = false;
-		$this->dimensionChangeTerrain = null;
-	}
-
 	public function syncViewAreaRadius(int $distance) : void{
 		$this->sendDataPacket(ChunkRadiusUpdatedPacket::create($distance));
 	}
@@ -1273,16 +1578,221 @@ class NetworkSession{
 	public function syncPlayerSpawnPoint(Position $newSpawn) : void{
 		$newSpawnBlockPosition = BlockPosition::fromVector3($newSpawn);
 		//TODO: respawn causing block position (bed, respawn anchor)
-		$this->sendDataPacket(SetSpawnPositionPacket::playerSpawn($newSpawnBlockPosition, $this->server->getDimensionManager()->getDimension($newSpawn->getWorld()), $newSpawnBlockPosition));
+		$this->sendDataPacket(SetSpawnPositionPacket::playerSpawn($newSpawnBlockPosition, self::getDimensionIdOf($newSpawn), $newSpawnBlockPosition));
 	}
 
 	public function syncWorldSpawnPoint(Position $newSpawn) : void{
-		$this->sendDataPacket(SetSpawnPositionPacket::worldSpawn(BlockPosition::fromVector3($newSpawn), $this->server->getDimensionManager()->getDimension($newSpawn->getWorld())));
+		$this->sendDataPacket(SetSpawnPositionPacket::worldSpawn(BlockPosition::fromVector3($newSpawn), self::getDimensionIdOf($newSpawn)));
+	}
+
+	/**
+	 * @phpstan-return DimensionIds::*
+	 */
+	private static function getDimensionIdOf(Position $position) : int{
+		return $position->isValid() ? $position->getWorld()->getDimension()->getNetworkId() : DimensionIds::OVERWORLD;
+	}
+
+	/**
+	 * @internal
+	 * Records the dimension the client was put in by StartGamePacket.
+	 */
+	public function setClientDimension(Dimension $dimension) : void{
+		$this->dimensionTracker->onStartGame($dimension);
+	}
+
+	/**
+	 * @internal
+	 * Whether this session is a player the proxy moved here from another server of the network (see ProxyTicket).
+	 */
+	public function isProxyTransfer() : bool{
+		return $this->getProxyTicket()?->transfer === true;
+	}
+
+	/**
+	 * @internal
+	 * Moves a player who arrived from another server into this server's world instead of a StartGamePacket: the client
+	 * is still in the other server's dimension and terrain, so it goes through a dimension change, with the detour of
+	 * a world switch when the dimension is the same, which makes it drop the old terrain.
+	 */
+	public function beginProxyTransferIn(Dimension $clientDimension) : void{
+		if($this->player === null){
+			return;
+		}
+		$world = $this->player->getWorld();
+		$style = $this->getProxyTicket()->style ?? ProxyTransferStyle::DIMENSION;
+		if($style !== ProxyTransferStyle::DIMENSION && $world->getDimension() === $clientDimension){
+			//no loading screen: the proxy already replaced the previous server's terrain with empty chunks, so the client
+			//only needs to be moved to its place here; this server's chunks arrive like after a teleport
+			$this->logger->debug("Transfer without dimension change (style $style)");
+			$this->dimensionTracker->onStartGame($clientDimension);
+			$this->syncMovement($this->player->getPosition(), null, null, MovePlayerPacket::MODE_TELEPORT);
+			$this->syncWorldState($world);
+			return;
+		}
+		$this->dimensionTracker->onStartGame($clientDimension);
+		$this->dimensionTracker->onTerrainSent();
+		$clear = $this->dimensionTracker->getClearSameDimensionTerrain();
+		$this->dimensionTracker->setClearSameDimensionTerrain(true);
+		$change = $this->dimensionTracker->onEnterWorld($world->getDimension(), false, true);
+		$this->dimensionTracker->setClearSameDimensionTerrain($clear);
+		if($change !== null){
+			$this->sendClientDimensionChange($change);
+		}
+		$this->syncWorldState($world);
+	}
+
+	/**
+	 * Returns the dimension the client currently renders, or null before StartGamePacket was sent.
+	 */
+	public function getClientDimension() : ?Dimension{
+		return $this->dimensionTracker->getClientDimension();
+	}
+
+	/**
+	 * Whether the client is in the loading screen of a dimension change.
+	 */
+	public function isChangingDimension() : bool{
+		return $this->dimensionTracker->isChanging();
+	}
+
+	/**
+	 * Whether a switch between two worlds of the same dimension makes the client drop the previous world's terrain, by
+	 * sending it through another dimension and back (with the dimension loading screen). Defaults to
+	 * player.clear-terrain-on-world-change in pocketmine.yml.
+	 * Without it, chunks of the previous world the new world doesn't overwrite stay visible on the client.
+	 */
+	public function getClearTerrainOnWorldChange() : bool{
+		return $this->dimensionTracker->getClearSameDimensionTerrain();
+	}
+
+	/**
+	 * @see NetworkSession::getClearTerrainOnWorldChange()
+	 */
+	public function setClearTerrainOnWorldChange(bool $clear) : void{
+		$this->dimensionTracker->setClearSameDimensionTerrain($clear);
+	}
+
+	/**
+	 * Moves the client to another dimension: it drops all its chunks and shows the dimension loading screen until the
+	 * chunks around its new position arrive.
+	 *
+	 * Flow (same as dragonfly and PowerNukkitX, which take it from BDS): ChangeDimension with the arrival position and,
+	 * when the player is alive, a loading screen ID; then, once the first chunk of the new dimension has been sent, a
+	 * PlayerAction DIMENSION_CHANGE_ACK from the server (since 1.19.50 the server sends it; the client answers with its
+	 * own ack and with ServerboundLoadingScreen start/end packets carrying the ID).
+	 *
+	 * The detour of a same-dimension world switch (see {@link ClientDimensionTracker}) gets a few empty chunks of the
+	 * detour dimension and the server ack right away, like WaterdogPE does between servers: the client then leaves that
+	 * dimension as soon as it acknowledges it, and no world chunk is sent until the real change back.
+	 */
+	private function sendClientDimensionChange(ClientDimensionChange $change) : void{
+		if($this->player === null){
+			return;
+		}
+		$dimension = $change->dimension;
+		$position = $this->player->getOffsetPosition($this->player->getPosition());
+		if($change->detour){
+			//keep the client inside the detour dimension's height range (e.g. Overworld Y -40 or 200 in the Nether)
+			$position = new Vector3($position->x, max($dimension->getMinY() + 1, min($dimension->getMaxY() - 2, $position->y)), $position->z);
+		}
+		$this->dimensionChangeStartTick = $this->server->getTick();
+		$this->logger->debug("Changing client dimension to " . $dimension->name . ($change->detour ? " (detour of a world switch)" : "") . ($change->respawn ? " (respawn)" : ""));
+		$this->sendDataPacket(ChangeDimensionPacket::create($dimension->getNetworkId(), $position, $change->respawn, $change->loadingScreenId));
+
+		if($change->detour){
+			$this->dimensionChangeAckDeadline = null;
+			$dimensionId = $dimension->getNetworkId();
+			$this->sendDataPacket(NetworkChunkPublisherUpdatePacket::create(BlockPosition::fromVector3($position), self::DETOUR_CHUNK_RADIUS * 16, []));
+			$payload = self::$emptyChunkPayloads[$dimensionId] ??= ChunkSerializer::serializeFullChunk(new Chunk([], false), $dimensionId, $this->typeConverter->getBlockTranslator());
+			$centerX = $position->getFloorX() >> Chunk::COORD_BIT_SIZE;
+			$centerZ = $position->getFloorZ() >> Chunk::COORD_BIT_SIZE;
+			for($x = -self::DETOUR_CHUNK_RADIUS; $x <= self::DETOUR_CHUNK_RADIUS; ++$x){
+				for($z = -self::DETOUR_CHUNK_RADIUS; $z <= self::DETOUR_CHUNK_RADIUS; ++$z){
+					$this->sendDataPacket(LevelChunkPacket::create(new ChunkPosition($centerX + $x, $centerZ + $z), $dimensionId, 0, false, null, $payload));
+				}
+			}
+			$this->sendDimensionChangeAck();
+		}else{
+			$this->dimensionChangeAckDeadline = $this->dimensionChangeStartTick + 40;
+		}
+	}
+
+	private function tickDimensionChange() : void{
+		$tick = $this->server->getTick();
+		if($this->dimensionChangeAckDeadline !== null && $tick >= $this->dimensionChangeAckDeadline){
+			//no chunk could be sent yet (e.g. terrain still generating): don't keep the client waiting forever
+			$this->sendDimensionChangeAck();
+		}
+		if($this->dimensionTracker->isChanging() && $tick - $this->dimensionChangeStartTick > 600 && $this->player !== null){
+			$this->logger->debug("Client never reported the end of the dimension change, assuming it finished");
+			$hadPendingWorld = $this->dimensionTracker->holdsChunks();
+			$this->onDimensionChangeFinished($this->dimensionTracker->forceChangeDone(!$this->player->isAlive(), $this->player->spawned), $hadPendingWorld);
+		}
+	}
+
+	private function sendDimensionChangeAck() : void{
+		$this->dimensionChangeAckDeadline = null;
+		if($this->player !== null){
+			$position = BlockPosition::fromVector3($this->player->getPosition());
+			$this->sendDataPacket(PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $position, $position, 0));
+		}
+	}
+
+	/**
+	 * @internal
+	 * Called when the client reports that it finished the dimension change (its own DIMENSION_CHANGE_ACK or the end of
+	 * the loading screen).
+	 */
+	public function onClientDimensionChangeDone(?int $loadingScreenId) : void{
+		if(!$this->dimensionTracker->isChanging() || $this->player === null){
+			return;
+		}
+		$expected = $this->dimensionTracker->getLoadingScreenId();
+		$hadPendingWorld = $this->dimensionTracker->holdsChunks();
+		$next = $this->dimensionTracker->onClientChangeDone($loadingScreenId, !$this->player->isAlive(), $this->player->spawned);
+		if($next === null && $this->dimensionTracker->isChanging()){
+			$this->logger->debug("Ignoring " . ($loadingScreenId !== null ? "end of loading screen $loadingScreenId" : "dimension change ack") . " (expected loading screen " . ($expected ?? "none") . ")");
+			return;
+		}
+		$this->logger->debug("Client finished changing dimension");
+		$this->onDimensionChangeFinished($next, $hadPendingWorld);
+	}
+
+	/**
+	 * @param bool $hadPendingWorld whether a world switch was waiting for the end of the change
+	 */
+	private function onDimensionChangeFinished(?ClientDimensionChange $next, bool $hadPendingWorld) : void{
+		$this->dimensionChangeAckDeadline = null;
+		if($next !== null){
+			$this->sendClientDimensionChange($next);
+		}
+		if($hadPendingWorld && $this->player !== null && !$this->dimensionTracker->isDetour()){
+			//the client is now on its way to (or already in) the dimension of the world the player is in
+			$this->syncWorldState($this->player->getWorld());
+		}
 	}
 
 	public function syncGameMode(GameMode $mode, bool $isRollback = false) : void{
 		$this->sendDataPacket(SetPlayerGameTypePacket::create($this->typeConverter->coreGameModeToProtocol($mode)));
 		if($this->player !== null){
+			//BDS 1.26.52 announces a game mode change only with UpdatePlayerGameType, to every player including this one
+			//(it never sends SetPlayerGameType for it): the client uses it to switch to native spectator
+			$tick = $this->server->getTick();
+			$actorUniqueId = $this->player->getId();
+			$recipients = [$this->player];
+			if(!$isRollback){
+				foreach($this->server->getOnlinePlayers() as $player){
+					if($player !== $this->player){
+						$recipients[] = $player;
+					}
+				}
+			}
+			foreach($recipients as $recipient){
+				if($recipient->spawned && $recipient->isConnected()){
+					$session = $recipient->getNetworkSession();
+					$session->sendDataPacket(UpdatePlayerGameTypePacket::create($session->getTypeConverter()->coreGameModeToProtocol($mode), $actorUniqueId, $tick));
+				}
+			}
 			$this->syncAbilities($this->player);
 			$this->syncAdventureSettings(); //TODO: we might be able to do this with the abilities packet alone
 		}
@@ -1318,11 +1828,16 @@ class NetworkSession{
 		$layers = [
 			new AbilitiesLayer(AbilitiesLayer::LAYER_BASE, $boolAbilities, $for->getFlightSpeedMultiplier(), 1, 0.1),
 		];
-		if(!$for->hasBlockCollision()){
-			//TODO: HACK! In 1.19.80, the client starts falling in our faux spectator mode when it clips into a
-			//block. We can't seem to prevent this short of forcing the player to always fly when block collision is
-			//disabled. Also, for some reason the client always reads flight state from this layer if present, even
-			//though the player isn't in spectator mode.
+		if($for->isSpectator()){
+			//native spectator: the same layers BDS 1.26.52 sends, spectator layer first. The client builds this layer
+			//itself (BDS sends no UpdateAbilities when the game mode changes), but every UpdateAbilities replaces them
+			array_unshift($layers, SpectatorAbilities::layer($for->isFlying(), !$for->hasBlockCollision()));
+		}elseif(!$for->hasBlockCollision()){
+			//TODO: HACK! In 1.19.80, the client starts falling when block collision is disabled outside spectator mode
+			//(this was our faux spectator mode before native spectator) and it clips into a block. We can't seem to
+			//prevent this short of forcing the player to always fly when block collision is disabled. Also, for some
+			//reason the client always reads flight state from this layer if present, even though the player isn't in
+			//spectator mode.
 
 			$layers[] = new AbilitiesLayer(AbilitiesLayer::LAYER_SPECTATOR, [
 				AbilitiesLayer::ABILITY_FLYING => true,
@@ -1353,13 +1868,19 @@ class NetworkSession{
 
 	public function syncAvailableCommands() : void{
 		$commandData = [];
+		$visibleCommands = [];
 		foreach($this->server->getCommandMap()->getCommands() as $command){
-			if(isset($commandData[$command->getLabel()]) || $command->getLabel() === "help" || !$command->testPermissionSilent($this->player)){
+			if(strtolower($command->getLabel()) === "help"){
+				//the client has its own /help, and BDS doesn't send one: a server /help in the list made 1.26 clients drop
+				//every command listed before it (no suggestions for /give, /gamemode...). Typed, it still reaches the server.
 				continue;
 			}
-
-			$overloads = \pocketmine\command\CommandMetadata::forProtocol($command, $this->player, $this->getProtocolId());
-			if($overloads === []){continue;}
+			if(!isset($visibleCommands[$command->getLabel()]) && $command->testPermissionSilent($this->player)){
+				$visibleCommands[$command->getLabel()] = $command;
+			}
+		}
+		$overloadMapper = new CommandOverloadMapper(CommandOverloadMapper::commandNames($visibleCommands));
+		foreach($visibleCommands as $command){
 			$lname = strtolower($command->getLabel());
 			$aliases = $command->getAliases();
 			$aliasObj = null;
@@ -1376,36 +1897,16 @@ class NetworkSession{
 				$lname, //TODO: commands containing uppercase letters in the name crash 1.9.0 client
 				$description instanceof Translatable ? $this->player->getLanguage()->translate($description) : $description,
 				0,
-				// Bedrock 1.21.130+ encodes this as a string enum. The wire value
-				// is case-sensitive ("Any"), not the legacy PHP alias "any".
-				// Older clients still use an integer permission byte.
-				$this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_130 ? "Any" : CommandPermissions::NORMAL,
+				CommandPermissions::NORMAL,
 				$aliasObj,
-				$overloads,
+				$overloadMapper->map($command),
 				chainedSubCommandData: []
 			);
 
 			$commandData[$command->getLabel()] = $data;
 		}
 
-		// Temporary diagnostic, automatically logged once per session.
-		// Only crate edit/remove arguments are included; never raw packet bytes.
-		if(!$this->crateCommandTraceCompleted){
-			try{
-				$this->logger->info("[CrateCommandTrace] stage=metadata protocol=" . $this->getProtocolId() . " commands=" . count($commandData));
-				foreach(\pocketmine\command\CommandMetadata::describeCrateOverloads(array_values($commandData)) as $line){
-					$this->logger->info("[CrateCommandTrace] stage=metadata " . $line);
-				}
-			}catch(\Throwable $e){
-				// Temporary diagnostics are never allowed to interrupt the login flow.
-				$this->logger->warning("[CrateCommandTrace] stage=metadata_error protocol=" . $this->getProtocolId() . " error=" . get_class($e));
-			}
-		}
-
-		// Resolve all enum definitions consistently across the entire command list,
-		// not one command at a time (subcommand overloads repeat enum names).
-		$normalized = \pocketmine\command\CommandMetadata::canonicalizePacketEnums(array_values($commandData));
-		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble($normalized, [], []));
+		$this->sendDataPacket(AvailableCommandsPacketAssembler::assemble(array_values($commandData), [], []));
 	}
 
 	/**
@@ -1415,16 +1916,29 @@ class NetworkSession{
 	public function prepareClientTranslatableMessage(Translatable $message) : array{
 		//we can't send nested translations to the client, so make sure they are always pre-translated by the server
 		$language = $this->player->getLanguage();
-		$parameters = array_map(fn(string|Translatable $p) => $p instanceof Translatable ? $language->translate($p) : $p, $message->getParameters());
+		$parameters = array_map(fn(string|Translatable $p) => $p instanceof Translatable ? self::prepareClientTranslatableParameter($language, $p) : $p, $message->getParameters());
 		$untranslatedParameterCount = 0;
 		$translated = $language->translateString($message->getText(), $parameters, "pocketmine.", $untranslatedParameterCount);
 		return [$translated, array_slice($parameters, 0, $untranslatedParameterCount)];
 	}
 
+	/**
+	 * Vanilla entity names (entity.<id>.name, e.g. the killer in a death message) are sent as "%key" like BDS does, so
+	 * that each client shows them in its own language; other nested translations are translated by the server.
+	 */
+	private static function prepareClientTranslatableParameter(Language $language, Translatable $parameter) : string{
+		$key = $parameter->getText();
+		if(count($parameter->getParameters()) === 0 && str_starts_with($key, "entity.") && str_ends_with($key, ".name")){
+			return "%" . $key;
+		}
+		return $language->translate($parameter);
+	}
+
 	public function onChatMessage(Translatable|string $message) : void{
 		if($message instanceof Translatable){
-			if(!$this->server->isLanguageForced()){
-				$this->sendDataPacket(TextPacket::translation(...$this->prepareClientTranslatableMessage($message)));
+			[$text, $parameters] = $this->prepareClientTranslatableMessage($message);
+			if(!$this->server->isLanguageForced() && count($parameters) <= self::MAX_CLIENT_TRANSLATION_PARAMETERS){
+				$this->sendDataPacket(TextPacket::translation($text, $parameters));
 			}else{
 				$this->sendDataPacket(TextPacket::raw($this->player->getLanguage()->translate($message)));
 			}
@@ -1436,8 +1950,9 @@ class NetworkSession{
 	public function onJukeboxPopup(Translatable|string $message) : void{
 		$parameters = [];
 		if($message instanceof Translatable){
-			if(!$this->server->isLanguageForced()){
-				[$message, $parameters] = $this->prepareClientTranslatableMessage($message);
+			[$text, $clientParameters] = $this->prepareClientTranslatableMessage($message);
+			if(!$this->server->isLanguageForced() && count($clientParameters) <= self::MAX_CLIENT_TRANSLATION_PARAMETERS){
+				[$message, $parameters] = [$text, $clientParameters];
 			}else{
 				$message = $this->player->getLanguage()->translate($message);
 			}
@@ -1464,44 +1979,16 @@ class NetworkSession{
 	/**
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
-	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world, int $chunkX, int $chunkZ) : void{
+	private function sendChunkPacket(string $chunkPacket, \Closure $onCompletion, World $world) : void{
 		$world->timings->syncChunkSend->startTiming();
 		try{
-			$transition = $this->dimensionTransition;
-			$hash = World::chunkHash($chunkX, $chunkZ);
-			$diagnosticReceipt = $this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics() && $transition->getTargetWorld() === $world->getFolderName() && $transition->containsChunk($hash);
-			// Protocol 844 (1.21.111/114) must receive terrain before actors.
-			$waitForLegacyReceipt = $this->getProtocolId() === ProtocolInfo::PROTOCOL_1_21_111;
-			if($diagnosticReceipt || $waitForLegacyReceipt){
-				$receipt = new PromiseResolver();
-				$receipt->getPromise()->onCompletion(
-					function() use ($transition, $hash, $chunkX, $chunkZ, $diagnosticReceipt, $waitForLegacyReceipt, $onCompletion) : void{
-						if($diagnosticReceipt && $transition !== null && $this->dimensionTransition === $transition){
-							$transition->recordReceipt($hash);
-							$this->traceDimension("transport_receipt chunk=$chunkX,$chunkZ received=" . $transition->getReceivedChunkCount() . "/9");
-						}
-						if($waitForLegacyReceipt){
-							$onCompletion();
-						}
-					},
-					function() use ($world, $chunkX, $chunkZ, $waitForLegacyReceipt) : void{
-						if($waitForLegacyReceipt){
-							$this->player?->retryFailedChunkSend($world, $chunkX, $chunkZ);
-						}
-					}
-				);
-				if($diagnosticReceipt){
-					$this->traceDimension("chunk=$chunkX,$chunkZ bytes=" . strlen($chunkPacket) . " sha256=" . hash("sha256", $chunkPacket));
-				}
-				$this->flushGamePacketQueue();
-				$this->queueCompressedNoGamePacketFlush($chunkPacket, ackPromises: [$receipt]);
-			}else{
-				$this->queueCompressed($chunkPacket);
+			$this->queueCompressed($chunkPacket);
+			$this->dimensionTracker->onTerrainSent();
+			if($this->dimensionChangeAckDeadline !== null){
+				//the client has terrain of the new dimension: let it leave the dimension change
+				$this->sendDimensionChangeAck();
 			}
-			$this->onDimensionTerrainSent($world, $chunkX, $chunkZ);
-			if(!$waitForLegacyReceipt){
-				$onCompletion();
-			}
+			$onCompletion();
 		}finally{
 			$world->timings->syncChunkSend->stopTiming();
 		}
@@ -1513,13 +2000,10 @@ class NetworkSession{
 	 * @phpstan-param \Closure() : void $onCompletion
 	 */
 	public function startUsingChunk(int $chunkX, int $chunkZ, \Closure $onCompletion) : void{
-
 		$world = $this->player->getLocation()->getWorld();
-		$cache = ChunkCache::getInstance($world, $this->compressor);
-		$cache->setDimensionId($this->server->getDimensionManager()->getDimension($world));
-		$promiseOrPacket = $cache->request($chunkX, $chunkZ, $this->getTypeConverter());
+		$promiseOrPacket = ChunkCache::getInstance($world, $this->compressor, $this->getProtocolId())->request($chunkX, $chunkZ);
 		if(is_string($promiseOrPacket)){
-			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world, $chunkX, $chunkZ);
+			$this->sendChunkPacket($promiseOrPacket, $onCompletion, $world);
 			return;
 		}
 		$promiseOrPacket->onResolve(
@@ -1540,7 +2024,7 @@ class NetworkSession{
 					//to NEEDED if they want to be resent.
 					return;
 				}
-				$this->sendChunkPacket($promise->getResult(), $onCompletion, $world, $chunkX, $chunkZ);
+				$this->sendChunkPacket($promise->getResult(), $onCompletion, $world);
 			}
 		);
 	}
@@ -1550,183 +2034,72 @@ class NetworkSession{
 	}
 
 	public function onEnterWorld() : void{
-		if($this->player === null || $this->disconnectGuard || !$this->connected){ return; }
-		$world = $this->player->getWorld();
-		$dimension = $this->server->getDimensionManager()->getDimension($world);
-		$sourceWorld = $this->clientWorldName;
-		$sequence = ++$this->dimensionTransitionSequence;
-		$this->finishDimensionTransition(PlayerDimensionChangeEvent::REPLACED);
-		if($sequence !== $this->dimensionTransitionSequence || $this->player->getWorld() !== $world){ return; }
-		$this->clientWorldName = $world->getFolderName();
-		$cache = ChunkCache::getInstance($world, $this->compressor);
-		$cache->setDimensionId($dimension);
-		$started = null;
-		if($dimension !== $this->clientDimension){
-			$this->clientDimension = $dimension;
-			$this->pendingDimensionChangeAck = true;
-			$this->beginDimensionTerrain($world);
-			$settings = $this->server->getDimensionManager()->getSettings();
-			$screenId = $this->getProtocolId() >= ProtocolInfo::PROTOCOL_1_21_20 ? ($sequence & 0x7fffffff) : null;
-			$started = $this->dimensionTransition = new DimensionTransition($sequence, $screenId, $sourceWorld, $world->getFolderName(), $dimension, microtime(true), $this->dimensionChangeTerrain["chunks"], $settings->transitionDiagnostics);
-			if(!$this->sendDataPacket(ChangeDimensionPacket::create($dimension, $this->player->getPosition(), false, $screenId))){
-				if($this->dimensionTransition === $started){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
-				return;
+		if($this->player !== null){
+			$world = $this->player->getWorld();
+			//another dimension: ChangeDimension; same dimension: a detour through another dimension so the client drops
+			//the previous world's terrain (ChangeDimension to the dimension the client is already in would leave it in
+			//an endless loading screen); a same-dimension switch during a change may wait for it to end. See
+			//ClientDimensionTracker.
+			$change = $this->dimensionTracker->onEnterWorld($world->getDimension(), !$this->player->isAlive(), $this->player->spawned);
+			if($change !== null){
+				$this->sendClientDimensionChange($change);
+			}elseif($this->dimensionTracker->holdsChunks()){
+				$this->logger->debug("Entered world " . $world->getFolderName() . " during a dimension change, completing the switch once it ends");
 			}
-			$this->traceDimension("begin source=" . ($sourceWorld ?? "unknown") . " dimension=$dimension screen_id=" . ($screenId ?? "none"));
-		}elseif($this->pendingDimensionChangeAck){
-			$this->beginDimensionTerrain($world);
+			$this->syncWorldState($world);
 		}
-		if($this->player->getWorld() !== $world || $sequence !== $this->dimensionTransitionSequence){ return; }
+	}
+
+	private function syncWorldState(World $world) : void{
 		$this->syncWorldTime($world->getTime());
-		$this->syncGameRules($world);
 		$this->syncWorldDifficulty($world->getDifficulty());
 		$this->syncWorldSpawnPoint($world->getSpawnLocation());
 		$weather = $world->getWeather();
 		$this->syncWorldWeather($weather->getRainLevel(), $weather->getLightningLevel());
-		if($started !== null && $this->dimensionTransition === $started){
-			(new PlayerDimensionChangeEvent($this->player, $started, PlayerDimensionChangeEvent::STARTED))->call();
-		}
+		$this->syncWorldGameRules($world);
 	}
 
-	/** Returns an isolated snapshot; modifying it cannot affect the session. */
-	public function getDimensionTransition() : ?DimensionTransition{
-		return $this->dimensionTransition === null ? null : clone $this->dimensionTransition;
-	}
-
-	/** @internal @return array<int, true> Only existing chunk requests should be prioritized. */
-	public function getDimensionArrivalChunks() : array{
-		return $this->dimensionChangeTerrain["chunks"] ?? [];
-	}
-
-	public function onClientDimensionChangeAck() : void{
-		$transition = $this->dimensionTransition;
-		if($transition === null){ return; }
-		if($transition->getServerAckAt() === null){
-			$this->traceDimension("client_ack ignored=server_ack_not_queued");
-			return;
-		}
-		$transition->recordClientAck(microtime(true));
-		$this->traceDimension("client_ack untagged=yes");
-		$this->completeObservedDimensionTransition();
-	}
-
-	public function onClientLoadingScreen(LoadingScreenType $type, ?int $screenId) : void{
-		$transition = $this->dimensionTransition;
-		if($transition === null){ return; }
-		if($type !== LoadingScreenType::START_LOADING_SCREEN && $type !== LoadingScreenType::STOP_LOADING_SCREEN){ return; }
-		$matched = $transition->recordScreen($type === LoadingScreenType::START_LOADING_SCREEN, $screenId, microtime(true));
-		$this->traceDimension("client_screen=" . $type->name . " screen_id=" . ($screenId ?? "none") . " matched=" . ($matched ? "yes" : "no"));
-		$this->completeObservedDimensionTransition();
-	}
-
-	private function completeObservedDimensionTransition() : void{
-		$transition = $this->dimensionTransition;
-		if($transition === null || $transition->getServerAckAt() === null){ return; }
-		if($transition->getScreenStoppedAt() !== null){
-			$this->finishDimensionTransition(PlayerDimensionChangeEvent::SCREEN_STOPPED);
-		}elseif($transition->getLoadingScreenId() === null && $transition->getClientAckAt() !== null){
-			$this->finishDimensionTransition(PlayerDimensionChangeEvent::CLIENT_ACKNOWLEDGED);
-		}
-	}
-
-	private function finishDimensionTransition(string $result) : void{
-		$transition = $this->dimensionTransition;
-		if($transition === null){ return; }
-		$this->traceDimension("end result=$result transport_receipts=" . $transition->getReceivedChunkCount() . "/9");
-		$this->dimensionTransition = null;
-		$transition->finish($result);
-		if($this->player !== null){
-			(new PlayerDimensionChangeEvent($this->player, $transition, $result))->call();
-		}
-	}
-
-	private function checkDimensionTransitionTimeout(float $now) : void{
-		if($this->dimensionTransition !== null && $now - $this->dimensionTransition->getStartedAt() >= $this->server->getDimensionManager()->getSettings()->transitionTimeoutSeconds){
-			$this->finishDimensionTransition(PlayerDimensionChangeEvent::TIMED_OUT);
-		}
-	}
-
-	private function traceDimension(string $message) : void{
-		$transition = $this->dimensionTransition;
-		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
-			$this->logger->debug(sprintf("Dimension trace #%d world=%s elapsed=%.3f %s", $transition->getId(), $transition->getTargetWorld(), microtime(true) - $transition->getStartedAt(), $message));
-		}
-	}
-
-	private function beginDimensionTerrain(World $world) : void{
-		$position = $this->player->getPosition();
-		$centerX = $position->getFloorX() >> Chunk::COORD_BIT_SIZE;
-		$centerZ = $position->getFloorZ() >> Chunk::COORD_BIT_SIZE;
-		$chunks = [];
-		for($x = $centerX - 1; $x <= $centerX + 1; ++$x){
-			for($z = $centerZ - 1; $z <= $centerZ + 1; ++$z){
-				$chunks[World::chunkHash($x, $z)] = true;
+	/**
+	 * Game rules of the world that the client applies itself (coordinates, days played, sun and moon, respawn
+	 * screen, keep inventory), see {@link GameRules::isSentToClients()}.
+	 *
+	 * @return ProtocolGameRule[]
+	 * @phpstan-return array<string, ProtocolGameRule>
+	 */
+	public static function getClientGameRules(World $world) : array{
+		$rules = [];
+		foreach(GameRules::getNames() as $name){
+			if(GameRules::isSentToClients($name)){
+				$value = $world->getGameRule($name);
+				$rules[$name] = is_bool($value) ? new BoolGameRule($value, false) : new IntGameRule($value, false);
 			}
 		}
-		$this->dimensionChangeTerrain = ["world" => $world, "chunks" => $chunks, "centerX" => $centerX, "centerZ" => $centerZ, "startedAt" => microtime(true)];
-		$this->logger->debug("Dimension transition to " . $world->getFolderName() . ": waiting for 9 arrival chunks");
+		return $rules;
 	}
 
-	private function onDimensionTerrainSent(World $world, int $chunkX, int $chunkZ) : void{
-		if($this->dimensionChangeTerrain === null || $this->dimensionChangeTerrain["world"] !== $world){
-			return;
-		}
-		unset($this->dimensionChangeTerrain["chunks"][World::chunkHash($chunkX, $chunkZ)]);
-		if($this->dimensionChangeTerrain["chunks"] === []){
-			$this->logger->debug(sprintf("Dimension transition to %s: arrival terrain queued in %.3f s, acknowledging change", $world->getFolderName(), microtime(true) - $this->dimensionChangeTerrain["startedAt"]));
-			$this->acknowledgeDimensionChange();
-		}
-	}
-
-	private function acknowledgeDimensionChange() : void{
-		if(!$this->pendingDimensionChangeAck || $this->player === null){
-			return;
-		}
-		$this->pendingDimensionChangeAck = false;
-		$this->dimensionChangeTerrain = null;
-		$blockPosition = BlockPosition::fromVector3($this->player->getPosition());
-		$packet = PlayerActionPacket::create($this->player->getId(), PlayerAction::DIMENSION_CHANGE_ACK, $blockPosition, $blockPosition, 0);
-		$transition = $this->dimensionTransition;
-		if($this->netherNetIdentityPublicKey === null && $transition !== null && $transition->hasDiagnostics()){
-			$this->sendDataPacketWithReceipt($packet)->onCompletion(function() use($transition) : void{
-				if($this->dimensionTransition === $transition){ $this->traceDimension("server_ack_transport_received"); }
-			}, function() use($transition) : void{
-				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
-			});
-		}else{
-			if(!$this->sendDataPacket($packet)){
-				if($this->dimensionTransition === $transition){ $this->finishDimensionTransition(PlayerDimensionChangeEvent::SEND_CANCELLED); }
-				return;
-			}
-		}
-		if($this->dimensionTransition === $transition){
-			$transition?->recordServerAck(microtime(true));
-			$this->traceDimension("server_ack_queued");
-			$this->completeObservedDimensionTransition();
-		}
-	}
-
-	public function syncGameRules(World $world) : void{
-		$this->sendDataPacket(\pocketmine\network\mcpe\protocol\GameRulesChangedPacket::create($world->getGameRules()->toNetwork()));
+	public function syncWorldGameRules(World $world) : void{
+		$this->sendDataPacket(GameRulesChangedPacket::create(self::getClientGameRules($world)));
 	}
 
 	public function syncWorldTime(int $worldTime) : void{
 		$this->sendDataPacket(SetTimePacket::create($worldTime));
 	}
 
-	/** Vanilla rain and thunder levels, encoded separately for each session protocol. */
+	/**
+	 * Sends the rain and thunder state: START_RAIN/START_THUNDER carry the intensity (0-65535), 0 stops them.
+	 *
+	 * @param float $rainLevel      0.0 - 1.0
+	 * @param float $lightningLevel 0.0 - 1.0
+	 */
 	public function syncWorldWeather(float $rainLevel, float $lightningLevel) : void{
-		$rainPacket = LevelEventPacket::create($rainLevel > 0 ? LevelEvent::START_RAIN : LevelEvent::STOP_RAIN, (int) ($rainLevel * 65535), null);
-		$thunderPacket = LevelEventPacket::create($lightningLevel > 0 ? LevelEvent::START_THUNDER : LevelEvent::STOP_THUNDER, (int) ($lightningLevel * 65535), null);
-		//Some Bedrock clients may drop the visual rain state when STOP_THUNDER
-		//arrives after START_RAIN. Send the active weather state last.
-		if($lightningLevel <= 0.0){
-			$this->sendDataPacket($thunderPacket);
-			$this->sendDataPacket($rainPacket);
-		}else{
-			$this->sendDataPacket($rainPacket);
-			$this->sendDataPacket($thunderPacket);
-		}
+		$this->sendDataPacket($rainLevel > 0 ?
+			LevelEventPacket::create(LevelEvent::START_RAIN, (int) ($rainLevel * 65535), null) :
+			LevelEventPacket::create(LevelEvent::STOP_RAIN, 0, null)
+		);
+		$this->sendDataPacket($lightningLevel > 0 ?
+			LevelEventPacket::create(LevelEvent::START_THUNDER, (int) ($lightningLevel * 65535), null) :
+			LevelEventPacket::create(LevelEvent::STOP_THUNDER, 0, null)
+		);
 	}
 
 	public function syncWorldDifficulty(int $worldDifficulty) : void{
@@ -1738,16 +2111,46 @@ class NetworkSession{
 	}
 
 	/**
+	 * 1.26.40+: the vanilla client expects the player list to carry the skin as the client originally sent it (persona
+	 * pieces, profile hash, ...) and the real device platform, so echo the login data back where we have it.
+	 */
+	private function createPlayerListEntry(Player $player) : PlayerListEntry{
+		$info = $player->getPlayerInfo();
+		$extraData = $info->getExtraData();
+		$deviceOs = $extraData["DeviceOS"] ?? -1;
+		//1.26.52 only knows Google, iOS, OSX, Amazon, Win32, Dedicated, Sony, Nintendo, Xbox, Linux and Unknown: a client
+		//that gets any other value (the old Windows 10 UWP 7, Gear VR, HoloLens, tvOS, Windows Phone) in another player's
+		//entry disconnects on the spot. Plugins and fake players still send 7, so map the rest to Unknown.
+		if(!is_int($deviceOs) || !in_array($deviceOs, self::VALID_BUILD_PLATFORMS, true)){
+			$deviceOs = -1;
+		}
+		$platformOnlineId = $extraData["PlatformOnlineId"] ?? "";
+		$skin = $player->getSkin();
+		//the login skin as the client sent it, unless the player has changed skin since
+		$loginSkinData = $skin === $info->getSkin() ? $info->getNetworkSkinData() : null;
+		return PlayerListEntry::createAdditionEntry(
+			$player->getUniqueId(),
+			$player->getId(),
+			$player->getDisplayName(),
+			$loginSkinData ?? $this->typeConverter->getSkinAdapter()->toSkinData($skin),
+			$player->getXuid(),
+			is_string($platformOnlineId) ? $platformOnlineId : "",
+			$deviceOs
+		);
+	}
+
+	/** Build platforms the 1.26.52 client accepts in a PlayerListPacket entry (BuildPlatform enum of the protocol docs) */
+	private const VALID_BUILD_PLATFORMS = [-1, 1, 2, 3, 4, 8, 9, 11, 12, 13, 15];
+
+	/**
 	 * @param Player[] $players
 	 */
 	public function syncPlayerList(array $players) : void{
-		$this->sendDataPacket(PlayerListPacket::add(array_map(function(Player $player) : PlayerListEntry{
-			return PlayerListEntry::createAdditionEntry($player->getUniqueId(), $player->getId(), $player->getDisplayName(), $this->typeConverter->coreSkinToNet($player->getSkin()), $player->getXuid());
-		}, $players)));
+		$this->sendDataPacket(PlayerListPacket::add(array_map($this->createPlayerListEntry(...), array_values($players))));
 	}
 
 	public function onPlayerAdded(Player $p) : void{
-		$this->sendDataPacket(PlayerListPacket::add([PlayerListEntry::createAdditionEntry($p->getUniqueId(), $p->getId(), $p->getDisplayName(), $this->typeConverter->coreSkinToNet($p->getSkin()), $p->getXuid())]));
+		$this->sendDataPacket(PlayerListPacket::add([$this->createPlayerListEntry($p)]));
 	}
 
 	public function onPlayerRemoved(Player $p) : void{
@@ -1795,13 +2198,40 @@ class NetworkSession{
 		));
 	}
 
+	public function setLastPlayerInputTick(int $tick) : void{
+		$this->lastPlayerInputTick = $tick;
+	}
+
+	/**
+	 * Tells the client about a firework boost while gliding, so it can predict its own movement for the given duration.
+	 */
+	public function onGlideBoost(int $durationTicks) : void{
+		if($this->player !== null){
+			$this->sendDataPacket(MovementEffectPacket::create(
+				$this->player->getId(),
+				MovementEffectType::GLIDE_BOOST,
+				$durationTicks,
+				$this->lastPlayerInputTick
+			));
+		}
+	}
+
+	public function onChargeItemComplete() : void{
+		if($this->player !== null){
+			$this->sendDataPacket(ActorEventPacket::create(
+				$this->player->getId(),
+				ActorEvent::CHARGED_ITEM,
+				0,
+				null
+			));
+		}
+	}
+
 	public function tick() : void{
 		if(!$this->isConnected()){
 			$this->dispose();
 			return;
 		}
-
-		$this->checkDimensionTransitionTimeout(microtime(true));
 
 		if($this->info === null){
 			if(time() >= $this->connectTime + 10){
@@ -1811,8 +2241,13 @@ class NetworkSession{
 			return;
 		}
 
+		$this->spawnTerrainPrefetch?->tick();
+
 		if($this->player !== null){
-			$this->player->doChunkRequests();
+			if(!$this->dimensionTracker->holdsChunks()){
+				//chunks of the new world must wait for the client to come back from the detour of a world switch
+				$this->player->doChunkRequests();
+			}
 
 			$dirtyAttributes = $this->player->getAttributeMap()->needSend();
 			$this->entityEventBroadcaster->syncAttributes([$this], $this->player, $dirtyAttributes);
@@ -1821,6 +2256,8 @@ class NetworkSession{
 				//if that happens, this will need to become more complex than a flag on the attribute itself
 				$attribute->markSynchronized();
 			}
+
+			$this->tickDimensionChange();
 		}
 		Timings::$playerNetworkSendInventorySync->startTiming();
 		try{
@@ -1832,6 +2269,3 @@ class NetworkSession{
 		$this->flushGamePacketQueue();
 	}
 }
-
-
-

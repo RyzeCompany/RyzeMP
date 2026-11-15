@@ -23,7 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\block\tile;
 
+use pocketmine\math\Vector3;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\world\World;
 
 /**
  * @deprecated
@@ -33,6 +35,12 @@ use pocketmine\nbt\tag\CompoundTag;
  * understand daylight sensors in worlds created by PM.
  */
 class DaylightSensor extends Tile{
+
+	public function __construct(World $world, Vector3 $pos){
+		parent::__construct($world, $pos);
+		//scheduled block updates are not saved: (re)start the sensor's update loop when it is placed or loaded
+		$world->scheduleDelayedBlockUpdate($pos, 1);
+	}
 
 	public function readSaveData(CompoundTag $nbt) : void{
 

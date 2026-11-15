@@ -26,6 +26,8 @@ namespace pocketmine\entity\effect;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Human;
 use pocketmine\entity\Living;
+use function max;
+use function min;
 
 class SaturationEffect extends InstantEffect{
 
@@ -33,7 +35,8 @@ class SaturationEffect extends InstantEffect{
 		if($entity instanceof Human){
 			$manager = $entity->getHungerManager();
 			$manager->addFood($instance->getEffectLevel());
-			$manager->addSaturation($instance->getEffectLevel() * 2);
+			//saturation can't exceed the food level
+			$manager->setSaturation(max(0.0, min($manager->getSaturation() + $instance->getEffectLevel() * 2, $manager->getFood())));
 		}
 	}
 }

@@ -99,5 +99,15 @@ class DaylightSensor extends Transparent implements AnalogRedstoneSignalEmitter{
 		return max(0, (int) round($lightLevel * cos(($sunAngle + ((($sunAngle < 0.5 ? 0 : 1) - $sunAngle) / 5)) * 2 * M_PI)));
 	}
 
-	//TODO
+	public function isRedstoneSource() : bool{
+		return true;
+	}
+
+	public function getWeakPower(int $face) : int{
+		return $this->signalStrength;
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
+	}
 }

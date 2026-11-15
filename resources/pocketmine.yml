@@ -3,23 +3,29 @@
 # Some of these settings are safe, others can break your server if modified incorrectly
 # New settings/defaults won't appear automatically in this file when upgrading.
 
+# Existing pocketmine.yml files are never replaced by server upgrades.
+# Existing custom values are kept; missing new options use safe runtime defaults.
+
 fishing:
+  # Compatibility with older RyzeMP installations; the other former fishing
+  # timing/pull settings were replaced by vanilla fishing mechanics.
   enabled: true
-  # Also requires pvp=true in server.properties. Hooks do not deal damage.
   pvp-enabled: true
-  max-distance: 24
-  cooldown-ticks: 10
-  pull-strength: 0.6
-  pull-vertical: 0.2
-  # 20 ticks = 1 second. Reel during the splash/bob to catch a fish.
-  bite-wait-min-ticks: 100
-  bite-wait-max-ticks: 300
-  bite-window-ticks: 30
-  lifetime-ticks: 2400
+  max-distance: 32
+#
+# Resource profile: performance-profile in server.properties chooses between "performance" (default: more memory and
+# CPU kept ready for a smoother server) and "economy" (as little memory and CPU as possible). Both play exactly the
+# same (same gameplay, mobs, terrain and view distance); economy gives memory back sooner and keeps fewer helpers
+# running, so new chunks can take a little longer to appear. The settings marked [profile] below follow the
+# profile while they keep the value written here (the performance value): set any other value to override the
+# profile for that setting.
 
 settings:
   #Whether to send all strings translated to server locale or let the device handle them
   force-language: false
+  #Translate server-side messages (join/quit, kicks, command output...) to each player's game language
+  #instead of the server language, when a translation for it exists. The console always uses the server language.
+  per-player-language: true
   shutdown-message: "Server closed"
   #Allow listing plugins via Query
   query-plugins: true
@@ -30,7 +36,10 @@ settings:
   #Number of AsyncTask workers.
   #Used for plugin asynchronous tasks, world generation, compression and web communication.
   #Set this approximately to your number of cores.
-  #If set to auto, it'll try to detect the number of cores (or use 2)
+  #If set to auto, it'll try to detect the number of cores: cores - 2, at least 2 and at most 4, counting only the
+  #cores the CPU limit or CPU pinning of the container (Docker, Pterodactyl...) allows. Every worker that generates
+  #vanilla terrain holds its own copy of the generator (~150-200 MB of RAM), so a higher number costs memory as well
+  #as CPU. [profile] With auto, the economy resource profile uses at most 2 workers instead of 4.
   async-workers: auto
   #Whether to allow running development builds. Dev builds might crash, break your plugins, corrupt your world and more.
   #It is recommended to avoid using development builds where possible.
@@ -49,10 +58,25 @@ memory:
   #This will stop the server when the limit is surpassed
   main-hard-limit: 1024
 
+  #When main-limit is 0: low memory starts when the main thread uses this percentage of main-hard-limit (0 = never).
+  #The hard limit counts the memory PHP took from the system, which with many chunks loaded and unloaded is 15-25%
+  #more than the memory in use, so without a soft limit the server can stop with only ~80% of the limit in use.
+  #On low memory the view distance is lowered step by step (see max-chunks.chunk-radius) and chunks out of view are
+  #unloaded at once; the view distance comes back step by step once the memory use stays well under this level.
+  auto-main-limit-percent: 70
+
   #AsyncWorker threads' hard memory limit in megabytes. Set to 0 to disable
   #This will crash the task currently executing on the worker if the task exceeds the limit
   #NOTE: THIS LIMIT APPLIES PER WORKER, NOT TO THE WHOLE PROCESS.
-  async-worker-hard-limit: 256
+  async-worker-hard-limit: 384
+
+  #AsyncWorker threads that have had no task for this many seconds are shut down, giving their memory back (a worker
+  #that generated vanilla terrain holds ~150-200 MB); they are started again when needed. Checked every minute and at
+  #the periodic garbage collection (garbage-collection.period). On low memory and with /gc, the workers idle for 300
+  #seconds are shut down whatever this is. Set to 0 to shut them down (after 300 seconds) only at the periodic garbage
+  #collection, on low memory or with /gc.
+  #[profile] economy: 60.
+  async-worker-idle-timeout: 300
 
   #Period in ticks to check memory (default 1 second)
   check-rate: 20
@@ -68,13 +92,28 @@ memory:
     #This only affects the main thread. Other threads should fire their own collections
     period: 36000
 
+    #Number of possible roots at which the main thread runs the cyclic garbage collector. A collection walks most of the
+    #heap whatever this number is (a few hundred milliseconds on a busy server), so a high value means fewer pauses of
+    #about the same length; it keeps a little more garbage (well under 1 MB per million roots) and 8 bytes per root.
+    #The threshold adapts between these bounds like PHP's own collector (PHP: 10001 to 1000000000).
+    cycle-threshold-min: 1000000
+    cycle-threshold-max: 4000000
+
+    #Number of possible roots at which the main thread collects early, while the server has spare time (on average
+    #under 60% of the tick time used, and the current tick in its first half). A collection then is smaller, and the
+    #longer ones at cycle-threshold-min only happen while the server is busy. After an early collection taking over
+    #100 ms (big heap: it would cost more CPU without much shorter pauses) they stop until the next periodic collection.
+    #Set to 0 to disable.
+    cycle-threshold-spare-time: 200000
+
   #Settings controlling memory dump handling.
   memory-dump:
     #Dump memory from async workers as well as the main thread. If you have issues with segfaults when dumping memory, disable this setting.
     dump-async-worker: true
 
   max-chunks:
-    #Cap maximum render distance per player when low memory is triggered. Set to 0 to disable cap.
+    #Smallest view distance cap while on low memory. Every low memory trigger lowers the cap by 2 chunks down to this;
+    #it is raised by 1 chunk per minute of memory use well under the low memory level. Set to 0 to disable cap.
     chunk-radius: 4
 
 network:
@@ -82,7 +121,15 @@ network:
   #Set to 0 to compress everything, -1 to disable.
   batch-threshold: 256
   #Compression level used when sending batched packets. Higher = more CPU, less bandwidth usage
-  compression-level: 6
+  #1 compresses about twice as fast as 6: movement batches come out the same size and chunks ~10% bigger. With many
+  #players the main thread spends several ms per tick compressing at level 6.
+  compression-level: 1
+  #Compress the packet batches of the sessions in a dedicated thread instead of the main thread. With many players
+  #close together this is one of the biggest costs of the main thread (every movement is sent to every viewer).
+  #The batches are sent as soon as the thread is done with them (usually while the main thread waits for the next
+  #tick). Off by default: players noticed a delay on every action (breaking blocks, joining) with it on (see
+  #PERF-NETWORK.md); when false the batches are compressed on the main thread (or in AsyncTasks, see async-compression).
+  compression-thread: false
   #Use AsyncTasks for compression during the main game session. Increases latency, but may reduce main thread load
   async-compression: false
   #Threshold for async compression, in bytes. Only packets larger than this will be compressed asynchronously
@@ -93,9 +140,71 @@ network:
   #Maximum size in bytes of packets sent over the network (default 1492 bytes). Packets larger than this will be
   #fragmented or split into smaller parts. Clients can request MTU sizes up to but not more than this number.
   max-mtu-size: 1492
+  #RakNet anti-spoofing cookies: the server only accepts connection requests that echo a cookie derived from the
+  #client's address, so attackers can't open sessions with spoofed IPs. Off by default: some providers' DDoS
+  #protection (e.g. OVH's game firewall) rewrites RakNet handshakes and is known to break with these checks.
+  raklib-anti-spoofing-cookies: false
+  #Protection against connection floods. The defaults are generous on purpose: players with slow or lossy connections
+  #(high ping, mobile data) take several seconds to join, and many players can share one IP address (mobile carriers,
+  #schools, LAN parties, cafés, proxies). Players who are already connected are never kicked by these limits: when one is
+  #reached, new connections are refused until the server is below it again. Every refusal is logged at debug level
+  #(debug.level 2), at most one line every 5 seconds, so you can check for false positives. 0 disables a limit.
+  connection-limits:
+    #Maximum connections from one IP address (IPv6: one /64 network) that have not sent their login yet (RakNet and
+    #NetherNet). Players who logged in do not count, so this only limits how many players of one address connect at the
+    #very same moment.
+    pending-logins-per-ip: 32
+    #IP addresses or networks (e.g. "203.0.113.7", "10.0.0.0/8") exempt from the per-address limits: proxies that
+    #forward many players from one address (WaterdogPE, VanillaGate). Players joining through pm-proxy never count.
+    exempt-addresses: []
+    #Maximum replies to RakNet server list pings per second, from all addresses together. A reply is several times
+    #bigger than a ping and UDP addresses can be spoofed, so without a limit the server can be abused to flood others.
+    #Pings above it get no reply (the client asks again a moment later).
+    raknet-pongs-per-second: 1000
+    #NetherNet: maximum joins in progress (from the first request until the encrypted connection is up, or has failed),
+    #from all addresses together and from one address (IPv6: one /64 network), so one address cannot block the joins of
+    #everyone else. Joins above them are refused. While half of nethernet-pending-joins are in use (an attack), each
+    #address only gets an eighth of nethernet-pending-joins-per-ip.
+    nethernet-pending-joins: 256
+    nethernet-pending-joins-per-ip: 32
+    #NetherNet: maximum connections, in total and per address (off by default: many players can share an address).
+    nethernet-max-connections: 2048
+    nethernet-max-connections-per-ip: 0
+    #NetherNet: new joins are refused while more than this much data (MB) waits to be delivered to all clients together
+    #(clients that stop receiving are disconnected above 32 MB each).
+    nethernet-max-buffered-mb: 1024
+    #NetherNet sharing the UDP port without RakNet: maximum Query requests per second handed to the server, from all
+    #addresses together (each address is also limited to 20 per second).
+    query-per-second: 200
   #Enable encryption of Minecraft network traffic. This has an impact on performance, but prevents hackers from stealing sessions and pretending to be other players.
   #DO NOT DISABLE THIS unless you understand the risks involved.
   enable-encryption: true
+  #Minecraft Bedrock 1.26.50+ uses NetherNet (WebRTC). RyzeMP uses RyzeRTC API 2
+  #exclusively, loaded externally from the Egg. No pm-nethernet process or additional
+  #public UDP port is needed. RakLib and RyzeRTC use the same server-port (TCP+UDP).
+  #The operator identity is stored in nethernet/operator-key.pem; preserve it.
+  nethernet:
+    #Optional HTTPS on the SAME server-port: existing PEM files are loaded for new
+    #connections, so external certificate renewals do not need a server restart.
+    #Without a trusted certificate Android/Windows retry over HTTP. iOS requires
+    #a valid HTTPS certificate for the exact address used to join.
+    #RyzeRTC does not issue ACME certificates itself yet. For Let's Encrypt, use
+    #certificates provided by your hosting panel or an external ACME/DNS provider.
+    https:
+      certificate: ""
+      private-key: ""
+  #Run behind pm-proxy, the VanillaMine Bedrock proxy. The proxy owns the player connections, checks Xbox Live and
+  #sends each player here over pm-link with a ticket signed by its key. With this enabled the server opens no RakNet
+  #or NetherNet port and players can only join through a trusted proxy.
+  proxy:
+    enabled: false
+    #Address and TCP port pm-proxy connects to (servers.<name>.address in its config.yml). Keep this port private:
+    #firewall it so that only the proxy can reach it.
+    listen: "127.0.0.1:19200"
+    #Name of this server in the proxy's configuration (servers.<name>). Tickets for other servers are refused.
+    server-name: "lobby-1"
+    #Public keys of the proxies allowed to connect, as printed by pm-proxy at startup.
+    public-keys: []
 
 debug:
   #If > 1, it will show debug messages in the console
@@ -107,13 +216,38 @@ player:
   #If true, checks that joining players' Xbox user ID (XUID) match what was previously recorded.
   #This also prevents non-XBL players using XBL players' usernames to steal their data on servers with xbox-auth=off.
   verify-xuid: true
+  #When a player moves between two worlds of the same dimension (e.g. two Overworld worlds), the client keeps the
+  #previous world's terrain wherever the new world doesn't send chunks (outside its view area, void worlds, chunks still
+  #generating). If true, the player is sent through another dimension and back (two short dimension loading screens)
+  #so the client drops it. Plugins can change it per player with NetworkSession::setClearTerrainOnWorldChange().
+  clear-terrain-on-world-change: true
+  #A player's movement is sent less often to players who are far away from them, which saves a lot of CPU and bandwidth
+  #with many players around (every movement otherwise goes to every viewer, every tick). The client smooths the
+  #movement of distant players, so this is hard to notice. Viewers within full-rate-distance blocks get every update,
+  #up to half-rate-distance every 2nd tick, and beyond that every 4th tick. The final position when a player stops is
+  #always sent to everyone. Set full-rate-distance to -1 to send every update to every viewer.
+  movement-broadcast:
+    full-rate-distance: 24
+    half-rate-distance: 48
+  #The locator bar (game rule locatorbar) shows the direction of the other players of the world. The client places the
+  #players it can see by itself; the server sends the position of the farther ones once per second, and only when they
+  #moved. Set to false to never send them (players in view still show while the game rule is on).
+  locator-bar: true
+  #In hardcore mode (hardcore=on in server.properties) players who die become spectators, like in vanilla. Set to true
+  #to kick and ban them instead (PocketMine-MP behaviour before VanillaMine).
+  hardcore-ban-on-death: false
+  #Knockback of players' melee hits, for Bedrock and Java players alike.
+  #pmmp: exactly like PocketMine-MP 5.44.3 (0.4 push, Knockback enchantment as a second push, no extra push for a
+  #sprinting attacker, no knockback resistance from netherite armour).
+  #vanilla: like vanilla Minecraft (a sprinting attacker pushes one Knockback level further, in the same push as the
+  #enchantment, and each netherite armour piece resists 10% of the knockback).
+  #In both modes, a knockback or vertical limit set by a plugin (EntityDamageByEntityEvent::setKnockBack(),
+  #setVerticalKnockBackLimit()) is applied as it is, without the vanilla extras on top.
+  knockback: pmmp
 
 level-settings:
   #The default format that worlds will use when created
   default-format: leveldb
-  #The minimum Y level an entity can go before taking damage from the void
-  #Default PM sets this as -80 but NetherGames makes this configurable and the default is 0
-  min-y: 0
 
 chunk-sending:
   #To change server normal render distance, change view-distance in server.properties.
@@ -121,10 +255,20 @@ chunk-sending:
   per-tick: 4
   #Radius of chunks that need to be sent before spawning the player
   spawn-radius: 4
+  #Faster joins: the chunks of the spawn radius are loaded and prepared while the player is still logging in, and
+  #sent faster than per-tick until the player spawns (only while that is cheap: within a few milliseconds per tick).
+  #The same chunks are sent in the same order; set false to send them at the per-tick rate after the client asks.
+  fast-spawn: true
 
 chunk-ticking:
-  #Radius of chunks around a player to tick
+  #Radius of chunks around a player in which blocks get random ticks (never more than simulation-distance)
   tick-radius: 3
+  #Radius of chunks around a player in which entities are ticked ("simulation distance" of Bedrock worlds; Bedrock
+  #Dedicated Server uses 4). Entities further away stay loaded and visible but frozen, as in vanilla (projectiles in
+  #flight are the exception: a thrown ender pearl keeps flying until it lands). 0 = tick the
+  #entities of every loaded chunk (PocketMine-MP before this setting). Mobs run their AI within this radius of a player
+  #(at least 64 blocks; 64 with 0).
+  simulation-distance: 4
   #Number of blocks inside ticking areas' subchunks that get ticked every tick. Higher values will accelerate events
   #like tree and plant growth, but at a higher performance cost.
   blocks-per-subchunk-per-tick: 3
@@ -137,15 +281,146 @@ chunk-ticking:
 chunk-generation:
   #Max. amount of chunks in the waiting queue to be populated
   population-queue-size: 32
+  #Number of async workers that generate chunks (the first ones). Each one holds its own copy of the world
+  #generators: ~135 MB for a vanilla world (~30 MB for the other generators). More workers generate faster when
+  #players explore a lot, at the cost of that memory each. 0 = all async workers.
+  #Other async tasks (plugins, chunk sending, lighting...) go to one of the other workers when it is running and idle,
+  #and to the generation workers otherwise (no worker is started for this): long-running async tasks of plugins can
+  #still delay generation when the other workers are busy or not running. [profile] economy: 1.
+  max-workers: 2
+  #The "vanilla" world generator computes the terrain shape with a small native program (vanillagen) that the server
+  #starts by itself, several times faster than PHP. If it is missing or fails, the PHP implementation is used instead
+  #(same worlds, slower).
+  vanilla-native:
+    enabled: true
+    #Path of the vanillagen program. Empty = use the one shipped for this platform.
+    binary: ""
+
+loot-tables:
+  #Vaults, trial spawners, decorated pots, suspicious sand/gravel and loot chests roll the vanilla loot tables, read
+  #from Minecraft Java Edition data that is (c) Mojang and never shipped with the server. A vanilla world brings it
+  #(vanilla-worldgen/ in the working directory). Without one, the server downloads Mojang's official server.jar once
+  #in the background at startup (~60 MB, nothing waits for it) and keeps only the loot tables (~2 MB) in
+  #vanilla-worldgen/. Set to false to disable the download: loot then rolls only once that data exists.
+  auto-download: true
 
 ticks-per:
   autosave: 6000
 
+auto-save:
+  #Milliseconds per tick an autosave may spend saving chunks and player data. Instead of stopping the server for
+  #seconds, the save is spread over the next ticks (more is done per tick when needed to finish within a minute), and
+  #chunks that did not change since they were last saved are skipped. 0 = save everything in one tick.
+  #Stopping the server, unloading a world and /save-all always save everything at once.
+  tick-budget-ms: 5
+
+redstone:
+  #Set to false to disable redstone power (wire, torches, repeaters, comparators and the blocks they power).
+  #Levers, buttons and pressure plates still change state, but nothing reacts to them.
+  enabled: true
+  #Maximum number of redstone wire blocks recalculated per world per tick. Work above this limit is deferred to the
+  #next tick. This protects the server from huge circuits and update storms, at the cost of slowing them down.
+  max-wire-updates-per-tick: 20000
+
+mobs:
+  #Set to false to disable mob AI (mobs stand still) and natural spawning.
+  enabled: true
+  #Worlds (folder names) without mobs: like enabled: false, but only in these worlds. Example: [lobby, spawn]
+  #To only stop mobs spawning naturally in a world, use /gamerule domobspawning false in it instead.
+  disabled-worlds: []
+  #Maximum number of mobs which may evaluate their goals (wander, look for a target, breed...) per tick, server-wide.
+  #Mobs over the limit keep doing what they were doing and think on a later tick.
+  max-ai-updates-per-tick: 200
+  #Maximum number of path searches (A*) per tick, server-wide. Searches over the limit are retried on the next ticks.
+  max-path-searches-per-tick: 10
+  #Maximum number of blocks explored by one path search. Higher values find longer paths around obstacles, at a
+  #higher CPU cost.
+  max-path-nodes: 400
+  #Mobs never target the NPCs of plugins (a living entity of a plugin class that has any name, stands still for
+  #clients or is not saved with the world: shopkeepers, menus, lobby mobs), e.g. zombies do not chase a shop NPC that
+  #looks like a villager. Plugins can also decide for each
+  #target with EntityTargetEvent (like Paper's EntityTargetEvent). Set to false to let mobs target them.
+  ignore-plugin-npcs: true
+  #Like player.movement-broadcast, for mobs: viewers within full-rate-distance blocks get every movement update, up to
+  #half-rate-distance every 2nd tick, and beyond that every 4th tick. The final position when a mob stops is always
+  #sent to everyone. Only what distant clients see changes (smoothness), not what the mobs do. -1 = every update to
+  #every viewer.
+  movement-broadcast:
+    full-rate-distance: 24
+    half-rate-distance: 48
+  spawning:
+    #Set to false to stop mobs spawning naturally around players (spawn eggs and plugins still work).
+    enabled: true
+    #"vanilla": Bedrock's spawning algorithm with Mojang's spawn rules (every mob in its biomes, light levels, herds,
+    #population caps per 9x9 chunks, slime chunks, phantoms...). "legacy": the old simplified spawning of 8 mobs, set
+    #up by hostile-interval, passive-interval, hostile-cap and passive-cap below.
+    mode: vanilla
+    #Download Mojang's official spawn rules (Mojang/bedrock-samples, about 270 KB, once, checked against fixed
+    #SHA-256 hashes) into <server data>/bedrock-spawn-rules. They are (c) Mojang and not shipped with the server.
+    #Until they are available, or if this is false, only the common Overworld mobs spawn (zombie, skeleton, creeper,
+    #spider, cow, pig, sheep, chicken) with their vanilla rules.
+    vanilla-rules: true
+    #Chance per tick (out of 2000) that a ticking chunk runs a spawn attempt (vanilla Bedrock: 11). The chunks are
+    #those within chunk-ticking.tick-radius of players (Bedrock's simulation distance).
+    chunk-chance: 11
+    #Maximum number of spawn attempts per tick and world, to bound the cost with many players.
+    max-attempts-per-tick: 32
+    #Maximum number of naturally spawned mobs per world (vanilla Bedrock: 200).
+    global-cap: 200
+    #Whether every mob that is not persistent counts towards the population caps: mobs from spawn eggs, spawners and
+    #breeding, and the mobs of plugins (e.g. a mob plugin with its own spawning, which then shares the caps instead of
+    #doubling the mobs). false = only naturally spawned mobs count (like Paper's count-all-mobs-for-spawning: false).
+    #Persistent mobs and plugin NPCs (see mobs.ignore-plugin-npcs) never count, like name-tagged mobs in vanilla.
+    count-all-mobs-for-spawning: true
+    #Population caps per 9x9 chunks, per population type (vanilla Bedrock values when -1: animal 4, monster 8 on the
+    #surface and 16 underground, ambient 2 underground, water_animal 36, pillager 8). A value replaces both the surface
+    #and the underground cap of that type.
+    spawn-limits:
+      animal: -1
+      monster: -1
+      ambient: -1
+      water_animal: -1
+      pillager: -1
+    #Mobs spawn between 24 and this many blocks from the nearest player. 0 = vanilla: 44 with a chunk tick radius of
+    #4 or less (Bedrock simulation distance 4), otherwise up to 128.
+    max-distance: 0
+    #Naturally spawned mobs despawn instantly beyond this distance from every player (they also despawn randomly
+    #beyond 32 blocks). 0 = vanilla: 44 with a chunk tick radius of 4 or less, otherwise 128 (fish: 40).
+    instant-despawn-distance: 0
+    #Phantoms spawn above players who have not slept (or died) for 3 days (Bedrock doinsomnia).
+    phantoms: true
+    #Wandering traders visit players (and their village bells) with two trader llamas.
+    wandering-traders: true
+    #Villages with claimed beds get stray cats (one per 4 beds, at most 5).
+    village-cats: true
+    #Legacy mode only: ticks between spawn attempts for hostile mobs (at night and in dark places) and for passive
+    #animals.
+    hostile-interval: 20
+    passive-interval: 400
+    #Legacy mode only: maximum number of hostile and passive mobs within 64 blocks of each player.
+    hostile-cap: 20
+    passive-cap: 10
+    patrols:
+      #Pillager patrols: groups of 2-5 pillagers led by a captain carrying the ominous banner, spawned on the surface
+      #24-48 blocks from a player where the light level is 7 or less, in Overworld biomes except mushroom fields.
+      enabled: true
+      #Ticks between two spawn attempts (vanilla Bedrock: 12000-13200, i.e. 10-11 minutes).
+      min-interval: 12000
+      max-interval: 13200
+      #Chance (percent) that an attempt spawns a patrol (vanilla Bedrock: 20).
+      chance: 20
+      #Age of the world (ticks it has run, not changed by /time) before patrols spawn (vanilla Bedrock: 120000, 6000 s).
+      min-world-time: 120000
+  raids:
+    #Set to false to disable raids: Bad Omen no longer turns into Raid Omen in villages.
+    enabled: true
+
 auto-report:
-  #Send crash reports for processing
+  #Off by default: crash reports may contain plugins and server settings.
+  #Opt in explicitly only after reviewing the destination and payload.
   enabled: false
-  send-code: true
-  send-settings: true
+  send-code: false
+  send-settings: false
   send-phpinfo: false
   use-https: true
   host: crash.pmmp.io
@@ -156,14 +431,17 @@ anonymous-statistics:
   host: stats.pocketmine.net
 
 auto-updater:
+  #RyzeMP publishes updates through official GitHub Releases and the Pterodactyl Egg.
+  #The inherited VanillaMine/PocketMine update API is NOT a RyzeMP update source.
+  #Do not automatically contact an unrelated update server.
   enabled: false
   on-update:
     warn-console: true
-  #Can be development, alpha, beta or stable.
+  #Can be development, alpha, beta or stable (for a custom compatible API).
   preferred-channel: stable
-  #If using a development version, it will suggest changing the channel
-  suggest-channels: true
-  host: update.pmmp.io
+  suggest-channels: false
+  #Optional: only set if you operate a trusted RyzeMP-compatible HTTPS update API.
+  host: ""
 
 timings:
   #Choose the host to use for viewing your timings results.
@@ -216,9 +494,33 @@ worlds:
   # seed: 404
   # generator: FLAT
   # preset: 2;bedrock,59xstone,3xdirt,grass;1
+  # dimension: overworld #overworld, nether or end; defaults to the generator's (nether -> nether, the_end -> end)
+  # bonus-chest: false #true to place a chest with starting items near the spawn of the new world
+
+dimensions:
+  #Set to true to create "<world>_nether" and "<world>_the_end" next to the default world at startup, and to
+  #generate the linked Nether/End world of any other world the first time a portal needs it.
+  #Portals only work when the linked world exists or can be generated.
+  enabled: false
+
+creative:
+  #Set to true to show the Education Edition content in the creative inventory, like a vanilla world with the
+  #"Education Edition" option: elements, compounds, chemistry tables, hardened glass, coloured and underwater torches,
+  #underwater TNT, heat blocks, ice bombs, bleach, medicine, balloons, glow sticks, sparklers and super fertilizer.
+  #The items exist either way (commands, plugins and old worlds can still use them).
+  education-items: false
 
 plugins:
   #Setting this to true will cause the legacy structure to be used where plugin data is placed inside the --plugins dir.
   #False will place plugin data under plugin_data under --data.
   #This option exists for backwards compatibility with existing installations.
   legacy-data-dir: false
+  #Uncaught exceptions/errors thrown by plugin code (event handlers, tasks, commands, async task completions,
+  #form responses...) are logged with the plugin's name and the stack trace, and the server keeps running.
+  #Exceptions which can't be blamed on a plugin (core bugs) still crash the server.
+  #Set this to true to crash the server on any plugin exception instead (the old PocketMine-MP behaviour).
+  crash-on-unhandled-exception: false
+  #A plugin which throws this many unhandled exceptions within error-window-seconds is disabled.
+  #Set to 0 to never disable plugins automatically.
+  disable-after-errors: 10
+  error-window-seconds: 60

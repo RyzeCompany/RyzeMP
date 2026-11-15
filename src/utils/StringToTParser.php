@@ -44,10 +44,21 @@ abstract class StringToTParser{
 	 */
 	private array $callbackMap = [];
 
+	/**
+	 * Built-in aliases that a later register() or registerAlias() of the same name leaves in place instead of failing.
+	 * @var true[]
+	 * @phpstan-var array<string, true>
+	 */
+	private array $keepBuiltIn = [];
+
 	/** @phpstan-param \Closure(string $input) : T $callback */
 	public function register(string $alias, \Closure $callback) : void{
 		$key = $this->reprocess($alias);
 		if(isset($this->callbackMap[$key])){
+			if(isset($this->keepBuiltIn[$key])){
+				$this->ignoreBuiltInRedefinition($key);
+				return;
+			}
 			throw new \InvalidArgumentException("Alias \"$key\" is already registered");
 		}
 		$this->callbackMap[$key] = $callback;
@@ -56,6 +67,25 @@ abstract class StringToTParser{
 	/** @phpstan-param \Closure(string $input) : T $callback */
 	public function override(string $alias, \Closure $callback) : void{
 		$this->callbackMap[$this->reprocess($alias)] = $callback;
+	}
+
+	/**
+	 * Keeps these existing aliases when something registers them again, instead of throwing. The server uses this for
+	 * the aliases VanillaMine added after PocketMine-MP 5.44.3: a plugin written for 5.44.3 that implemented one of
+	 * those things itself (e.g. filled maps) keeps loading, and the built-in one stays in use.
+	 * @internal
+	 */
+	public function keepBuiltIn(string ...$aliases) : void{
+		foreach($aliases as $alias){
+			$key = $this->reprocess($alias);
+			if(isset($this->callbackMap[$key])){
+				$this->keepBuiltIn[$key] = true;
+			}
+		}
+	}
+
+	private function ignoreBuiltInRedefinition(string $key) : void{
+		\GlobalLogger::get()->warning("A plugin tried to register \"$key\", which this server already provides: the built-in one is kept");
 	}
 
 	/**
@@ -68,6 +98,10 @@ abstract class StringToTParser{
 		}
 		$newKey = $this->reprocess($alias);
 		if(isset($this->callbackMap[$newKey])){
+			if(isset($this->keepBuiltIn[$newKey])){
+				$this->ignoreBuiltInRedefinition($newKey);
+				return;
+			}
 			throw new \InvalidArgumentException("Alias \"$newKey\" is already registered");
 		}
 		$this->callbackMap[$newKey] = $this->callbackMap[$existingKey];

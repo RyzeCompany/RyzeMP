@@ -27,6 +27,7 @@ use pocketmine\data\runtime\RuntimeDataDescriber;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\world\sound\GoatHornSound;
+use pocketmine\world\vibration\GameEvent;
 
 class GoatHorn extends Item implements Releasable{
 
@@ -65,6 +66,7 @@ class GoatHorn extends Item implements Releasable{
 	public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems) : ItemUseResult{
 		$position = $player->getPosition();
 		$position->getWorld()->addSound($position, new GoatHornSound($this->goatHornType));
+		$position->getWorld()->addGameEvent($position, GameEvent::INSTRUMENT_PLAY, $player); //Java InstrumentItem.play()
 
 		return ItemUseResult::SUCCESS;
 	}

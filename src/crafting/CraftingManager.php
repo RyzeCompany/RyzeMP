@@ -52,6 +52,13 @@ class CraftingManager{
 	protected array $shapelessRecipes = [];
 
 	/**
+	 * Crafting recipes that are neither shaped nor shapeless (e.g. the decorated pot), matched by inspecting the grid.
+	 * @var CraftingRecipe[]
+	 * @phpstan-var list<CraftingRecipe>
+	 */
+	protected array $specialCraftingRecipes = [];
+
+	/**
 	 * @var CraftingRecipe[]
 	 * @phpstan-var array<int, CraftingRecipe>
 	 */
@@ -70,6 +77,12 @@ class CraftingManager{
 	protected array $potionTypeRecipes = [];
 
 	/**
+	 * @var SmithingRecipe[]
+	 * @phpstan-var list<SmithingRecipe>
+	 */
+	protected array $smithingRecipes = [];
+
+	/**
 	 * @var PotionContainerChangeRecipe[]
 	 * @phpstan-var list<PotionContainerChangeRecipe>
 	 */
@@ -83,6 +96,9 @@ class CraftingManager{
 
 	/** @phpstan-var ObjectSet<\Closure() : void> */
 	private ObjectSet $recipeRegisteredCallbacks;
+
+	/** @phpstan-var \WeakMap<CraftingRecipe|FurnaceRecipe, RecipeUnlocking>|null */
+	private ?\WeakMap $recipeUnlocking = null;
 
 	public function __construct(){
 		$this->recipeRegisteredCallbacks = new ObjectSet();
@@ -190,6 +206,18 @@ class CraftingManager{
 		return $this->potionContainerChangeRecipes;
 	}
 
+	/**
+	 * @return SmithingRecipe[]
+	 * @phpstan-return list<SmithingRecipe>
+	 */
+	public function getSmithingRecipes() : array{
+		return $this->smithingRecipes;
+	}
+
+	public function getSmithingRecipeFromIndex(int $index) : ?SmithingRecipe{
+		return $this->smithingRecipes[$index] ?? null;
+	}
+
 	public function registerShapedRecipe(ShapedRecipe $recipe) : void{
 		$this->shapedRecipes[self::hashOutputs($recipe->getResults())][] = $recipe;
 		$this->craftingRecipeIndex[] = $recipe;
@@ -208,6 +236,44 @@ class CraftingManager{
 		}
 	}
 
+	/**
+	 * Registers a crafting recipe that is neither shaped nor shapeless. It is matched against the crafting grid with
+	 * {@link CraftingRecipe::matchesCraftingGrid()} and its results come from {@link CraftingRecipe::getResultsFor()}.
+	 */
+	public function registerSpecialCraftingRecipe(CraftingRecipe $recipe) : void{
+		$this->specialCraftingRecipes[] = $recipe;
+		$this->craftingRecipeIndex[] = $recipe;
+
+		foreach($this->recipeRegisteredCallbacks as $callback){
+			$callback();
+		}
+	}
+
+	/**
+	 * Sets the recipe book data of a registered recipe: its priority and what unlocks it (see
+	 * {@link \pocketmine\player\RecipeBook}). Recipes without it are always unlocked.
+	 */
+	public function setRecipeUnlocking(CraftingRecipe|FurnaceRecipe $recipe, RecipeUnlocking $unlocking) : void{
+		$this->recipeUnlocking ??= new \WeakMap();
+		$this->recipeUnlocking[$recipe] = $unlocking;
+
+		foreach($this->recipeRegisteredCallbacks as $callback){
+			$callback();
+		}
+	}
+
+	public function getRecipeUnlocking(CraftingRecipe|FurnaceRecipe $recipe) : ?RecipeUnlocking{
+		return $this->recipeUnlocking[$recipe] ?? null;
+	}
+
+	/**
+	 * @return CraftingRecipe[]
+	 * @phpstan-return list<CraftingRecipe>
+	 */
+	public function getSpecialCraftingRecipes() : array{
+		return $this->specialCraftingRecipes;
+	}
+
 	public function registerPotionTypeRecipe(PotionTypeRecipe $recipe) : void{
 		$this->potionTypeRecipes[] = $recipe;
 
@@ -218,6 +284,14 @@ class CraftingManager{
 
 	public function registerPotionContainerChangeRecipe(PotionContainerChangeRecipe $recipe) : void{
 		$this->potionContainerChangeRecipes[] = $recipe;
+
+		foreach($this->recipeRegisteredCallbacks as $callback){
+			$callback();
+		}
+	}
+
+	public function registerSmithingRecipe(SmithingRecipe $recipe) : void{
+		$this->smithingRecipes[] = $recipe;
 
 		foreach($this->recipeRegisteredCallbacks as $callback){
 			$callback();
@@ -248,6 +322,12 @@ class CraftingManager{
 			}
 		}
 
+		foreach($this->specialCraftingRecipes as $recipe){
+			if($recipe->matchesCraftingGrid($grid)){
+				return $recipe;
+			}
+		}
+
 		return null;
 	}
 
@@ -273,6 +353,9 @@ class CraftingManager{
 				yield $recipe;
 			}
 		}
+
+		//special recipes produce output depending on the grid, so they cannot be indexed by output
+		yield from $this->specialCraftingRecipes;
 	}
 
 	public function matchBrewingRecipe(Item $input, Item $ingredient) : ?BrewingRecipe{
@@ -296,5 +379,52 @@ class CraftingManager{
 		}
 
 		return null;
+	}
+
+	private const GRID_MATCH_CACHE_SIZE = 1024;
+
+	/**
+	 * @var int[] grid key => index in craftingRecipeIndex, -1 for no match
+	 * @phpstan-var array<string, int>
+	 */
+	private array $gridMatchCache = [];
+	private int $gridMatchCacheRecipeCount = 0;
+
+	/**
+	 * Finds the crafting recipe matching the contents of the grid, without knowing the output (e.g. for crafters).
+	 * Results for grids without NBT are cached.
+	 */
+	public function matchRecipeByGrid(CraftingGrid $grid) : ?CraftingRecipe{
+		if($this->gridMatchCacheRecipeCount !== count($this->craftingRecipeIndex)){
+			$this->gridMatchCache = [];
+			$this->gridMatchCacheRecipeCount = count($this->craftingRecipeIndex);
+		}
+		$key = "";
+		foreach($grid->getContents(true) as $item){
+			if($item->hasNamedTag()){
+				$key = null;
+				break;
+			}
+			$key .= $item->isNull() ? "-," : $item->getStateId() . ",";
+		}
+		if($key !== null && isset($this->gridMatchCache[$key])){
+			$index = $this->gridMatchCache[$key];
+			return $index === -1 ? null : $this->craftingRecipeIndex[$index];
+		}
+
+		$found = -1;
+		foreach($this->craftingRecipeIndex as $index => $recipe){
+			if($recipe->matchesCraftingGrid($grid)){
+				$found = $index;
+				break;
+			}
+		}
+		if($key !== null){
+			if(count($this->gridMatchCache) >= self::GRID_MATCH_CACHE_SIZE){
+				$this->gridMatchCache = [];
+			}
+			$this->gridMatchCache[$key] = $found;
+		}
+		return $found === -1 ? null : $this->craftingRecipeIndex[$found];
 	}
 }

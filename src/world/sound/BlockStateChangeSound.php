@@ -1,0 +1,46 @@
+<?php
+
+/*
+ *
+ *  ____            _        _   __  __ _                  __  __ ____
+ * |  _ \ ___   ___| | _____| |_|  \/  (_)_ __   ___      |  \/  |  _ \
+ * | |_) / _ \ / __| |/ / _ \ __| |\/| | | '_ \ / _ \_____| |\/| | |_) |
+ * |  __/ (_) | (__|   <  __/ |_| |  | | | | | |  __/_____| |  | |  __/
+ * |_|   \___/ \___|_|\_\___|\__|_|  |_|_|_| |_|\___|     |_|  |_|_|
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * @author PocketMine Team
+ * @link http://www.pocketmine.net/
+ *
+ *
+ */
+
+declare(strict_types=1);
+
+namespace pocketmine\world\sound;
+
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
+use pocketmine\block\Block;
+use pocketmine\math\Vector3;
+use pocketmine\network\mcpe\convert\TypeConverter;
+use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
+use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
+
+/**
+ * The "state_change" sound of a block (resource pack block_sounds), e.g. a dried ghast taking in water.
+ */
+class BlockStateChangeSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
+	public function __construct(private Block $block){}
+
+	public function encode(Vector3 $pos) : array{
+		return [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::STATE_CHANGE, $pos, false, $this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()))];
+	}
+}

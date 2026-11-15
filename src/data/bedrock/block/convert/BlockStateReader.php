@@ -84,6 +84,31 @@ final class BlockStateReader{
 		throw $this->missingOrWrongTypeException($name, $tag);
 	}
 
+	/**
+	 * Like readBool(), but returns the given default when the property is absent. Used for properties that were
+	 * added in newer versions (e.g. 1.26.50 connection bits) so that data saved by older versions still loads.
+	 *
+	 * @throws BlockStateDeserializeException
+	 */
+	public function readOptionalBool(string $name, bool $default) : bool{
+		if($this->data->getState($name) === null){
+			return $default;
+		}
+		return $this->readBool($name);
+	}
+
+	/**
+	 * Like readString(), but returns the given default when the property is absent.
+	 *
+	 * @throws BlockStateDeserializeException
+	 */
+	public function readOptionalString(string $name, string $default) : string{
+		if($this->data->getState($name) === null){
+			return $default;
+		}
+		return $this->readString($name);
+	}
+
 	/** @throws BlockStateDeserializeException */
 	public function readInt(string $name) : int{
 		unset($this->unusedStates[$name]);

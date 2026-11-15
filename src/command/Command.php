@@ -27,12 +27,16 @@ declare(strict_types=1);
 namespace pocketmine\command;
 
 use pocketmine\command\utils\CommandException;
+use pocketmine\entity\vehicle\MinecartCommandSender;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\lang\Translatable;
 use pocketmine\permission\PermissionManager;
+use pocketmine\player\Player;
 use pocketmine\Server;
 use pocketmine\utils\BroadcastLoggerForwarder;
 use pocketmine\utils\TextFormat;
+use pocketmine\world\GameRules;
+use pocketmine\world\World;
 use function array_values;
 use function explode;
 use function implode;
@@ -235,21 +239,49 @@ abstract class Command{
 	}
 
 	public static function broadcastCommandMessage(CommandSender $source, Translatable|string $message, bool $sendToSource = true) : void{
+		$world = null;
+		if($source instanceof ExecuteCommandSender){
+			///execute: the output goes to whoever ran it, under the game rules of the world it ran in
+			$world = $source->getExecutingPosition()->getWorld();
+			$source = $source->getOriginalSender();
+		}
 		$users = $source->getServer()->getBroadcastChannelSubscribers(Server::BROADCAST_CHANNEL_ADMINISTRATIVE);
 		$result = KnownTranslationFactory::chat_type_admin($source->getName(), $message);
 		$colored = $result->prefix(TextFormat::GRAY . TextFormat::ITALIC);
 
-		if($sendToSource){
+		//game rules: sendcommandfeedback off hides the results from the player who ran the command and from the other
+		//admins, commandblockoutput off hides command block results from the admins (the console still logs them)
+		$world ??= self::getSourceWorld($source);
+		$feedback = $world === null || $world->getGameRule(GameRules::SEND_COMMAND_FEEDBACK) !== false;
+		$informAdmins = $feedback && ((!$source instanceof MinecartCommandSender && !$source instanceof BlockCommandSender) || $world === null || $world->getGameRule(GameRules::COMMAND_BLOCK_OUTPUT) !== false);
+		if($sendToSource && ($feedback || !$source instanceof Player)){
 			$source->sendMessage($message);
 		}
 
 		foreach($users as $user){
 			if($user instanceof BroadcastLoggerForwarder){
 				$user->sendMessage($result);
-			}elseif($user !== $source){
+			}elseif($informAdmins && $user !== $source){
 				$user->sendMessage($colored);
 			}
 		}
+	}
+
+	/**
+	 * The world whose game rules apply to the command's feedback: the sender's world (the default world for the
+	 * console).
+	 */
+	private static function getSourceWorld(CommandSender $source) : ?World{
+		if($source instanceof Player){
+			return $source->getWorld();
+		}
+		if($source instanceof EntityCommandSender){
+			return $source->getExecutingEntity()->getWorld();
+		}
+		if($source instanceof BlockCommandSender){
+			return $source->getExecutingPosition()->getWorld();
+		}
+		return $source->getServer()->getWorldManager()->getDefaultWorld();
 	}
 
 	public function __toString() : string{

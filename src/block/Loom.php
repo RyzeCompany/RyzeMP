@@ -40,4 +40,8 @@ final class Loom extends Opaque implements HorizontalFacing{
 		}
 		return false;
 	}
+
+	public function getFuelTime() : int{
+		return 300;
+	}
 }

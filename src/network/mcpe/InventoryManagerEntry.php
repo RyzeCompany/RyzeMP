@@ -45,8 +45,25 @@ final class InventoryManagerEntry{
 	 */
 	public array $pendingSyncs = [];
 
+	/**
+	 * Dynamic container IDs of the bundles in this inventory, by slot.
+	 * @var int[]
+	 * @phpstan-var array<int, int>
+	 */
+	public array $bundleIds = [];
+
+	/**
+	 * Slots holding a bundle whose container ID was assigned without the client knowing it yet, so the slot must be
+	 * sent to the client even if the change was predicted.
+	 * @var true[]
+	 * @phpstan-var array<int, true>
+	 */
+	public array $newBundleIds = [];
+
 	public function __construct(
 		public Inventory $inventory,
-		public ?ComplexInventoryMapEntry $complexSlotMap = null
+		public ?ComplexInventoryMapEntry $complexSlotMap = null,
+		/** Set if this inventory mirrors the contents of a bundle. */
+		public ?BundleContainer $bundleContainer = null
 	){}
 }

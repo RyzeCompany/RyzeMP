@@ -23,10 +23,11 @@ declare(strict_types=1);
 
 namespace pocketmine\entity;
 
-use function array_filter;
-
 class AttributeMap{
-	/** @var Attribute[] */
+	/**
+	 * @var Attribute[]
+	 * @phpstan-var array<string, Attribute>
+	 */
 	private array $attributes = [];
 
 	public function add(Attribute $attribute) : void{
@@ -46,10 +47,16 @@ class AttributeMap{
 
 	/**
 	 * @return Attribute[]
+	 * @phpstan-return array<string, Attribute>
 	 */
 	public function needSend() : array{
-		return array_filter($this->attributes, function(Attribute $attribute) : bool{
-			return $attribute->isSyncable() && $attribute->isDesynchronized();
-		});
+		//called for every player every tick: a plain loop instead of array_filter() with a closure (same result, keys kept)
+		$result = [];
+		foreach($this->attributes as $attribute){
+			if($attribute->isSyncable() && $attribute->isDesynchronized()){
+				$result[$attribute->getId()] = $attribute; //same key as add()
+			}
+		}
+		return $result;
 	}
 }

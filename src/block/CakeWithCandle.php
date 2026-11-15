@@ -24,15 +24,18 @@ declare(strict_types=1);
 namespace pocketmine\block;
 
 use pocketmine\block\utils\CandleTrait;
+use pocketmine\block\utils\ComparatorReadable;
 use pocketmine\block\utils\Lightable;
 use pocketmine\entity\Living;
+use pocketmine\item\enchantment\VanillaEnchantments;
 use pocketmine\item\Item;
+use pocketmine\item\ItemTypeIds;
 use pocketmine\math\AxisAlignedBB;
 use pocketmine\math\Facing;
 use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 
-class CakeWithCandle extends BaseCake implements Lightable{
+class CakeWithCandle extends BaseCake implements Lightable, ComparatorReadable{
 	use CandleTrait {
 		onInteract as onInteractCandle;
 	}
@@ -50,11 +53,14 @@ class CakeWithCandle extends BaseCake implements Lightable{
 	}
 
 	public function onInteract(Item $item, int $face, Vector3 $clickVector, ?Player $player = null, array &$returnedItems = []) : bool{
-		if($this->lit && $face !== Facing::UP){
-			return true;
-		}
-		if($this->onInteractCandle($item, $face, $clickVector, $player, $returnedItems)){
-			return true;
+		//vanilla (Java CandleCakeBlock): lighting tools light the candle, an empty hand on a lit candle puts it out,
+		//anything else eats a slice (the candle drops)
+		$typeId = $item->getTypeId();
+		if(
+			$typeId === ItemTypeIds::FLINT_AND_STEEL || $typeId === ItemTypeIds::FIRE_CHARGE || $item->hasEnchantment(VanillaEnchantments::FIRE_ASPECT()) ||
+			($this->lit && $face === Facing::UP && $item->isNull())
+		){
+			return $this->onInteractCandle($item, $face, $clickVector, $player, $returnedItems);
 		}
 
 		return parent::onInteract($item, $face, $clickVector, $player, $returnedItems);
@@ -75,5 +81,9 @@ class CakeWithCandle extends BaseCake implements Lightable{
 	public function onConsume(Living $consumer) : void{
 		parent::onConsume($consumer);
 		$this->position->getWorld()->dropItem($this->position->add(0.5, 0.5, 0.5), $this->getCandle()->asItem());
+	}
+
+	public function getComparatorOutput() : int{
+		return 14; //a whole cake
 	}
 }

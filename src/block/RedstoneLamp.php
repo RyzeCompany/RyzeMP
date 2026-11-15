@@ -31,6 +31,8 @@ use pocketmine\data\runtime\RuntimeDataDescriber;
 class RedstoneLamp extends Opaque implements PoweredByRedstone, Lightable{
 	use PoweredByRedstoneTrait;
 
+	public const TURN_OFF_DELAY_TICKS = 4;
+
 	protected function describeBlockOnlyState(RuntimeDataDescriber $w) : void{
 		$w->bool($this->powered);
 	}
@@ -47,5 +49,36 @@ class RedstoneLamp extends Opaque implements PoweredByRedstone, Lightable{
 	public function setLit(bool $lit = true) : self{
 		$this->powered = $lit;
 		return $this;
+	}
+
+	public function onNearbyBlockChange() : void{
+		$world = $this->position->getWorld();
+		$redstone = $world->getRedstone();
+		if($redstone === null){
+			return;
+		}
+		$x = $this->position->getFloorX();
+		$y = $this->position->getFloorY();
+		$z = $this->position->getFloorZ();
+		$powered = $redstone->isPowered($x, $y, $z);
+		if($powered && !$this->powered){
+			$this->powered = true;
+			$world->setBlock($this->position, $this);
+		}elseif(!$powered && $this->powered && !$world->isBlockUpdateScheduled($x, $y, $z)){
+			//lamps turn off two redstone ticks after losing power
+			$world->scheduleDelayedBlockUpdate($this->position, self::TURN_OFF_DELAY_TICKS);
+		}
+	}
+
+	public function onScheduledUpdate() : void{
+		$world = $this->position->getWorld();
+		if($this->powered && !$world->isBlockPowered($this->position)){
+			$this->powered = false;
+			$world->setBlock($this->position, $this);
+		}
+	}
+
+	public function pausesScheduledUpdatesOutsideTickingChunks() : bool{
+		return true; //redstone components only update in ticking chunks, like vanilla block ticks
 	}
 }

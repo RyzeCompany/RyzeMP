@@ -24,14 +24,18 @@ declare(strict_types=1);
 namespace pocketmine\command\defaults;
 
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\CommandParameter;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\command\utils\InvalidCommandSyntaxException;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\player\Player;
 use pocketmine\utils\TextFormat;
 use function count;
+use function filter_var;
+use const FILTER_VALIDATE_INT;
 
-class TransferServerCommand extends NativeCommand{
+class TransferServerCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -42,7 +46,11 @@ class TransferServerCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_TRANSFERSERVER);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[CommandParameter::string("server"), CommandParameter::int("port", true)]];
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		if(count($args) < 1){
 			throw new InvalidCommandSyntaxException();
 		}elseif(!($sender instanceof Player)){
@@ -51,7 +59,13 @@ class TransferServerCommand extends NativeCommand{
 			return false;
 		}
 
-		$sender->transfer($args[0], (int) ($args[1] ?? 19132));
+		//a port out of range would be truncated to 16 bits on the wire and send the player somewhere else
+		$port = filter_var($args[1] ?? "19132", FILTER_VALIDATE_INT, ["options" => ["min_range" => 0, "max_range" => 65535]]);
+		if($port === false){
+			throw new InvalidCommandSyntaxException();
+		}
+
+		$sender->transfer($args[0], $port);
 
 		return true;
 	}

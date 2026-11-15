@@ -25,7 +25,18 @@ namespace pocketmine\block;
 
 use pocketmine\block\utils\WoodMaterial;
 use pocketmine\block\utils\WoodTypeTrait;
+use pocketmine\entity\Entity;
+use pocketmine\entity\projectile\Arrow;
+use pocketmine\entity\projectile\Trident;
+use pocketmine\item\VanillaItems;
+use pocketmine\math\Axis;
+use pocketmine\math\AxisAlignedBB;
+use pocketmine\math\Facing;
+use pocketmine\math\Vector3;
 
+/**
+ * Also pressed by arrows and thrown tridents touching it; it stays pressed while they are there.
+ */
 class WoodenButton extends Button implements WoodMaterial{
 	use WoodTypeTrait;
 
@@ -34,7 +45,52 @@ class WoodenButton extends Button implements WoodMaterial{
 	}
 
 	public function hasEntityCollision() : bool{
-		return false; //TODO: arrows activate wooden buttons
+		return true;
+	}
+
+	/**
+	 * Returns the button's shape, which arrows must touch to press it.
+	 */
+	public function getShape() : AxisAlignedBB{
+		//2 pixels thick (1 when pressed), 6 pixels wide and 4 pixels high; on the floor and ceiling 6 along X, 4 along Z
+		$box = AxisAlignedBB::one()->trim($this->facing, ($this->pressed ? 15 : 14) / 16);
+		[$wideAxis, $shortAxis] = match(Facing::axis($this->facing)){
+			Axis::Y => [Axis::X, Axis::Z],
+			Axis::X => [Axis::Z, Axis::Y],
+			default => [Axis::X, Axis::Y],
+		};
+		return $box
+			->squash($wideAxis, 5 / 16)
+			->squash($shortAxis, 6 / 16)
+			->offset($this->position->x, $this->position->y, $this->position->z);
+	}
+
+	private static function isActivatingProjectile(Entity $entity) : bool{
+		return ($entity instanceof Arrow || $entity instanceof Trident) && !$entity->isFlaggedForDespawn() && !$entity->isClosed();
+	}
+
+	private function hasProjectilesInside() : bool{
+		foreach($this->position->getWorld()->getNearbyEntities($this->getShape()) as $entity){
+			if(self::isActivatingProjectile($entity)){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function onEntityInside(Entity $entity) : bool{
+		if(!$this->pressed && self::isActivatingProjectile($entity) && $entity->getBoundingBox()->intersectsWith($this->getShape())){
+			$this->onInteract(VanillaItems::AIR(), $this->facing, new Vector3(0.5, 0.5, 0.5));
+		}
+		return true;
+	}
+
+	public function onScheduledUpdate() : void{
+		if($this->pressed && $this->hasProjectilesInside()){
+			$this->position->getWorld()->scheduleDelayedBlockUpdate($this->position, $this->getActivationTime());
+			return;
+		}
+		parent::onScheduledUpdate();
 	}
 
 	public function getFuelTime() : int{

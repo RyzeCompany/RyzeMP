@@ -83,5 +83,7 @@ final class SwampHutPiece extends OrientedPiece{
 		}
 		//the witch and the cat stand at (2, 2, 5); the box check spawns them once, in the chunk holding that block. The
 		//cat is an all black adult (Bedrock spawn_midnight_cat), see Cat::setSpawnReason()
+		$this->spawnMob($c, $box, "minecraft:witch", 2, 2, 5);
+		$this->spawnMob($c, $box, "minecraft:cat", 2, 2, 5);
 	}
 }

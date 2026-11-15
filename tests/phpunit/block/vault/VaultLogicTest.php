@@ -27,9 +27,6 @@ use PHPUnit\Framework\TestCase;
 use pocketmine\block\utils\VaultState;
 use pocketmine\item\Item;
 use pocketmine\item\VanillaItems;
-use pocketmine\data\bedrock\item\SavedItemData;
-use pocketmine\world\format\io\GlobalItemDataHandlers;
-use pocketmine\world\generator\vanilla\structure\TrialChamberContent;
 use pocketmine\nbt\NBT;
 use pocketmine\nbt\tag\CompoundTag;
 use pocketmine\nbt\tag\ListTag;
@@ -38,23 +35,6 @@ use function array_map;
 use function min;
 
 final class VaultLogicTest extends TestCase{
-
-	public static function setUpBeforeClass() : void{
-		parent::setUpBeforeClass();
-		//The standalone vault tests must register key serialization without also
-		//registering the Trial Chamber BLOCK states into the global runtime registry.
-		//Doing so would pollute the independent block round-trip suite.
-		foreach([false, true] as $ominous){
-			$id = $ominous ? "minecraft:ominous_trial_key" : "minecraft:trial_key";
-			$key = TrialChamberContent::trialKey($ominous);
-			$deserializer = GlobalItemDataHandlers::getDeserializer();
-			if($deserializer->getDeserializerForId($id) === null){
-				$deserializer->map($id, static fn() : Item => clone $key);
-				GlobalItemDataHandlers::getSerializer()->map($key, static fn() : SavedItemData => new SavedItemData($id));
-			}
-		}
-	}
-
 
 	private function host(VaultConfig $config) : FakeVaultHost{
 		$host = new FakeVaultHost();
@@ -140,7 +120,7 @@ final class VaultLogicTest extends TestCase{
 		self::assertSame(VaultState::ACTIVE, $host->state);
 
 		$keyTime = $host->time;
-		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()->setCount(3)));
+		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()->setCount(3)));
 		self::assertSame(VaultState::UNLOCKING, $host->state);
 		self::assertSame([VaultConfig::DEFAULT_LOOT_TABLE], $host->rolledTables);
 		self::assertSame([1], $host->rolledFor);
@@ -162,7 +142,7 @@ final class VaultLogicTest extends TestCase{
 		//the player stays rewarded: the vault doesn't turn on for them any more
 		$this->runUntil($host, $config, $data, $host->time + 60);
 		self::assertSame(VaultState::INACTIVE, $host->state);
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()), "inactive vaults ignore keys");
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()), "inactive vaults ignore keys");
 	}
 
 	public function testRewardedPlayerKeyIsRefused() : void{
@@ -177,18 +157,18 @@ final class VaultLogicTest extends TestCase{
 		self::assertSame(["b" => 2], $data->getConnectedPlayers());
 		$host->events = [];
 
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()));
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()));
 		self::assertSame(["reject rewarded"], $host->events);
 		self::assertSame([], $host->rolledTables);
 		//the refusal sound isn't repeated within 15 ticks
 		$host->time += 5;
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()));
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()));
 		self::assertSame(["reject rewarded"], $host->events);
 		$host->time += 10;
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()));
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()));
 		self::assertSame(["reject rewarded", "reject rewarded"], $host->events);
 
-		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "b", 2, TrialChamberContent::trialKey()));
+		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "b", 2, VanillaItems::TRIAL_KEY()));
 	}
 
 	public function testOminousVaultNeedsTheOminousKey() : void{
@@ -199,9 +179,9 @@ final class VaultLogicTest extends TestCase{
 		$this->activate($host, $config, $data);
 		self::assertSame(["activate ominous"], $host->events);
 
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()));
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()));
 		self::assertSame(VaultState::ACTIVE, $host->state);
-		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey(ominous: true)));
+		self::assertSame(1, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::OMINOUS_TRIAL_KEY()));
 		self::assertSame([VaultConfig::OMINOUS_LOOT_TABLE], $host->rolledTables);
 	}
 
@@ -211,7 +191,7 @@ final class VaultLogicTest extends TestCase{
 		$data = new VaultData();
 		$this->activate($host, $config, $data);
 		self::assertNull($data->getDisplayItem());
-		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, TrialChamberContent::trialKey()));
+		self::assertSame(0, VaultLogic::tryInsertKey($host->state, $config, $data, $host, "a", 1, VanillaItems::TRIAL_KEY()));
 		self::assertSame(VaultState::ACTIVE, $host->state);
 		self::assertFalse($data->hasRewardedPlayer("a"));
 	}
@@ -276,14 +256,14 @@ final class VaultLogicTest extends TestCase{
 
 		$loaded = VaultConfig::fromNbt($nbt);
 		self::assertSame(VaultConfig::OMINOUS_LOOT_TABLE, $loaded->getLootTable());
-		self::assertTrue($loaded->isKey(TrialChamberContent::trialKey(ominous: true)));
-		self::assertFalse($loaded->isKey(TrialChamberContent::trialKey()));
+		self::assertTrue($loaded->isKey(VanillaItems::OMINOUS_TRIAL_KEY()));
+		self::assertFalse($loaded->isKey(VanillaItems::TRIAL_KEY()));
 		self::assertNull($loaded->getOverrideLootTableToDisplay());
 
 		//a key item of two keys takes two
-		$two = new VaultConfig(keyItem: TrialChamberContent::trialKey()->setCount(2));
-		self::assertFalse($two->isKey(TrialChamberContent::trialKey()));
-		self::assertTrue($two->isKey(TrialChamberContent::trialKey()->setCount(2)));
+		$two = new VaultConfig(keyItem: VanillaItems::TRIAL_KEY()->setCount(2));
+		self::assertFalse($two->isKey(VanillaItems::TRIAL_KEY()));
+		self::assertTrue($two->isKey(VanillaItems::TRIAL_KEY()->setCount(2)));
 		//a vault without a key never opens
 		self::assertFalse((new VaultConfig(keyItem: VanillaItems::AIR()))->hasKey());
 	}
@@ -302,7 +282,7 @@ final class VaultLogicTest extends TestCase{
 			->setString(VaultConfig::TAG_OVERRIDE_LOOT_TABLE_TO_DISPLAY, ""));
 		self::assertSame("loot_tables/chests/trial_chambers/reward.json", $config->getLootTable());
 		self::assertSame($config->getLootTable(), $config->getLootTableToDisplay());
-		self::assertTrue($config->isKey(TrialChamberContent::trialKey()));
+		self::assertTrue($config->isKey(VanillaItems::TRIAL_KEY()));
 		self::assertSame(4.0, $config->getActivationRange());
 		self::assertSame(4.5, $config->getDeactivationRange());
 	}

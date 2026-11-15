@@ -25,99 +25,32 @@ namespace pocketmine\network\mcpe\convert;
 
 use pocketmine\entity\InvalidSkinException;
 use pocketmine\entity\Skin;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\skin\SkinData;
 use pocketmine\network\mcpe\protocol\types\skin\SkinImage;
 use function is_array;
 use function is_string;
-use function intdiv;
 use function json_decode;
 use function json_encode;
+use function random_bytes;
 use function str_repeat;
-use function substr;
+use function trim;
 use const JSON_THROW_ON_ERROR;
 
-class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
-
-	/** @phpstan-var \WeakMap<Skin, SkinData> */
-	private static ?\WeakMap $personaSkins = null;
-	/** @phpstan-var \WeakMap<Skin, int> */
-	private static ?\WeakMap $skinSourceProtocols = null;
-	/** @phpstan-var \WeakMap<Skin, SkinData> */
-	private static ?\WeakMap $sourceSkins = null;
-	/** @phpstan-var \WeakMap<Skin, array<int, SkinData>> */
-	private static ?\WeakMap $outgoingSkinCache = null;
-
-	public function __construct(){
-		self::$personaSkins ??= new \WeakMap();
-		self::$skinSourceProtocols ??= new \WeakMap();
-		self::$sourceSkins ??= new \WeakMap();
-		self::$outgoingSkinCache ??= new \WeakMap();
-	}
+class LegacySkinAdapter implements SkinAdapter{
+	/**
+	 * The skin data a client sent, by the Skin made from it. Skin keeps only the image, cape and geometry, so turning
+	 * it back into network data lost the rest: persona skins became a random colour and the face animation (the
+	 * blinking eyes) disappeared whenever such a skin was sent again (skin changes, NPCs wearing a player's skin).
+	 * Skins are immutable, so the same object always stands for the same data.
+	 *
+	 * @phpstan-var \WeakMap<Skin, SkinData>|null
+	 */
+	private ?\WeakMap $networkSkins = null;
 
 	public function toSkinData(Skin $skin) : SkinData{
-		$original = self::$sourceSkins[$skin] ?? self::$personaSkins[$skin] ?? null;
-		if($original !== null){
-			return $original;
+		if($this->networkSkins !== null && isset($this->networkSkins[$skin])){
+			return $this->networkSkins[$skin];
 		}
-		return $this->toClassicSkinData($skin, true);
-	}
-
-	private static function getPersonaCompatibilityFamily(int $protocolId) : int{
-		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_50){
-			return 2; // 2193+: 1.26.50/51/52
-		}
-		if($protocolId >= ProtocolInfo::PROTOCOL_1_26_40){
-			return 1; // 2168/2169: 1.26.40/44/45
-		}
-		return 0; // Legacy Persona wire format (1.26.30 and older)
-	}
-
-	public function toSkinDataForProtocol(Skin $skin, int $targetProtocol) : SkinData{
-		// Do not cache a plugin's potentially customized adapter output across adapter instances.
-		$useCache = $this::class === self::class;
-		$cached = $useCache ? (self::$outgoingSkinCache[$skin] ?? []) : [];
-		if(isset($cached[$targetProtocol])){
-			return $cached[$targetProtocol];
-		}
-
-		$persona = self::$personaSkins[$skin] ?? null;
-		if($persona !== null){
-			$sourceProtocol = self::$skinSourceProtocols[$skin] ?? null;
-			if(
-				$sourceProtocol === null ||
-				self::getPersonaCompatibilityFamily($sourceProtocol) !== self::getPersonaCompatibilityFamily($targetProtocol)
-			){
-				// The Persona wire layout and metadata are not portable between families.
-				// The replacement is a server-authored, trusted classic skin.
-				$converted = $this->toClassicSkinData($skin, true, $targetProtocol);
-			}else{
-				$converted = $persona;
-			}
-		}elseif($useCache){
-			$sourceProtocol = self::$skinSourceProtocols[$skin] ?? null;
-			$original = self::$sourceSkins[$skin] ?? null;
-			// Preserve client skin identity and metadata for its own protocol. The 827 -> 844
-			// path uses the same classic skin wire layout and is an upgrade, not a downgrade.
-			if($original !== null && ($sourceProtocol === $targetProtocol || ($sourceProtocol === ProtocolInfo::PROTOCOL_1_21_100 && $targetProtocol === ProtocolInfo::PROTOCOL_1_21_111))){
-				$converted = $original;
-			}else{
-				$forceClassicGeometry = $sourceProtocol !== null && $sourceProtocol >= ProtocolInfo::PROTOCOL_1_26_40 && $targetProtocol < ProtocolInfo::PROTOCOL_1_26_40;
-				$converted = $this->toClassicSkinData($skin, true, $targetProtocol, $forceClassicGeometry);
-			}
-		}else{
-			// Respect plugin overrides of the legacy adapter method.
-			$converted = $this->toSkinData($skin);
-		}
-
-		if($useCache){
-			$cached[$targetProtocol] = $converted;
-			self::$outgoingSkinCache[$skin] = $cached;
-		}
-		return $converted;
-	}
-
-	private function toClassicSkinData(Skin $skin, bool $trusted, ?int $targetProtocol = null, bool $forceClassicGeometry = false) : SkinData{
 		$capeData = $skin->getCapeData();
 		$capeImage = $capeData === "" ? new SkinImage(0, 0, "") : new SkinImage(32, 64, $capeData);
 		$geometryName = $skin->getGeometryName();
@@ -125,79 +58,32 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 			$geometryName = "geometry.humanoid.custom";
 		}
 		$geometryData = $skin->getGeometryData();
-		if($geometryData === "" || $forceClassicGeometry){
-			$geometryData = SkinData::GEOMETRY_DATA_NONE;
+		if(trim($geometryData) === ""){
+			//1.26.40+ (Cereal): SerializedSkin::GeometryData must parse as JSON, and an empty string doesn't. The client
+			//falls back to its built-in geometry for the name in the resource patch, exactly as it did with "".
+			$geometryData = '{"format_version":"1.12.0","minecraft:geometry":[]}';
 		}
-		if($forceClassicGeometry){
-			$geometryName = "geometry.humanoid.custom";
-		}
-		$geometryEngineVersion = match(true){
-			$targetProtocol === null => ProtocolInfo::MINECRAFT_VERSION_NETWORK,
-			$targetProtocol < ProtocolInfo::PROTOCOL_1_21_0 => "1.20.0",
-			$targetProtocol < ProtocolInfo::PROTOCOL_1_26_0 => "1.21.0",
-			$targetProtocol < ProtocolInfo::PROTOCOL_1_26_40 => "1.26.0",
-			default => ProtocolInfo::MINECRAFT_VERSION_NETWORK
-		};
 		return new SkinData(
 			$skin->getSkinId(),
 			"", //TODO: playfab ID
 			json_encode(["geometry" => ["default" => $geometryName]], JSON_THROW_ON_ERROR),
 			SkinImage::fromLegacy($skin->getSkinData()), [],
 			$capeImage,
-			$geometryData,
-			geometryDataEngineVersion: $geometryEngineVersion,
-			isVerified: $trusted,
-			trustedSkinFlag: $trusted ? "true" : "false",
-			profileHash: ""
+			$geometryData
 		);
 	}
 
-	private static function normalizeSkinImage(SkinImage $image) : string{
-		$width = $image->getWidth();
-		$height = $image->getHeight();
-		$data = $image->getData();
-		if($width !== $height || ($width !== 254 && $width !== 256)){
-			return $data;
-		}
-
-		$normalized = "";
-		for($y = 0; $y < 128; ++$y){
-			$sourceY = intdiv($y * $height, 128);
-			for($x = 0; $x < 128; ++$x){
-				$sourceX = intdiv($x * $width, 128);
-				$normalized .= substr($data, ($sourceY * $width + $sourceX) * 4, 4);
-			}
-		}
-		return $normalized;
-	}
-
-	private static function personaToClassicSkin(SkinData $data) : Skin{
-		$skinData = self::normalizeSkinImage($data->getSkinImage());
-		try{
-			return new Skin(
-				"Standard_Custom",
-				$skinData,
-				"",
-				"geometry.humanoid.custom",
-				SkinData::GEOMETRY_DATA_NONE
-			);
-		}catch(InvalidSkinException){
-			// Keep a deterministic safe fallback for unexpected Persona image sizes.
-			return new Skin(
-				"Standard_Custom",
-				str_repeat("\x7f\x7f\x7f\xff", 64 * 64),
-				"",
-				"geometry.humanoid.custom",
-				SkinData::GEOMETRY_DATA_NONE
-			);
-		}
-	}
-
 	public function fromSkinData(SkinData $data) : Skin{
+		$skin = $this->convertSkinData($data);
+		//initialised here rather than in a constructor, which subclasses written for 5.44.3 don't call
+		$this->networkSkins ??= new \WeakMap();
+		$this->networkSkins[$skin] = $data;
+		return $skin;
+	}
+
+	private function convertSkinData(SkinData $data) : Skin{
 		if($data->isPersona()){
-			$skin = self::personaToClassicSkin($data);
-			self::$personaSkins[$skin] = $data;
-			return $skin;
+			return new Skin("Standard_Custom", str_repeat(random_bytes(3) . "\xff", 4096));
 		}
 
 		$capeData = $data->isPersonaCapeOnClassic() ? "" : $data->getCapeImage()->getData();
@@ -209,13 +95,6 @@ class LegacySkinAdapter implements ProtocolAwareSkinAdapter{
 			throw new InvalidSkinException("Missing geometry name field");
 		}
 
-		return new Skin($data->getSkinId(), self::normalizeSkinImage($data->getSkinImage()), $capeData, $geometryName, $data->getGeometryData());
+		return new Skin($data->getSkinId(), $data->getSkinImage()->getData(), $capeData, $geometryName, $data->getGeometryData());
 	}
-	public function fromSkinDataForProtocol(SkinData $data, int $sourceProtocol) : Skin{
-		$skin = $this->fromSkinData($data);
-		self::$sourceSkins[$skin] = $data;
-		self::$skinSourceProtocols[$skin] = $sourceProtocol;
-		return $skin;
-	}
-
 }

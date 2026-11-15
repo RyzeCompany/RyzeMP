@@ -33,6 +33,7 @@ use pocketmine\world\generator\vanilla\math\FloatMath;
 use pocketmine\world\generator\vanilla\random\LegacyRandom;
 use pocketmine\world\generator\vanilla\structure\BoundingBox;
 use pocketmine\world\generator\vanilla\structure\StructurePlaceContext;
+use pocketmine\world\generator\vanilla\structure\template\EntityConversion;
 use pocketmine\world\generator\vanilla\structure\template\Rotations;
 use pocketmine\world\generator\vanilla\structure\template\StructureBlockEntities;
 
@@ -379,4 +380,15 @@ abstract class OrientedPiece extends StructurePiece{
 		return true;
 	}
 
+	/**
+	 * Spawns a mob at the centre of a piece-local block, if the block is in the box.
+	 */
+	protected function spawnMob(StructurePlaceContext $c, BoundingBox $box, string $javaEntity, int $x, int $y, int $z) : bool{
+		[$wx, $wy, $wz] = $this->getWorldPos($x, $y, $z);
+		if(!$box->isInside($wx, $wy, $wz)){
+			return false;
+		}
+		$nbt = EntityConversion::pendingEntity(CompoundTag::create()->setString("id", $javaEntity), $wx + 0.5, $wy, $wz + 0.5, 0.0, 0.0);
+		return $nbt !== null && $c->level->addEntity($wx, $wz, $nbt);
+	}
 }

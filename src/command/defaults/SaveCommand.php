@@ -25,12 +25,13 @@ namespace pocketmine\command\defaults;
 
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
+use pocketmine\command\parameter\ExhaustiveOverloads;
 use pocketmine\lang\KnownTranslationFactory;
 use pocketmine\permission\DefaultPermissionNames;
 use function microtime;
 use function round;
 
-class SaveCommand extends NativeCommand{
+class SaveCommand extends VanillaCommand implements ExhaustiveOverloads{
 
 	public function __construct(){
 		parent::__construct(
@@ -40,7 +41,11 @@ class SaveCommand extends NativeCommand{
 		$this->setPermission(DefaultPermissionNames::COMMAND_SAVE_PERFORM);
 	}
 
-	protected function executeParsed(CommandSender $sender, string $commandLabel, array $args){
+	public function getOverloads() : array{
+		return [[]]; //no arguments
+	}
+
+	public function execute(CommandSender $sender, string $commandLabel, array $args){
 		Command::broadcastCommandMessage($sender, KnownTranslationFactory::pocketmine_save_start());
 		$start = microtime(true);
 

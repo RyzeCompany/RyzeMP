@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace pocketmine\entity\effect;
 
 use pocketmine\entity\Living;
+use pocketmine\entity\Mob;
 use pocketmine\event\entity\EntityEffectAddEvent;
 use pocketmine\event\entity\EntityEffectRemoveEvent;
 use function count;
@@ -63,7 +64,7 @@ class EffectManager extends EffectCollection{
 		$oldEffect = $this->effects[$index] ?? null;
 
 		$ev = new EntityEffectAddEvent($this->entity, $effect, $oldEffect);
-		if(!$this->canAdd($effect)){
+		if(!$this->canAdd($effect) || ($this->entity instanceof Mob && $this->entity->isImmuneToEffect($effect->getType()))){
 			$ev->cancel();
 		}
 

@@ -34,11 +34,14 @@ use pocketmine\utils\LegacyEnumShimTrait;
  * @method static SuspiciousStewType ALLIUM()
  * @method static SuspiciousStewType AZURE_BLUET()
  * @method static SuspiciousStewType BLUE_ORCHID()
+ * @method static SuspiciousStewType CLOSED_EYEBLOSSOM()
  * @method static SuspiciousStewType CORNFLOWER()
  * @method static SuspiciousStewType DANDELION()
  * @method static SuspiciousStewType LILY_OF_THE_VALLEY()
+ * @method static SuspiciousStewType OPEN_EYEBLOSSOM()
  * @method static SuspiciousStewType OXEYE_DAISY()
  * @method static SuspiciousStewType POPPY()
+ * @method static SuspiciousStewType TORCHFLOWER()
  * @method static SuspiciousStewType TULIP()
  * @method static SuspiciousStewType WITHER_ROSE()
  */
@@ -55,6 +58,9 @@ enum SuspiciousStewType{
 	case ALLIUM;
 	case OXEYE_DAISY;
 	case WITHER_ROSE;
+	case TORCHFLOWER;
+	case OPEN_EYEBLOSSOM;
+	case CLOSED_EYEBLOSSOM;
 
 	/**
 	 * @return EffectInstance[]
@@ -71,7 +77,10 @@ enum SuspiciousStewType{
 			self::BLUE_ORCHID => [new EffectInstance(VanillaEffects::SATURATION(), 6)],
 			self::ALLIUM => [new EffectInstance(VanillaEffects::FIRE_RESISTANCE(), 40)],
 			self::OXEYE_DAISY => [new EffectInstance(VanillaEffects::REGENERATION(), 120)],
-			self::WITHER_ROSE => [new EffectInstance(VanillaEffects::WITHER(), 120)]
+			self::WITHER_ROSE => [new EffectInstance(VanillaEffects::WITHER(), 120)],
+			self::TORCHFLOWER => [new EffectInstance(VanillaEffects::NIGHT_VISION(), 100)],
+			self::OPEN_EYEBLOSSOM => [new EffectInstance(VanillaEffects::BLINDNESS(), 220)],
+			self::CLOSED_EYEBLOSSOM => [new EffectInstance(VanillaEffects::NAUSEA(), 140)]
 		};
 	}
 }

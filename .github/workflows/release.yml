@@ -1,107 +1,96 @@
-name: Build and Release Phar
+name: Publish verified RyzeMP beta release
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+# Manual only: merging main must never silently release untested software.
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "New immutable tag matching src/VersionInfo.php"
+        required: true
+        default: v1.0.0-beta.6
 
 permissions:
   contents: read
 
 jobs:
-  tests:
-    uses: ./.github/workflows/ci.yml
-  build:
-    needs: tests
-    uses: ./.github/workflows/ci-2225-phar-preview.yml
   publish:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write
       actions: read
+    concurrency:
+      group: ryzemp-publish
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: RyzeMP-phar
-          path: package
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24.x'
-          cache: false
-      - name: Build the exact pinned VanillaMine Go binary for the same release
-        env:
-          GOTOOLCHAIN: local
-          GOPROXY: 'off'
-          VANILLAMINE_REVISION: 4dd2228b47d64c8015c28138c846e6c4acb28345
+      - name: Require exact version and green main CI on this commit
         shell: bash
-        run: |
-          set -euo pipefail
-          git init "$RUNNER_TEMP/vanillamine-release"
-          git -C "$RUNNER_TEMP/vanillamine-release" fetch --depth=1 https://gitlab.com/VanillaMine/VanillaMine.git "$VANILLAMINE_REVISION"
-          git -C "$RUNNER_TEMP/vanillamine-release" checkout --detach FETCH_HEAD
-          test "$(git -C "$RUNNER_TEMP/vanillamine-release" rev-parse HEAD)" = "$VANILLAMINE_REVISION"
-          (
-            cd "$RUNNER_TEMP/vanillamine-release/native/vanillagen"
-            go test -count=1 ./...
-            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/package/vanillagen-linux-amd64" .
-          )
-          test "$(package/vanillagen-linux-amd64 -version)" = 'vanillagen dev protocol 7 algorithm 4'
-          sha256sum package/vanillagen-linux-amd64
-      - name: Publish the verified beta PHAR and update manifest
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           version="$(sed -n 's/.*public const BASE_VERSION = "\([^"]*\)";.*/\1/p' src/VersionInfo.php)"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]
-          tag="v$version"
-          channel=estable
-          flags=(--draft)
-          if [[ "$version" == *-* ]]; then channel=pruebas; flags+=(--prerelease); fi
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = "$tag"; fi
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' > /tmp/release-draft; then
-            if [[ "$(cat /tmp/release-draft)" != true ]]; then
-              echo "$tag already published; its assets are preserved."
-              exit 0
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] || { echo "Not a beta version: $version" >&2; exit 1; }
+          test "$RELEASE_TAG" = "v$version"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s "docs/releases/$version.md"
+          test -s tools/ryzertc-runtime.json
+          for workflow in ryzemp-integration.yml ryzemp-extended-coverage.yml; do
+            url="repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?branch=main&head_sha=$GITHUB_SHA&per_page=100"
+            run="$(gh api "$url" | jq -r --arg sha "$GITHUB_SHA" '.workflow_runs[] | select(.head_sha == $sha and .event == "push" and .conclusion == "success") | .id' | head -n 1)"
+            if [[ ! "$run" =~ ^[0-9]+$ ]]; then
+              echo "Missing successful main push CI for $workflow at $GITHUB_SHA" >&2
+              exit 1
             fi
-            draft_id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$tag\") | .id")"
-            [[ "$draft_id" =~ ^[0-9]+$ ]]
-            draft_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.target_commitish')"
-            if [[ "$draft_target" != "$GITHUB_SHA" ]]; then
-              # An empty draft can be resumed after a publishing-only correction.
-              test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$draft_id" --jq '.assets | length')" = 0
-              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"
-            fi
-          else
-            test -s "docs/releases/$version.md"
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${flags[@]}" \
-              --title "RyzeMP $version · Bedrock 1.26.60 / RyzeRTC" --notes-file "docs/releases/$version.md"
-          fi
-          (cd package && sha256sum -c SHA256SUMS.txt)
-          mv package/RyzeMP.phar "package/RyzeMP_${tag}.phar"
-          (cd package && sha256sum "RyzeMP_${tag}.phar" > SHA256SUMS.txt)
-          cp LICENSE package/LICENSE
-          cp COPYING package/COPYING
-          python3 tools/release-manifest.py --release "$tag" --channel "$channel" \
-            --phar "package/RyzeMP_${tag}.phar" --go package/vanillagen-linux-amd64 --out package/ryzemp-update.json
-          # Publish the manifest last; keep the release hidden until all files are ready.
-          for name in "RyzeMP_${tag}.phar" vanillagen-linux-amd64 SHA256SUMS.txt LICENSE COPYING native-phar-smoke.log native-prespawn-smoke.log public-command-smoke.log ryzemp-update.json; do
-            mkdir -p existing
-            if gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir existing; then
-              cmp "package/$name" "existing/$name"
-            else
-              gh release upload "$tag" "package/$name" --repo "$GITHUB_REPOSITORY"
-            fi
+            echo "$workflow passed (run $run)"
+            if [[ "$workflow" == ryzemp-integration.yml ]]; then echo "VERIFIED_RUN=$run" >> "$GITHUB_ENV"; fi
           done
-          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG exists: refuse to overwrite immutable assets." >&2
+            exit 1
+          fi
+      - name: Download PHAR tested by the exact passed integration CI
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          gh run download "$VERIFIED_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name RyzeMP-vanillamine-integration-phar --dir package
+          (cd package && sha256sum -c RyzeMP.phar.sha256)
+          php -r '$p = new Phar("package/RyzeMP.phar"); if ($p->count() < 100) throw new RuntimeException("Invalid PHAR"); foreach (new RecursiveIteratorIterator($p) as $f) { $name = $f->getPathname(); if (str_ends_with($name, ".so") || str_contains($name, "pm-nethernet")) throw new RuntimeException("Native/old transport embedded"); } if (isset($p["native/vanillagen/bin/vanillagen-linux-amd64"])) throw new RuntimeException("Go embedded in PHAR");'
+      - name: Prepare PHAR checksum and independent native dependency manifest
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mv package/RyzeMP.phar "package/RyzeMP_$RELEASE_TAG.phar"
+          (cd package && sha256sum "RyzeMP_$RELEASE_TAG.phar" > SHA256SUMS.txt)
+          cp LICENSE COPYING package/
+          python3 tools/release-manifest.py --release "$RELEASE_TAG" --channel pruebas \
+            --phar "package/RyzeMP_$RELEASE_TAG.phar" --out package/ryzemp-update.json
+          test "$(python3 -c 'import json; print(json.load(open("package/ryzemp-update.json"))["schema"])')" = 1
+          (cd package && sha256sum -c SHA256SUMS.txt)
+      - name: Publish new beta with Egg manifest uploaded last
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          version="$(echo "$RELEASE_TAG" | cut -c2-)"
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --draft --prerelease \
+            --title "RyzeMP $version - VanillaMine multiversion beta" \
+            --notes-file "docs/releases/$version.md"
+          gh release upload "$RELEASE_TAG" \
+            "package/RyzeMP_$RELEASE_TAG.phar" package/SHA256SUMS.txt \
+            package/LICENSE package/COPYING --repo "$GITHUB_REPOSITORY"
+          # The manifest is intentionally last: its presence enables Egg installation.
+          gh release upload "$RELEASE_TAG" package/ryzemp-update.json --repo "$GITHUB_REPOSITORY"
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
