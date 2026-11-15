@@ -105,6 +105,27 @@ jobs:
             echo 'Server did not reach completed-startup state' >&2
             exit 1
           }
+      - name: Headless legacy pocketmine.yml startup and preservation smoke
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ryzemp-legacy/plugins"
+          cp tests/fixtures/legacy-pocketmine.yml "$RUNNER_TEMP/ryzemp-legacy/pocketmine.yml"
+          before="$(sha256sum "$RUNNER_TEMP/ryzemp-legacy/pocketmine.yml" | cut -d ' ' -f1)"
+          # Keep existing-world settings and port; no modification to the legacy YAML.
+          printf 'server-ip=0.0.0.0\nserver-port=19132\nenable-nethernet=off\nlevel-type=flat\n' > "$RUNNER_TEMP/ryzemp-legacy/server.properties"
+          set +e
+          timeout --signal=INT --kill-after=10s 65s php -d memory_limit=2G RyzeMP.phar \
+            --no-wizard --disable-ansi --no-log-file \
+            --data="$RUNNER_TEMP/ryzemp-legacy" --plugins="$RUNNER_TEMP/ryzemp-legacy/plugins" \
+            > "$RUNNER_TEMP/ryzemp-legacy.log" 2>&1
+          code=$?
+          set -e
+          tail -n 100 "$RUNNER_TEMP/ryzemp-legacy.log"
+          test "$code" -eq 0 -o "$code" -eq 124
+          ! grep -Eiq 'Fatal error|Uncaught |\[.*(CRITICAL|EMERGENCY).*\]' "$RUNNER_TEMP/ryzemp-legacy.log"
+          grep -Eq 'Done \(|For help, type|Server started' "$RUNNER_TEMP/ryzemp-legacy.log"
+          after="$(sha256sum "$RUNNER_TEMP/ryzemp-legacy/pocketmine.yml" | cut -d ' ' -f1)"
+          test "$before" = "$after"
       - name: Upload test build (never a production release)
         uses: actions/upload-artifact@v4
         with:
