@@ -2,21 +2,39 @@
 
 This branch is a **development candidate**, not a production-ready replacement for RyzeMP beta.5. The upstream VanillaMine gameplay code and attribution remain intact.
 
-## Networking decision / known incompatibility
+## Networking: authenticated native RyzeRTC API 2 with exclusive fallback
 
-The current VanillaMine-derived runtime starts its **pm-nethernet** native helper for Bedrock 1.26.50+ and keeps RakLib available for legacy RakNet clients. The bridge can multiplex the game UDP port with RakNet and use the same numerical server port for TCP HTTP signaling. The Pterodactyl host must expose both TCP and UDP on the **same** public allocation. No additional public port is permitted.
+RyzeMP now has **two mutually exclusive** NetherNet implementations. If the official
+`ryzertc.so` extension is loaded **outside** the PHAR with API 2, the default
+`network.nethernet.transport: auto` chooses the native RyzeRTC adapter.
+Otherwise it keeps VanillaMine's checksum-pinned `pm-nethernet` bridge. Use
+`network.nethernet.transport: ryzertc` only to require the native runtime (and
+fail startup if missing); `bridge` forces the fallback. This optional selection
+does **not** introduce any additional public ports or separate settings for ICE.
 
-**The existing official [RyzeMP egg](https://github.com/RyzeCompany/egg-ryzemp) instead installs [RyzeRTC](https://github.com/RyzeCompany/RyzeRTC) API 2 as an external native PHP module.** These are different transports with different startup and identity contracts. Do **not** start both transports on the same public port, assume a PM-NetherNet helper is equivalent to RyzeRTC, ship `ryzertc.so` inside `RyzeMP.phar`, or update the existing egg to this branch until a compatible transport integration has been tested.
+The native mode reserves a loopback-only ICE backend, then configures RakLib's
+**existing public UDP socket** for authenticated STUN/DTLS peer traffic. The
+same configured `server-ip`/`server-port` is used for TCP HTTP signaling and
+public UDP RakNet/NetherNet (typically 19132). The two transports cannot be
+started together and RakLib must own UDP in native mode. All signed Minecraft
+identity/ICE assertions, transport-key-to-login-key checks and SDP public-port
+rewriting remain enabled. RyzeRTC does not belong inside `RyzeMP.phar`.
 
-For a production RyzeMP release, either (a) integrate RyzeRTC API 2 into this new base and repeat all authentication and shared-port tests, preserving the official egg, or (b) explicitly design, test and publish an approved new egg/runtime distribution for the pm-nethernet architecture. Neither option is currently approved. The CI candidate uses the upstream bridge solely for **testing**, with its pinned checksum.
+The [official RyzeMP egg](https://github.com/RyzeCompany/egg-ryzemp) supplies
+the compatible native runtime separately; no Egg or production release was
+altered by this integration. The native API 2 smoke test reached `NetherNet READY`
+using the pinned RyzeRTC release and a real headless RyzeMP world on
+[GitHub Actions](https://github.com/RyzeCompany/RyzeMP/actions/runs/43723527405).
+**Authenticated retail-client login, sessions and mixed-version interoperability
+remain unverified** and block production deployment.
 
 ## Automated test gates
 
 - Locked public Composer dependencies (RyzeCompany protocol/data), PHP 8.4 and strict source syntax checks.
 - Focused multiversion palette, block/tile NBT, entity equipment routing, pre-spawn and packet regressions.
-- Full PHPUnit run; PHPStan and Go generator tests should pass with any warnings triaged.
+- Full PHPUnit run on stock PocketMine PHP (focused/regular gate), plus strict **zero-skipped** extended run with official October 2026 PHP 8.4 containing native chunkutils2 0.3.15, vanilla worldgen data, Bedrock sample fixtures and Go vanillagen; PHPStan warnings must be triaged.
 - Build a named `RyzeMP.phar`, verify PHAR validity, startup/`--version`, no embedded `.so`, bridge SHA-256 and an uploadable test artifact.
-- Boot a disposable test instance with headless smoke for both RakNet UDP and authenticated NetherNet TCP+UDP signaling. Verify failure modes and identity protections.
+- Boot disposable test worlds with both pm-nethernet fallback and verified external RyzeRTC API 2 native module; confirm one shared public TCP/UDP port, no duplicate transport and authenticated NetherNet READY. Real retail-client and reconnect tests remain a separate gate.
 
 ## Required real-client acceptance matrix
 
@@ -32,7 +50,7 @@ Also import a copy of an existing LevelDB world; check saving, restart, entity/c
 
 ## CI / artifact
 
-The branch workflow [RyzeMP VanillaMine-base integration](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) builds a disposable PHAR with a checksummed Linux amd64 `pm-nethernet` bridge and Go `vanillagen`. It is not a signed, sanctioned production release. The normal RyzeMP egg continues consuming existing RyzeMP release manifests; this branch does not publish into that channel.
+The [integration CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) builds a disposable PHAR with the checksummed Linux amd64 pm-nethernet fallback and native Go vanillagen, then starts it **twice**: once with the default bridge and once with a SHA-256-verified external RyzeRTC API 2 extension. The [extended coverage CI](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-extended-coverage.yml) exercises the formerly skipped native, vanilla-data and benchmark tests, including a full PHPUnit run that fails on any skipped test. Neither workflow releases to production; the normal egg continues using existing official releases.
 
 ## Upstream attribution
 
