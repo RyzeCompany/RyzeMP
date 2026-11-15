@@ -83,6 +83,26 @@ jobs:
           sha256sum RyzeMP.phar > RyzeMP.phar.sha256
       - name: Check archive version entry point
         run: php RyzeMP.phar --version
+      - name: Headless world start smoke (non-retail)
+        run: |
+          mkdir -p "$RUNNER_TEMP/ryzemp-smoke/plugins"
+          set +e
+          timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
+          code=$?
+          set -e
+          tail -n 120 "$RUNNER_TEMP/ryzemp-smoke.log"
+          if grep -Eiq 'Fatal error|Uncaught |\[.*(CRITICAL|EMERGENCY).*\]' "$RUNNER_TEMP/ryzemp-smoke.log"; then
+            echo 'Server reported a fatal boot error' >&2
+            exit 1
+          fi
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Boot smoke exited with code $code" >&2
+            exit 1
+          fi
+          grep -Eq 'Done \(|For help, type|Server started' "$RUNNER_TEMP/ryzemp-smoke.log" || {
+            echo 'Server did not reach completed-startup state' >&2
+            exit 1
+          }
       - name: Upload test build (never a production release)
         uses: actions/upload-artifact@v4
         with:
