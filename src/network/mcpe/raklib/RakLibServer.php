@@ -36,6 +36,7 @@ use raklib\server\ipc\RakLibToUserThreadMessageSender;
 use raklib\server\ipc\UserToRakLibThreadMessageReceiver;
 use raklib\server\Server;
 use raklib\server\ServerSocket;
+use pocketmine\network\mcpe\ryzertc\NetherNetSharedPortSocket;
 use raklib\server\SimpleProtocolAcceptor;
 use raklib\utils\ExceptionTraceCleaner;
 use raklib\utils\InternetAddress;
@@ -56,6 +57,11 @@ class RakLibServer extends Thread{
 	protected int $relayPort = 0;
 	protected int $wakePort = 0;
 	protected string $mainPath;
+	private ?int $netherNetIceBackendPort = null;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetIceCommands;
+	/** @phpstan-var ThreadSafeArray<int, string> */
+	private ThreadSafeArray $netherNetPeerEvents;
 	/** @phpstan-var NonThreadSafeValue<InternetAddress> */
 	protected NonThreadSafeValue $address;
 
@@ -77,10 +83,21 @@ class RakLibServer extends Thread{
 		/** Maximum replies to unconnected pings (server list) per second, 0 = no limit */
 		protected int $maxPongsPerSecond = 0,
 		/** Comma-separated addresses and networks never blocked automatically, e.g. proxies (loopback always is) */
-		protected string $autoBlockExemptAddresses = ""
+		protected string $autoBlockExemptAddresses = "",
+		ThreadSafeArray $netherNetIceCommands = new ThreadSafeArray(),
+		ThreadSafeArray $netherNetPeerEvents = new ThreadSafeArray()
 	){
+		$this->netherNetIceCommands = $netherNetIceCommands;
+		$this->netherNetPeerEvents = $netherNetPeerEvents;
 		$this->mainPath = \pocketmine\PATH;
 		$this->address = new NonThreadSafeValue($address);
+	}
+
+	public function configureNetherNetSharedPort(int $backendPort) : void{
+		if($backendPort < 1 || $backendPort > 65535 || $this->isRunning()){
+			throw new \InvalidArgumentException("RyzeRTC ICE backend must be a private port configured before RakLib starts");
+		}
+		$this->netherNetIceBackendPort = $backendPort;
 	}
 
 	public function startAndWait(int $options = NativeThread::INHERIT_NONE) : void{
@@ -108,7 +125,12 @@ class RakLibServer extends Thread{
 		ini_set("display_startup_errors", '1');
 		\GlobalLogger::set($this->logger);
 
-		if($this->relayToken !== ""){
+		if($this->netherNetIceBackendPort !== null){
+			if($this->relayToken !== ""){
+				throw new \LogicException("Cannot run the RyzeRTC UDP owner and pm-nethernet relay together");
+			}
+			$socket = new NetherNetSharedPortSocket($this->address->deserialize(), $this->netherNetIceBackendPort, $this->netherNetIceCommands, $this->netherNetPeerEvents);
+		}elseif($this->relayToken !== ""){
 			$socket = new RelayedServerSocket($this->address->deserialize(), $this->relayToken);
 			$this->relayPort = $socket->getRelayPort();
 		}else{
