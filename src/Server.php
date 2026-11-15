@@ -1350,7 +1350,6 @@ class Server{
 			}
 		}
 
-
 		// The Pterodactyl Egg can request a separate Vanilla world without modifying
 		// server.properties, pocketmine.yml, the default world or existing world files.
 		// New installations already use the Vanilla default generator; no duplicate is needed.
@@ -1411,8 +1410,13 @@ class Server{
 				$generatorOptions = $this->configGroup->getConfigString(ServerProperties::DEFAULT_WORLD_GENERATOR_SETTINGS);
 				$generatorClass = $getGenerator($generatorName, $generatorOptions, $default);
 				if($generatorClass === null && GeneratorManager::getInstance()->getGenerator($generatorName)?->getGeneratorClass() === VanillaGenerator::class){
-					//e.g. no network on the first start: Mojang's data can't be fetched. Don't leave the server unable to
-					//start because of the default generator.
+					// With explicit Vanilla opt-in, a failed data fetch must never
+					// silently create a permanent Normal world under the intended name.
+					if(getenv("RYZEMP_VANILLA_WORLDGEN") === "true"){
+						$this->logger->emergency("[RyzeMP Vanilla] Cannot prepare the new default Vanilla world without its verified data. Fix the download or disable the opt-in; no replacement terrain was generated.");
+						return false;
+					}
+					// Without the opt-in preserve legacy fallback behaviour for new servers.
 					$this->logger->warning("The vanilla world generator is not available (see the error above): creating the new world \"$default\" with the normal generator instead.");
 					$generatorOptions = "";
 					$generatorClass = $getGenerator("normal", $generatorOptions, $default);
