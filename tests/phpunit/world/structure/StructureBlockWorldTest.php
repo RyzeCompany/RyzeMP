@@ -265,7 +265,7 @@ final class StructureBlockWorldTest extends RedstoneTestCase{
 
 		$this->saveFilled("test:shared", 32, 2, 32);
 		$first = $this->structureBlock(-30, 10, -30, StructureBlockType::LOAD, "test:shared", new Vector3(0, 1, 0));
-		$second = $this->structureBlock(0, 10, 0, StructureBlockType::LOAD, "test:shared", new Vector3(0, 1, 0));
+		$second = $this->structureBlock(8, 10, 8, StructureBlockType::LOAD, "test:shared", new Vector3(0, 1, 0));
 		$start = hrtime(true);
 		self::assertNull($first->loadStructure());
 		self::assertNull($second->loadStructure());
@@ -274,11 +274,11 @@ final class StructureBlockWorldTest extends RedstoneTestCase{
 		//a budget older than a tick (50 ms) belongs to an earlier tick: on a busy machine (CI runners, tests in parallel)
 		//the two loads can take that long, and then the second one rightly gets a budget of its own
 		if($elapsed < 40_000_000){
-			self::assertFalse($this->get(0, 11, 0)->isSameState(VanillaBlocks::STONE()), "the first load used the budget of the tick");
+			self::assertFalse($this->get(8, 11, 8)->isSameState(VanillaBlocks::STONE()), "the first load used the budget of the tick");
 		}
 		$this->runUntilLoaded(400, $first, $second);
 		self::assertTrue($this->get(1, 12, 31)->isSameState(VanillaBlocks::STONE()));
-		self::assertTrue($this->get(1, 12, 1)->isSameState(VanillaBlocks::STONE()));
+		self::assertTrue($this->get(9, 12, 9)->isSameState(VanillaBlocks::STONE()));
 	}
 
 	/**

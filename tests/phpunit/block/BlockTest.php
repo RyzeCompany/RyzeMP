@@ -104,7 +104,7 @@ class BlockTest extends TestCase{
 	}
 
 	public function testBlockBreakInfo() : void{
-		$propertiesTable = json_decode(Filesystem::fileGetContents(BedrockDataFiles::BLOCK_PROPERTIES_TABLE_JSON), true, 3, JSON_THROW_ON_ERROR);
+		$propertiesTable = BlockPropertiesTable::load();
 		if(!is_array($propertiesTable)){
 			throw new AssumptionFailedError("Block properties table must be an array");
 		}
@@ -128,10 +128,10 @@ class BlockTest extends TestCase{
 			if(!isset($propertiesTable[$vanillaId]) || !is_array($propertiesTable[$vanillaId])){
 				throw new AssumptionFailedError("$vanillaId does not exist in the vanilla block properties table or is not an array");
 			}
-			if(!isset($propertiesTable[$vanillaId]["hardness"]) || !is_float($propertiesTable[$vanillaId]["hardness"])){
+			if(!isset($propertiesTable[$vanillaId]["hardness"]) || (!is_float($propertiesTable[$vanillaId]["hardness"]) && !is_int($propertiesTable[$vanillaId]["hardness"]))){
 				throw new AssumptionFailedError("Hardness property is missing for $vanillaId or is not a float value");
 			}
-			if(!isset($propertiesTable[$vanillaId]["blastResistance"]) || !is_float($propertiesTable[$vanillaId]["blastResistance"])){
+			if(!isset($propertiesTable[$vanillaId]["blastResistance"]) || (!is_float($propertiesTable[$vanillaId]["blastResistance"]) && !is_int($propertiesTable[$vanillaId]["blastResistance"]))){
 				throw new AssumptionFailedError("Blast resistance property is missing for $vanillaId or is not a float value");
 			}
 			$testedBlocks[$vanillaId] = true;

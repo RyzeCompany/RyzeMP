@@ -71,7 +71,7 @@ final class BlockPropertiesParityTest extends TestCase{
 	 * @return array<string, array<string, mixed>>
 	 */
 	private static function loadTable() : array{
-		$table = json_decode(Filesystem::fileGetContents(BedrockDataFiles::BLOCK_PROPERTIES_TABLE_JSON), true, 3, JSON_THROW_ON_ERROR);
+		$table = BlockPropertiesTable::load();
 		self::assertIsArray($table);
 		/** @var array<string, array<string, mixed>> $table */
 		return $table;

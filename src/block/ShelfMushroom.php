@@ -40,14 +40,14 @@ use pocketmine\world\BlockTransaction;
  * Shelf mushroom (Bedrock 1.26.40): a flat fungus that grows on the side of a block.
  *
  * Vanilla (wall_foliage_block, size_count 2) only uses growth 0 (small) and 1 (large): bone meal grows a small one into
- * a large one, which drops 2. The block states go up to 7 like every "growth" state, so they all stay loadable.
+ * a large one, which drops 2. Only these two states occur in the 1.26.60 network palette.
  */
 class ShelfMushroom extends Flowable implements HorizontalFacing{
 	use HorizontalFacingTrait;
 	use StaticSupportTrait;
 
 	public const MIN_GROWTH = 0;
-	public const MAX_GROWTH = 7;
+	public const MAX_GROWTH = 1;
 	/** Growth of a large shelf mushroom, the last vanilla stage. */
 	private const LARGE_GROWTH = 1;
 
@@ -96,6 +96,6 @@ class ShelfMushroom extends Flowable implements HorizontalFacing{
 	}
 
 	public function getLightLevel() : int{
-		return 1;
+		return 0; //BDS 1.26.51 properties export: shelf_mushroom does not emit light
 	}
 }
