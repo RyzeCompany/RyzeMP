@@ -42,7 +42,7 @@ use const M_PI;
  * {@link \pocketmine\entity\npc\VillagerV2::getHomeRadius()}): the villager heads for a random point within 6 blocks
  * inside it, in legs of {@link RaidMoveGoal::STEP} blocks, then explores spots up to 5 blocks around, waiting up to 10
  * seconds at each, for twice the time the trip took. Villagers without a bed don't explore. A leg the villager can't
- * walk (no path, or a partial one that leaves it where it was: pens, iron farms, walled villages) ends the trip, like a
+ * walk (no path, or a partial one that stops short of its waypoint: pens, iron farms, walled villages) ends the trip, like a
  * failed path ends vanilla goals; the next exploration then waits {@link ExploreOutskirtsGoal::COOLDOWN_MAX} ticks, twice
  * as long after two failed ones in a row and four times after three or more, so that villagers which can't leave their
  * pen don't keep searching paths out of it.
@@ -61,8 +61,6 @@ class ExploreOutskirtsGoal extends VillagerGoal{
 	private const COOLDOWN_MAX = 1200;
 	/** A leg ending farther than this from its end point... */
 	private const LEG_REACHED_DISTANCE = 2.0;
-	/** ...after moving the villager less than this failed. */
-	private const LEG_MIN_PROGRESS = 1.5;
 	/** Highest power of two of the wait after failed explorations in a row. */
 	private const MAX_FAILED_SHIFT = 2;
 
@@ -74,8 +72,6 @@ class ExploreOutskirtsGoal extends VillagerGoal{
 	private int $nextTry = 0;
 	/** Whether a leg was requested and hasn't been checked yet. */
 	private bool $onLeg = false;
-	private float $legStartX = 0.0;
-	private float $legStartZ = 0.0;
 	private float $legEndX = 0.0;
 	private float $legEndZ = 0.0;
 	/** Explorations in a row that couldn't get to their target. */
@@ -138,10 +134,9 @@ class ExploreOutskirtsGoal extends VillagerGoal{
 			}
 			if($this->onLeg){
 				$this->onLeg = false;
-				if(
-					($loc->x - $this->legEndX) ** 2 + ($loc->z - $this->legEndZ) ** 2 > self::LEG_REACHED_DISTANCE ** 2 &&
-					($loc->x - $this->legStartX) ** 2 + ($loc->z - $this->legStartZ) ** 2 < self::LEG_MIN_PROGRESS ** 2
-				){
+				//A partial path is a failed leg even when it made some progress: retrying from
+				//the same blocked waypoint wastes A* searches in pens and walled villages.
+				if(($loc->x - $this->legEndX) ** 2 + ($loc->z - $this->legEndZ) ** 2 > self::LEG_REACHED_DISTANCE ** 2){
 					$this->giveUp($now); //no way there
 					return;
 				}
@@ -154,8 +149,6 @@ class ExploreOutskirtsGoal extends VillagerGoal{
 					return;
 				}
 				$this->onLeg = true;
-				$this->legStartX = $loc->x;
-				$this->legStartZ = $loc->z;
 				$this->legEndX = $step->x;
 				$this->legEndZ = $step->z;
 			}
