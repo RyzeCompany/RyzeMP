@@ -79,7 +79,7 @@ jobs:
         run: |
           php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar --git="$GITHUB_SHA" --build="$GITHUB_RUN_NUMBER"
           test -s RyzeMP.phar
-          php -r '$p = new Phar("RyzeMP.phar"); if($p->count() < 100) throw new RuntimeException("Empty PHAR"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so")) throw new RuntimeException("Native .so must remain outside PHAR");}'
+          php -r '$p = new Phar("RyzeMP.phar"); if($p->count() < 100) throw new RuntimeException("Empty PHAR"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so")) throw new RuntimeException("Native .so must remain outside PHAR");} foreach(["native/nethernet/bin/pm-nethernet-linux-amd64", "native/vanillagen/bin/vanillagen-linux-amd64"] as $native){if(isset($p[$native])) throw new RuntimeException("Native executable embedded: $native");}'
           sha256sum RyzeMP.phar > RyzeMP.phar.sha256
       - name: Check archive version entry point
         run: php RyzeMP.phar --version
@@ -89,7 +89,7 @@ jobs:
           cp resources/pocketmine.yml "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
           sed -i "s/enable-dev-builds: false/enable-dev-builds: true/" "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
           set +e
-          timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
+          RYZEMP_NETHERNET_BINARY="$PWD/native/nethernet/bin/pm-nethernet-linux-amd64" RYZEMP_VANILLAGEN_BINARY="$PWD/native/vanillagen/bin/vanillagen-linux-amd64" timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
           code=$?
           set -e
           tail -n 120 "$RUNNER_TEMP/ryzemp-smoke.log"
@@ -112,6 +112,8 @@ jobs:
           path: |
             RyzeMP.phar
             RyzeMP.phar.sha256
+            native/nethernet/bin/pm-nethernet-linux-amd64
+            native/vanillagen/bin/vanillagen-linux-amd64
           if-no-files-found: error
           retention-days: 7
 
