@@ -155,7 +155,7 @@ final class BossBar{
 
 	public function show(Player $player) : void{
 		$this->viewers[spl_object_id($player)] = $player;
-		$player->getNetworkSession()->sendDataPacket(BossEventPacket::show($this->boss->getId(), $this->title, $this->getPercent(), $this->color));
+		$player->getNetworkSession()->sendDataPacket(BossEventPacket::show($this->boss->getId(), $this->title, $this->getPercent(), false, $this->color));
 	}
 
 	public function hide(Player $player) : void{

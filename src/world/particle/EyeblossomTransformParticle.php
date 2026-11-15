@@ -37,6 +37,6 @@ class EyeblossomTransformParticle implements Particle{
 	){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle($this->open ? ParticleIds::EYEBLOSSOM_OPEN : ParticleIds::EYEBLOSSOM_CLOSE, 0, $pos)];
+		return [LevelEventPacket::standardParticle($this->open ? ParticleIds::EYEBLOSSOM_OPEN : ParticleIds::EYEBLOSSOM_CLOSE, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

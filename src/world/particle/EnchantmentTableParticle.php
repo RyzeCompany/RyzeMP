@@ -30,6 +30,6 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 class EnchantmentTableParticle implements Particle{
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::ENCHANTMENT_TABLE, 0, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::ENCHANTMENT_TABLE, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

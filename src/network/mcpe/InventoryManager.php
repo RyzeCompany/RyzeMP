@@ -713,6 +713,7 @@ class InventoryManager{
 				$windowId,
 				$netSlot,
 				null,
+				0,
 				null,
 				new ItemStackWrapper(0, ItemStack::null())
 			));
@@ -722,6 +723,7 @@ class InventoryManager{
 			$windowId,
 			$netSlot,
 			null,
+			0,
 			null,
 			$itemStackWrapper
 		));
@@ -743,10 +745,11 @@ class InventoryManager{
 			$windowId,
 			array_fill_keys(array_keys($itemStackWrappers), new ItemStackWrapper(0, ItemStack::null())),
 			new FullContainerName(0, null),
+			0,
 			new ItemStackWrapper(0, ItemStack::null())
 		));
 		//now send the real contents
-		$this->session->sendDataPacket(InventoryContentPacket::create($windowId, $itemStackWrappers, new FullContainerName(0, null), new ItemStackWrapper(0, ItemStack::null())));
+		$this->session->sendDataPacket(InventoryContentPacket::create($windowId, $itemStackWrappers, new FullContainerName(0, null), 0, new ItemStackWrapper(0, ItemStack::null())));
 	}
 
 	public function syncSlot(Inventory $inventory, int $slot, ItemStack $itemStack) : void{
@@ -1075,6 +1078,7 @@ class InventoryManager{
 			ContainerIds::CONTAINER_ID_REGISTRY,
 			$wrappers,
 			new FullContainerName(ContainerUIIds::DYNAMIC, $container->id),
+			0,
 			new ItemStackWrapper($bundleStackId, $this->session->getTypeConverter()->coreItemStackToNet($bundle, $container->id))
 		));
 	}

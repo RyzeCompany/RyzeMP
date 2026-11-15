@@ -32,6 +32,6 @@ class DustParticle implements Particle{
 	public function __construct(private Color $color){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::DUST, $this->color->toARGB(), $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::DUST, $this->color->toARGB(), $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

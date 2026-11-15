@@ -31,6 +31,6 @@ class RedstoneParticle implements Particle{
 	public function __construct(private int $lifetime = 1){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::REDSTONE, $this->lifetime, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::REDSTONE, $this->lifetime, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

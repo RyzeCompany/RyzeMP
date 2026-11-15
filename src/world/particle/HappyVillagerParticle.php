@@ -30,6 +30,6 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 class HappyVillagerParticle implements Particle{
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::VILLAGER_HAPPY, 0, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::VILLAGER_HAPPY, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

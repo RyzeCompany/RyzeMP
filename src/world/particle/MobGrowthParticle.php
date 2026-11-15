@@ -41,6 +41,6 @@ class MobGrowthParticle implements Particle{
 	}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle($this->paused ? ParticleIds::PAUSE_MOB_GROWTH : ParticleIds::RESET_MOB_GROWTH, 0, $pos)];
+		return [LevelEventPacket::standardParticle($this->paused ? ParticleIds::PAUSE_MOB_GROWTH : ParticleIds::RESET_MOB_GROWTH, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

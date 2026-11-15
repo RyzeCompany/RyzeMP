@@ -722,8 +722,8 @@ class InGamePacketHandler extends PacketHandler{
 
 		$vehicleInfo = $packet->getVehicleInfo();
 		if($vehicleInfo !== null && $vehicleInfo->getPredictedVehicleActorUniqueId() === $vehicle->getId()){
-			$yaw = $vehicleInfo->getVehicleRotationZ();
-			$pitch = $vehicleInfo->getVehicleRotationX();
+			$yaw = $vehicleInfo->getVehicleRotationZ() ?? $location->yaw;
+			$pitch = $vehicleInfo->getVehicleRotationX() ?? 0.0;
 			if(is_nan($yaw) || is_infinite($yaw) || is_nan($pitch) || is_infinite($pitch)){
 				$yaw = $location->yaw;
 				$pitch = 0.0;

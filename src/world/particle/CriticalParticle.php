@@ -31,6 +31,6 @@ class CriticalParticle implements Particle{
 	public function __construct(private int $scale = 2){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::CRITICAL, $this->scale, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::CRITICAL, $this->scale, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

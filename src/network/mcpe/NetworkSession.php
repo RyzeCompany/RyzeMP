@@ -734,7 +734,7 @@ class NetworkSession{
 			try{
 				$stream = new ByteBufferReader($buffer);
 				try{
-					$packet->decode($stream);
+				$packet->decode($stream, ProtocolInfo::CURRENT_PROTOCOL);
 				}catch(PacketDecodeException $e){
 					throw PacketHandlingException::wrap($e);
 				}
@@ -873,7 +873,7 @@ class NetworkSession{
 		$timings = Timings::getEncodeDataPacketTimings($packet);
 		$timings->startTiming();
 		try{
-			$packet->encode($serializer);
+			$packet->encode($serializer, ProtocolInfo::CURRENT_PROTOCOL);
 			return $serializer->getData();
 		}finally{
 			$timings->stopTiming();

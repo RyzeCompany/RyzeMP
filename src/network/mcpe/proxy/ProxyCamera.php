@@ -77,7 +77,7 @@ final class ProxyCamera{
 
 	private static function sendPresets(NetworkSession $session) : void{
 		$session->sendDataPacket(CameraPresetsPacket::create([
-			new CameraPreset("minecraft:free", "", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+			new CameraPreset("minecraft:free", "", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
 		]));
 	}
 

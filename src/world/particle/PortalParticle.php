@@ -30,6 +30,6 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 class PortalParticle implements Particle{
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::PORTAL, 0, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::PORTAL, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

@@ -33,6 +33,6 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 class CreakingCrumbleParticle implements Particle{
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::CREAKING_CRUMBLE, 0, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::CREAKING_CRUMBLE, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

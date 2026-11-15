@@ -31,6 +31,6 @@ class SmokeParticle implements Particle{
 	public function __construct(private int $scale = 0){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::SMOKE, $this->scale, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::SMOKE, $this->scale, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

@@ -96,7 +96,7 @@ final class RaidBossBar{
 		foreach($new as $id => $player){
 			if(!isset($this->viewers[$id])){
 				$this->viewers[$id] = $player;
-				$player->getNetworkSession()->sendDataPacket(BossEventPacket::show($player->getId(), $this->title, $this->percent, BossBarColor::RED));
+				$player->getNetworkSession()->sendDataPacket(BossEventPacket::show($player->getId(), $this->title, $this->percent, false, BossBarColor::RED));
 			}
 		}
 	}

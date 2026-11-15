@@ -296,7 +296,7 @@ final class CraftingDataCache{
 		}
 		$context = $unlocking->getContext();
 		if($context !== RecipeUnlocking::CONTEXT_NONE){
-			return new RecipeUnlockingRequirement(null, $context);
+			return new RecipeUnlockingRequirement(null);
 		}
 		//an empty list (e.g. the crafting table from crimson planks, covered by the planks tag recipe) is never unlocked
 		return new RecipeUnlockingRequirement(array_map($converter->coreRecipeIngredientToNet(...), $unlocking->getUnlockingIngredients()));

@@ -53,6 +53,7 @@ use pocketmine\network\mcpe\protocol\types\LevelSettings;
 use pocketmine\network\mcpe\protocol\types\NetworkPermissions;
 use pocketmine\network\mcpe\protocol\types\PlayerAction;
 use pocketmine\network\mcpe\protocol\types\PlayerMovementSettings;
+use pocketmine\network\mcpe\protocol\types\ServerAuthMovementMode;
 use pocketmine\network\mcpe\protocol\types\ServerTelemetryData;
 use pocketmine\network\mcpe\protocol\types\SpawnSettings;
 use pocketmine\network\mcpe\protocol\types\TrimMaterial;
@@ -136,7 +137,7 @@ class PreSpawnPacketHandler extends PacketHandler{
 				$this->server->getMotd(),
 				"",
 				false,
-				new PlayerMovementSettings(0, true),
+				new PlayerMovementSettings(ServerAuthMovementMode::SERVER_AUTHORITATIVE_V3, 0, true),
 				0,
 				0,
 				"",
@@ -145,12 +146,14 @@ class PreSpawnPacketHandler extends PacketHandler{
 				Uuid::fromString(Uuid::NIL),
 				false,
 				true, //blockNetworkIdsAreHashes - see BlockStateDictionary::computeNetworkId()
+				false,
 				new NetworkPermissions(disableClientSounds: true),
 				true,
 				null,
 				new ServerTelemetryData("", "", "", ""),
 				[],
 				0,
+				$typeConverter->getItemTypeDictionary()->getEntries(),
 			));
 
 			$this->session->getLogger()->debug("Sending items");

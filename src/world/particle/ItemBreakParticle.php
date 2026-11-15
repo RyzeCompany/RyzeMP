@@ -34,6 +34,6 @@ class ItemBreakParticle implements Particle{
 
 	public function encode(Vector3 $pos) : array{
 		[$id, $meta] = TypeConverter::getInstance()->getItemTranslator()->toNetworkId($this->item);
-		return [LevelEventPacket::standardParticle(ParticleIds::ITEM_BREAK, ($id << 16) | $meta, $pos)];
+		return [LevelEventPacket::standardParticle(ParticleIds::ITEM_BREAK, ($id << 16) | $meta, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
 	}
 }

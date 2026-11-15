@@ -317,7 +317,7 @@ final class MapManager{
 		$player->getNetworkSession()->sendDataPacket($creation);
 
 		$data = $this->createPacket($map);
-		$data->colors = MapImage::fromRGBABytes(MapData::SIZE, MapData::SIZE, $map->getPixels());
+		$data->colors = self::imageFromRgbaBytes(MapData::SIZE, MapData::SIZE, $map->getPixels());
 		$this->setDecorations($data, $map->getId());
 		$player->getNetworkSession()->sendDataPacket($data);
 	}
@@ -540,11 +540,27 @@ final class MapManager{
 			$packet = $this->createPacket($map);
 			$packet->xOffset = $x;
 			$packet->yOffset = $y;
-			$packet->colors = MapImage::fromRGBABytes($width, $height, $map->getPixelArea($x, $y, $width, $height));
+			$packet->colors = self::imageFromRgbaBytes($width, $height, $map->getPixelArea($x, $y, $width, $height));
 			foreach($viewers as $viewer){
 				$viewer->getNetworkSession()->sendDataPacket($packet);
 			}
 		}
+	}
+
+	private static function imageFromRgbaBytes(int $width, int $height, string $bytes) : MapImage{
+		if(strlen($bytes) !== $width * $height * 4){
+			throw new \InvalidArgumentException("Map image byte count does not match its dimensions");
+		}
+		$pixels = [];
+		for($y = 0; $y < $height; ++$y){
+			$row = [];
+			for($x = 0; $x < $width; ++$x){
+				$offset = ($y * $width + $x) * 4;
+				$row[] = new Color(ord($bytes[$offset]), ord($bytes[$offset + 1]), ord($bytes[$offset + 2]), ord($bytes[$offset + 3]));
+			}
+			$pixels[] = $row;
+		}
+		return new MapImage($pixels);
 	}
 
 	/**

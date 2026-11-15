@@ -38,8 +38,10 @@ use pocketmine\utils\SingletonTrait;
 use pocketmine\utils\Utils;
 use pocketmine\world\biome\model\BiomeDefinitionEntryData;
 use function count;
+use function base64_decode;
 use function get_debug_type;
 use function is_array;
+use function is_string;
 use function json_decode;
 
 class StaticPacketCache{
@@ -82,6 +84,10 @@ class StaticPacketCache{
 					$biomeDefinition->id,
 					$biomeDefinition->temperature,
 					$biomeDefinition->downfall,
+					0.0,
+					0.0,
+					0.0,
+					0.0,
 					$biomeDefinition->foliageSnow,
 					$biomeDefinition->depth,
 					$biomeDefinition->scale,
@@ -106,8 +112,18 @@ class StaticPacketCache{
 		return new self(
 			BiomeDefinitionListPacket::fromDefinitions(self::loadBiomeDefinitionModel(BedrockDataFiles::BIOME_DEFINITIONS_JSON)),
 			AvailableActorIdentifiersPacket::create(self::loadCompoundFromFile(BedrockDataFiles::ENTITY_IDENTIFIERS_NBT)),
-			JigsawStructureDataPacket::create(self::loadCompoundFromFile(BedrockDataFiles::JIGSAW_STRUCTURE_DATA_NBT))
+			self::loadJigsawStructureData()
 		);
+	}
+
+	private static function loadJigsawStructureData() : JigsawStructureDataPacket{
+		$json = json_decode(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "/jigsaw_structures-1.26.50.json"), true, flags: JSON_THROW_ON_ERROR);
+		$encoded = is_array($json) ? ($json["nbtB64"] ?? null) : null;
+		$nbt = is_string($encoded) ? base64_decode($encoded, true) : false;
+		if($nbt === false){
+			throw new SavedDataLoadingException("Invalid jigsaw structure fixture");
+		}
+		return JigsawStructureDataPacket::create(new CacheableNbt((new NetworkNbtSerializer())->read($nbt)->mustGetCompoundTag()));
 	}
 
 	private JigsawStructureDataPacket $jigsawStructureData;
@@ -121,7 +137,7 @@ class StaticPacketCache{
 		private AvailableActorIdentifiersPacket $availableActorIdentifiers,
 		?JigsawStructureDataPacket $jigsawStructureData = null
 	){
-		$this->jigsawStructureData = $jigsawStructureData ?? JigsawStructureDataPacket::create(self::loadCompoundFromFile(BedrockDataFiles::JIGSAW_STRUCTURE_DATA_NBT));
+		$this->jigsawStructureData = $jigsawStructureData ?? self::loadJigsawStructureData();
 	}
 
 	public function getBiomeDefs() : BiomeDefinitionListPacket{
