@@ -32,10 +32,11 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
       - name: Verify PHP syntax
         run: find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /tmp/ryzemp-php-lint.log
-      - name: Test multiversion item palettes and entity equipment packet routing
+      - name: Test multiversion, authenticated NetherNet and same-port HTTP/TLS regressions
         run: |
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/ProtocolPaletteTest.php
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/StandardEntityEventBroadcasterTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/ryzertc/NetherNetHttpServerTest.php
 
   full-suite:
     name: Full PHPUnit suite (release gate)
@@ -71,7 +72,7 @@ jobs:
         with:
           go-version: '1.24.x'
           cache: false
-      - name: Build checked native NetherNet bridge and Go generator for Linux
+      - name: Build external native Go generator for Linux
         env:
           NATIVE_TARGETS: linux/amd64
         run: bash build/ci/build-native.sh "integration-$GITHUB_RUN_NUMBER"
@@ -79,7 +80,7 @@ jobs:
         run: |
           php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar --git="$GITHUB_SHA" --build="$GITHUB_RUN_NUMBER"
           test -s RyzeMP.phar
-          php -r '$p = new Phar("RyzeMP.phar"); if($p->count() < 100) throw new RuntimeException("Empty PHAR"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so")) throw new RuntimeException("Native .so must remain outside PHAR");} foreach(["native/nethernet/bin/pm-nethernet-linux-amd64", "native/vanillagen/bin/vanillagen-linux-amd64"] as $native){if(isset($p[$native])) throw new RuntimeException("Native executable embedded: $native");}'
+          php -r '$p = new Phar("RyzeMP.phar"); if($p->count() < 100) throw new RuntimeException("Empty PHAR"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so") || str_contains($f->getPathname(), "pm-nethernet")) throw new RuntimeException("Legacy/native binary inside PHAR");} if(isset($p["native/vanillagen/bin/vanillagen-linux-amd64"])) throw new RuntimeException("Go must remain outside PHAR");'
           sha256sum RyzeMP.phar > RyzeMP.phar.sha256
       - name: Check archive version entry point
         run: php RyzeMP.phar --version
@@ -88,8 +89,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ryzemp-smoke/plugins"
           cp resources/pocketmine.yml "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
           sed -i "s/enable-dev-builds: false/enable-dev-builds: true/" "$RUNNER_TEMP/ryzemp-smoke/pocketmine.yml"
+          # This smoke intentionally exercises RakNet-only startup without native PHP modules.
+          printf 'server-ip=0.0.0.0\nserver-port=19132\nenable-nethernet=off\n' > "$RUNNER_TEMP/ryzemp-smoke/server.properties"
           set +e
-          RYZEMP_NETHERNET_BINARY="$PWD/native/nethernet/bin/pm-nethernet-linux-amd64" RYZEMP_VANILLAGEN_BINARY="$PWD/native/vanillagen/bin/vanillagen-linux-amd64" timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
+          RYZEMP_VANILLAGEN_BINARY="$PWD/native/vanillagen/bin/vanillagen-linux-amd64" timeout --signal=INT --kill-after=10s 75s php -d memory_limit=2G RyzeMP.phar --no-wizard --disable-ansi --no-log-file --data="$RUNNER_TEMP/ryzemp-smoke" --plugins="$RUNNER_TEMP/ryzemp-smoke/plugins" > "$RUNNER_TEMP/ryzemp-smoke.log" 2>&1
           code=$?
           set -e
           tail -n 120 "$RUNNER_TEMP/ryzemp-smoke.log"
@@ -112,7 +115,6 @@ jobs:
           path: |
             RyzeMP.phar
             RyzeMP.phar.sha256
-            native/nethernet/bin/pm-nethernet-linux-amd64
             native/vanillagen/bin/vanillagen-linux-amd64
           if-no-files-found: error
           retention-days: 7
@@ -154,7 +156,7 @@ jobs:
           LD_LIBRARY_PATH="$RYZERTC_NATIVE_DIR/lib" php -d "extension=$RYZERTC_NATIVE_DIR/ryzertc.so" -r '
             if (!extension_loaded("ryzertc") || RyzeRTC\Runtime::apiVersion() < 2) exit(1);
             echo RyzeRTC\Runtime::version(), " API ", RyzeRTC\Runtime::apiVersion(), "\n";'
-      - name: Boot PHAR using native RyzeRTC (not pm-nethernet)
+      - name: Boot PHAR using exclusive native RyzeRTC
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ryzertc-smoke/plugins"
@@ -179,8 +181,8 @@ jobs:
           fi
           grep -Fq 'Native RyzeRTC API 2 using TCP/UDP 19132' "$RUNNER_TEMP/ryzertc-smoke.log"
           grep -Eq 'Done \(|For help, type|Server started' "$RUNNER_TEMP/ryzertc-smoke.log"
-          if grep -Fq 'Bridge 0.1.2' "$RUNNER_TEMP/ryzertc-smoke.log"; then
-            echo 'Mutually exclusive transports ran together' >&2
+          if grep -Eq 'Bridge 0\\.1\\.2|pm-nethernet' "$RUNNER_TEMP/ryzertc-smoke.log"; then
+            echo 'Legacy NetherNet Go bridge was invoked' >&2
             exit 1
           fi
           grep -Fq 'NetherNet READY' "$RUNNER_TEMP/ryzertc-smoke.log"
