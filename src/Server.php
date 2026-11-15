@@ -173,6 +173,7 @@ use function file_put_contents;
 use function filemtime;
 use function fopen;
 use function get_class;
+use function getenv;
 use function gettype;
 use function implode;
 use function ini_set;
@@ -1346,6 +1347,50 @@ class Server{
 				}
 
 				$this->worldManager->generateWorld($name, $creationOptions);
+			}
+		}
+
+
+		// The Pterodactyl Egg can request a separate Vanilla world without modifying
+		// server.properties, pocketmine.yml, the default world or existing world files.
+		// New installations already use the Vanilla default generator; no duplicate is needed.
+		if(getenv("RYZEMP_VANILLA_WORLDGEN") === "true"){
+			$defaultWorldName = $this->configGroup->getConfigString(ServerProperties::DEFAULT_WORLD_NAME, "world");
+			$defaultGenerator = $this->configGroup->getConfigString(ServerProperties::DEFAULT_WORLD_GENERATOR, "normal");
+			$isNewVanillaDefault = !$this->worldManager->isWorldGenerated($defaultWorldName) && $defaultGenerator === "vanilla";
+			if($isNewVanillaDefault){
+				$this->logger->info("[RyzeMP Vanilla] The new default world will use the Vanilla generator; no additional world is needed.");
+			}else{
+				$vanillaName = "world_vanilla_auto";
+				$vanillaPath = Path::join($this->dataPath, "worlds", $vanillaName);
+				if($this->worldManager->isWorldGenerated($vanillaName)){
+					if(!$this->worldManager->loadWorld($vanillaName, true)){
+						$this->logger->warning("[RyzeMP Vanilla] The existing world \"$vanillaName\" could not be loaded. Its data was not modified.");
+					}
+				}elseif(file_exists($vanillaPath)){
+					// Never generate into an existing directory, even if the provider
+					// cannot recognise it (e.g. a partial or corrupted save).
+					$this->logger->warning("[RyzeMP Vanilla] \"$vanillaName\" already exists but is not a valid world; it was not overwritten.");
+				}else{
+					$generatorClass = $getGenerator("vanilla", "", $vanillaName);
+					if($generatorClass === null){
+						// Unlike default-world creation, NEVER substitute Normal:
+						// users opting in explicitly asked for Vanilla terrain.
+						$this->logger->warning("[RyzeMP Vanilla] Could not prepare Vanilla worldgen data. Existing worlds remain available; will retry on the next start.");
+					}else{
+						$options = WorldCreationOptions::create()
+							->setGeneratorClass($generatorClass)
+							->setGeneratorOptions("")
+							->setDifficulty($this->getDifficulty());
+						$seed = Generator::convertSeed($this->configGroup->getConfigString(ServerProperties::DEFAULT_WORLD_SEED));
+						if($seed !== null){
+							$options->setSeed($seed);
+						}
+						if($this->worldManager->generateWorld($vanillaName, $options)){
+							$this->logger->info("[RyzeMP Vanilla] Created additional Vanilla world \"$vanillaName\"; the default world was not changed.");
+						}
+					}
+				}
 			}
 		}
 
