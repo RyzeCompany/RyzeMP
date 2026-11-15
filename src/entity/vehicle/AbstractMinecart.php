@@ -53,6 +53,7 @@ use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\MoveActorAbsolutePacket;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
+use pocketmine\network\mcpe\protocol\types\entity\IntMetadataProperty;
 use pocketmine\player\Player;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\GameRules;
@@ -928,6 +929,13 @@ abstract class AbstractMinecart extends Entity implements DetectorRailActivator{
 		}elseif($this->customDisplayOffset !== null){
 			$properties->setInt(EntityMetadataProperties::MINECART_DISPLAY_OFFSET, $this->customDisplayOffset);
 		}
+	}
+
+	protected function networkDataForProtocol(TypeConverter $converter, array $data) : array{
+		if($this->customDisplayBlock !== null && isset($data[EntityMetadataProperties::MINECART_DISPLAY_BLOCK])){
+			$data[EntityMetadataProperties::MINECART_DISPLAY_BLOCK] = new IntMetadataProperty($converter->getBlockTranslator()->internalIdToNetworkId($this->customDisplayBlock->getStateId()));
+		}
+		return $data;
 	}
 
 	/**

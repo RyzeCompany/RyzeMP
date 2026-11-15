@@ -95,7 +95,7 @@ class ArmorStand extends Living{
 
 		$this->mainHand = new SimpleInventory(1);
 		$this->mainHand->getListeners()->add(CallbackInventoryListener::onAnyChange(function() : void{
-			NetworkBroadcastUtils::broadcastPackets($this->getViewers(), [$this->createMainHandPacket()]);
+			TypeConverter::broadcastByTypeConverter($this->getViewers(), fn(TypeConverter $converter) : array => [$this->createMainHandPacket($converter)]);
 		}));
 
 		//the armor is loaded and saved by Living ("Armor", helmet to boots)
@@ -149,10 +149,10 @@ class ArmorStand extends Living{
 		$this->networkPropertiesDirty = true;
 	}
 
-	private function createMainHandPacket() : MobEquipmentPacket{
+	private function createMainHandPacket(TypeConverter $converter) : MobEquipmentPacket{
 		return MobEquipmentPacket::create(
 			$this->getId(),
-			ItemStackWrapper::legacy(TypeConverter::getInstance()->coreItemStackToNet($this->mainHand->getItem(0))),
+			ItemStackWrapper::legacy($converter->coreItemStackToNet($this->mainHand->getItem(0))),
 			0,
 			0,
 			ContainerIds::INVENTORY
@@ -161,7 +161,7 @@ class ArmorStand extends Living{
 
 	protected function sendSpawnPacket(Player $player) : void{
 		parent::sendSpawnPacket($player);
-		$player->getNetworkSession()->sendDataPacket($this->createMainHandPacket());
+		$player->getNetworkSession()->sendDataPacket($this->createMainHandPacket($player->getNetworkSession()->getTypeConverter()));
 	}
 
 	protected function syncNetworkData(EntityMetadataCollection $properties) : void{

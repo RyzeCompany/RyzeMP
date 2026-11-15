@@ -102,6 +102,12 @@ class MovingBlock extends Spawnable{
 		}
 	}
 
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		$translator = $converter->getBlockTranslator();
+		$nbt->setTag(self::TAG_MOVING_BLOCK, $translator->internalIdToNetworkStateData(($this->movingBlock ?? VanillaBlocks::AIR())->getStateId())->toNbt());
+		$nbt->setTag(self::TAG_MOVING_BLOCK_EXTRA, $translator->internalIdToNetworkStateData(VanillaBlocks::AIR()->getStateId())->toNbt());
+	}
+
 	private function writeCommonData(CompoundTag $nbt) : void{
 		$pistonPos = $this->pistonPos ?? new Vector3(0, -1, 0);
 		$nbt->setInt(self::TAG_PISTON_POS_X, $pistonPos->getFloorX());

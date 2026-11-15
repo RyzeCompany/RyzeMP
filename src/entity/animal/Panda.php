@@ -504,8 +504,8 @@ class Panda extends Animal{
 			return;
 		}
 		$item = $this->snack ?? VanillaItems::AIR();
-		NetworkBroadcastUtils::broadcastPackets($players, [
-			MobEquipmentPacket::create($this->getId(), ItemStackWrapper::legacy(TypeConverter::getInstance()->coreItemStackToNet($item)), 0, 0, ContainerIds::INVENTORY)
+		TypeConverter::broadcastByTypeConverter($players, fn(TypeConverter $converter) : array => [
+			MobEquipmentPacket::create($this->getId(), ItemStackWrapper::legacy($converter->coreItemStackToNet($item)), 0, 0, ContainerIds::INVENTORY)
 		]);
 	}
 

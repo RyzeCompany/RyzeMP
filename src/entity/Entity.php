@@ -38,6 +38,7 @@ use pocketmine\block\utils\Waterlogged;
 use pocketmine\block\VanillaBlocks;
 use pocketmine\block\Water;
 use pocketmine\entity\animation\Animation;
+use pocketmine\entity\animation\ConsumingItemAnimation;
 use pocketmine\entity\object\LightningBolt;
 use pocketmine\entity\riding\RideableSeat;
 use pocketmine\entity\riding\RiderInput;
@@ -72,6 +73,7 @@ use pocketmine\network\mcpe\protocol\types\entity\EntityLink;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataFlags;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\types\entity\MetadataProperty;
 use pocketmine\network\mcpe\protocol\types\entity\PropertySyncData;
 use pocketmine\player\Player;
@@ -2962,7 +2964,7 @@ abstract class Entity{
 			array_map(function(Attribute $attr) : NetworkAttribute{
 				return new NetworkAttribute($attr->getId(), $attr->getMinValue(), $attr->getMaxValue(), $attr->getValue(), $attr->getDefaultValue(), []);
 			}, $this->attributeMap->getAll()),
-			$this->getAllNetworkData(),
+			$this->networkDataForProtocol($player->getNetworkSession()->getTypeConverter(), $this->getAllNetworkData()),
 			$this->getNetworkSyncedProperties(),
 			$this->getSpawnLinks($player)
 		));
@@ -3132,7 +3134,29 @@ abstract class Entity{
 		$targets = $targets ?? $this->hasSpawned;
 		$data = $data ?? $this->getAllNetworkData();
 
+		if(!\pocketmine\network\mcpe\NetworkSession::hasOnlyStandardSessions()){
+			$groups = [];
+			foreach($targets as $target){
+				$groups[$target->getNetworkSession()->getProtocolId()][] = $target;
+			}
+			foreach($groups as $protocolId => $recipients){
+				$mapped = $this->networkDataForProtocol(TypeConverter::getInstance($protocolId), $data);
+				NetworkBroadcastUtils::broadcastEntityEvent($recipients, fn(EntityEventBroadcaster $broadcaster, array $sessions) => $broadcaster->syncActorData($sessions, $this, $mapped));
+			}
+			return;
+		}
 		NetworkBroadcastUtils::broadcastEntityEvent($targets, fn(EntityEventBroadcaster $broadcaster, array $recipients) => $broadcaster->syncActorData($recipients, $this, $data));
+	}
+
+	/**
+	 * Override only metadata whose numeric value depends on the recipient's block or item palette.
+	 * @param MetadataProperty[] $data
+	 * @return MetadataProperty[]
+	 * @phpstan-param array<int, MetadataProperty> $data
+	 * @phpstan-return array<int, MetadataProperty>
+	 */
+	protected function networkDataForProtocol(TypeConverter $converter, array $data) : array{
+		return $data;
 	}
 
 	/**
@@ -3229,7 +3253,12 @@ abstract class Entity{
 	 * @param Player[]|null $targets
 	 */
 	public function broadcastAnimation(Animation $animation, ?array $targets = null) : void{
-		NetworkBroadcastUtils::broadcastPackets($targets ?? $this->getViewers(), $animation->encode());
+		$viewers = $targets ?? $this->getViewers();
+		if($animation instanceof ConsumingItemAnimation && !\pocketmine\network\mcpe\NetworkSession::hasOnlyStandardSessions()){
+			TypeConverter::broadcastByTypeConverter($viewers, fn(TypeConverter $converter) : array => $animation->encodeForProtocol($converter));
+		}else{
+			NetworkBroadcastUtils::broadcastPackets($viewers, $animation->encode());
+		}
 	}
 
 	/**

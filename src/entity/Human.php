@@ -163,8 +163,8 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 	 * @param Player[]|null $targets
 	 */
 	public function sendSkin(?array $targets = null) : void{
-		NetworkBroadcastUtils::broadcastPackets($targets ?? $this->hasSpawned, [
-			PlayerSkinPacket::create($this->getUniqueId(), "", "", TypeConverter::getInstance()->getSkinAdapter()->toSkinData($this->skin))
+		TypeConverter::broadcastByTypeConverter($targets ?? $this->hasSpawned, fn(TypeConverter $converter) : array => [
+			PlayerSkinPacket::create($this->getUniqueId(), "", "", $converter->getSkinAdapter()->toSkinData($this->skin))
 		]);
 	}
 
@@ -496,7 +496,7 @@ class Human extends Living implements ProjectileSource, InventoryHolder{
 			$this->location->yaw, //TODO: head yaw
 			ItemStackWrapper::legacy($typeConverter->coreItemStackToNet($this->getInventory()->getItemInHand())),
 			$this instanceof Player ? $typeConverter->coreGameModeToProtocol($this->getGamemode()) : GameMode::SURVIVAL,
-			$this->getAllNetworkData(),
+			$this->networkDataForProtocol($typeConverter, $this->getAllNetworkData()),
 			new PropertySyncData([], []),
 			UpdateAbilitiesPacket::create(new AbilitiesData(CommandPermissions::NORMAL, PlayerPermissions::VISITOR, $this->getId() /* TODO: this should be unique ID */, [
 				//BDS lists the spectator layer of a spectator player before the base layer

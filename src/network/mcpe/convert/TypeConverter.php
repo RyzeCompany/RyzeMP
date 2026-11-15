@@ -45,6 +45,7 @@ use pocketmine\nbt\tag\ListTag;
 use pocketmine\nbt\tag\Tag;
 use pocketmine\nbt\TreeRoot;
 use pocketmine\nbt\UnexpectedTagTypeException;
+use pocketmine\network\mcpe\NetworkBroadcastUtils;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\GameMode as ProtocolGameMode;
@@ -81,6 +82,23 @@ class TypeConverter{
 
 	public function getProtocolId() : int{
 		return $this->protocolId;
+	}
+
+	/**
+	 * @param \pocketmine\player\Player[] $players
+	 * @param \Closure(self) : array<int, \pocketmine\network\mcpe\protocol\ClientboundPacket> $packetFactory Creates the wire packets for one client palette.
+	 */
+	public static function broadcastByTypeConverter(array $players, \Closure $packetFactory) : void{
+		$groups = [];
+		foreach($players as $player){
+			$groups[$player->getNetworkSession()->getProtocolId()][] = $player;
+		}
+		foreach($groups as $protocolId => $recipients){
+			$packets = $packetFactory(self::getInstance($protocolId));
+			if(count($packets) > 0){
+				NetworkBroadcastUtils::broadcastPackets($recipients, $packets);
+			}
+		}
 	}
 
 	private const PM_ID_TAG = "___Id___";

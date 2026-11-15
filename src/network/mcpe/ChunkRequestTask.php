@@ -60,7 +60,7 @@ class ChunkRequestTask extends AsyncTask{
 		$this->chunkX = $chunkX;
 		$this->chunkZ = $chunkZ;
 		$this->dimensionId = $dimensionId;
-		$this->tiles = ChunkSerializer::serializeTiles($chunk);
+		$this->tiles = ChunkSerializer::serializeTiles($chunk, TypeConverter::getInstance($protocolId));
 
 		$this->storeLocal(self::TLS_KEY_PROMISE, $promise);
 	}

@@ -54,6 +54,7 @@ use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataFlags;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
+use pocketmine\network\mcpe\protocol\types\entity\IntMetadataProperty;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 use pocketmine\player\Player;
 use pocketmine\world\dimension\Dimension;
@@ -466,5 +467,13 @@ class Enderman extends Monster implements Angerable{
 		$properties->setInt(EntityMetadataProperties::ENDERMAN_HELD_ITEM_ID, $this->carriedBlock !== null ?
 			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->carriedBlock->getStateId()) :
 			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId()));
+	}
+
+	protected function networkDataForProtocol(TypeConverter $converter, array $data) : array{
+		if(isset($data[EntityMetadataProperties::ENDERMAN_HELD_ITEM_ID])){
+			$stateId = ($this->carriedBlock ?? VanillaBlocks::AIR())->getStateId();
+			$data[EntityMetadataProperties::ENDERMAN_HELD_ITEM_ID] = new IntMetadataProperty($converter->getBlockTranslator()->internalIdToNetworkId($stateId));
+		}
+		return $data;
 	}
 }

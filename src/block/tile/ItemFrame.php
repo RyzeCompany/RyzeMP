@@ -108,4 +108,10 @@ class ItemFrame extends Spawnable{
 			$nbt->setTag(self::TAG_ITEM, TypeConverter::getInstance()->getItemTranslator()->toNetworkNbt($this->item));
 		}
 	}
+
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		if(!$this->item->isNull()){
+			$nbt->setTag(self::TAG_ITEM, $converter->getItemTranslator()->toNetworkNbt($this->item));
+		}
+	}
 }

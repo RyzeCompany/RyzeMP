@@ -140,4 +140,13 @@ class Shelf extends Spawnable implements Container{
 		}
 		$nbt->setTag(Container::TAG_ITEMS, new ListTag($items, NBT::TAG_Compound));
 	}
+
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		$translator = $converter->getItemTranslator();
+		$items = [];
+		foreach($this->getRealInventory()->getContents(true) as $item){
+			$items[] = $item->isNull() ? self::emptyItemTag() : $translator->toNetworkNbt($item);
+		}
+		$nbt->setTag(Container::TAG_ITEMS, new ListTag($items, NBT::TAG_Compound));
+	}
 }

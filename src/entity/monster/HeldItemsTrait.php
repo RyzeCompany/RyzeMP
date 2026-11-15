@@ -416,8 +416,7 @@ trait HeldItemsTrait{
 		if(count($players) === 0){
 			return;
 		}
-		$converter = TypeConverter::getInstance();
-		NetworkBroadcastUtils::broadcastPackets($players, [
+		TypeConverter::broadcastByTypeConverter($players, fn(TypeConverter $converter) : array => [
 			MobEquipmentPacket::create($this->getId(), ItemStackWrapper::legacy($converter->coreItemStackToNet($this->getMainHandItem())), 0, 0, ContainerIds::INVENTORY),
 			MobEquipmentPacket::create($this->getId(), ItemStackWrapper::legacy($converter->coreItemStackToNet($this->getOffHandItem())), 0, 0, ContainerIds::OFFHAND)
 		]);

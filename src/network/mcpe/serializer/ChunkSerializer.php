@@ -167,11 +167,11 @@ final class ChunkSerializer{
 		}
 	}
 
-	public static function serializeTiles(Chunk $chunk) : string{
+	public static function serializeTiles(Chunk $chunk, ?\pocketmine\network\mcpe\convert\TypeConverter $converter = null) : string{
 		$stream = new ByteBufferWriter();
 		foreach($chunk->getTiles() as $tile){
 			if($tile instanceof Spawnable){
-				$stream->writeByteArray($tile->getSerializedSpawnCompound()->getEncodedNbt());
+				$stream->writeByteArray($tile->getSerializedSpawnCompound($converter)->getEncodedNbt());
 			}
 		}
 

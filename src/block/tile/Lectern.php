@@ -85,4 +85,10 @@ class Lectern extends Spawnable{
 			$nbt->setInt(self::TAG_TOTAL_PAGES, count($this->book->getPages()));
 		}
 	}
+
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		if($this->book !== null){
+			$nbt->setTag(self::TAG_BOOK, $converter->getItemTranslator()->toNetworkNbt($this->book));
+		}
+	}
 }

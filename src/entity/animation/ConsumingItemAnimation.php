@@ -37,7 +37,12 @@ final class ConsumingItemAnimation implements Animation{
 	){}
 
 	public function encode() : array{
-		[$netId, $netData] = TypeConverter::getInstance()->getItemTranslator()->toNetworkId($this->item);
+		return $this->encodeForProtocol(TypeConverter::getInstance());
+	}
+
+	/** @return \pocketmine\network\mcpe\protocol\ClientboundPacket[] */
+	public function encodeForProtocol(TypeConverter $converter) : array{
+		[$netId, $netData] = $converter->getItemTranslator()->toNetworkId($this->item);
 		return [
 			//TODO: need to check the data values
 			ActorEventPacket::create($this->entity->getId(), ActorEvent::EATING_ITEM, ($netId << 16) | $netData, null)

@@ -45,6 +45,7 @@ use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\types\entity\EntityIds;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataCollection;
 use pocketmine\network\mcpe\protocol\types\entity\EntityMetadataProperties;
+use pocketmine\network\mcpe\protocol\types\entity\IntMetadataProperty;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use pocketmine\world\sound\BlockBreakSound;
 use function abs;
@@ -211,6 +212,13 @@ class FallingBlock extends Entity{
 		parent::syncNetworkData($properties);
 
 		$properties->setInt(EntityMetadataProperties::VARIANT, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()));
+	}
+
+	protected function networkDataForProtocol(TypeConverter $converter, array $data) : array{
+		if(isset($data[EntityMetadataProperties::VARIANT])){
+			$data[EntityMetadataProperties::VARIANT] = new IntMetadataProperty($converter->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()));
+		}
+		return $data;
 	}
 
 	public function getOffsetPosition(Vector3 $vector3) : Vector3{

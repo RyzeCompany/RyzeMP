@@ -99,6 +99,12 @@ class FlowerPot extends Spawnable{
 		}
 	}
 
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		if($this->plant !== null){
+			$nbt->setTag(self::TAG_PLANT_BLOCK, $converter->getBlockTranslator()->internalIdToNetworkStateData($this->plant->getStateId())->toNbt());
+		}
+	}
+
 	public function getRenderUpdateBugWorkaroundStateProperties(Block $block) : array{
 		return [BlockStateNames::UPDATE_BIT => new ByteTag(1)];
 	}

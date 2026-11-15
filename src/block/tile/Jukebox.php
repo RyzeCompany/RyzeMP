@@ -73,6 +73,12 @@ class Jukebox extends Spawnable{
 		}
 	}
 
+	protected function addAdditionalSpawnDataForProtocol(CompoundTag $nbt, TypeConverter $converter) : void{
+		if($this->record !== null){
+			$nbt->setTag(self::TAG_RECORD, $converter->getItemTranslator()->toNetworkNbt($this->record));
+		}
+	}
+
 	protected function onBlockDestroyedHook() : void{
 		$this->position->getWorld()->addSound($this->position->add(0.5, 0.5, 0.5), new RecordStopSound($this->record?->getRecordType()));
 	}
