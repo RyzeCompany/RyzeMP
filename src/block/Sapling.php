@@ -178,10 +178,10 @@ class Sapling extends Flowable{
 	}
 
 	public function getFlameEncouragement() : int{
-		return $this->saplingType === SaplingType::CHERRY || $this->saplingType === SaplingType::PALE_OAK ? 5 : 0;
+		return $this->saplingType === SaplingType::CHERRY || $this->saplingType === SaplingType::PALE_OAK || $this->saplingType === SaplingType::POPLAR ? 5 : 0;
 	}
 
 	public function getFlammability() : int{
-		return $this->saplingType === SaplingType::CHERRY || $this->saplingType === SaplingType::PALE_OAK ? 20 : 0;
+		return $this->saplingType === SaplingType::CHERRY || $this->saplingType === SaplingType::PALE_OAK || $this->saplingType === SaplingType::POPLAR ? 20 : 0;
 	}
 }
