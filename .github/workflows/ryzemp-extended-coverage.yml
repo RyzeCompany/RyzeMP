@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      POCKETMINE_VANILLA_WORLDGEN_DATA: ${{ runner.temp }}/ryzemp-vanilla-fixtures
+      POCKETMINE_VANILLA_WORLDGEN_DATA: /tmp/ryzemp-vanilla-fixtures
     steps:
       - uses: actions/checkout@v4
       - uses: pmmp/setup-php-action@3.2.0
