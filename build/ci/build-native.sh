@@ -1,40 +1,15 @@
 #!/bin/bash
-# CI step for the native programs, into native/*/bin where server-phar.php picks them up:
-# - pm-nethernet (NetherNet bridge): downloaded from the releases of gitlab.com/VanillaPocketMine/nethernet, version
-#   NETHERNET_VERSION (default 0.1.2), checked against the upstream release's SHA256SUMS.
-# - vanillagen (terrain core): built from native/vanillagen (Linux counterpart of native/vanillagen/build.ps1).
+# CI builds the native Go worldgen helper for external installation by the Egg.
+# RyzeRTC is released separately. pm-nethernet is no longer downloaded or used.
 # Usage: NATIVE_TARGETS="linux/amd64" build/ci/build-native.sh [version]
 # Third-party native bridge and Go generator retain their upstream attribution.
 set -euo pipefail
 
 VERSION="${1:-git-$(git rev-parse --short HEAD)}"
 TARGETS="${NATIVE_TARGETS:-windows/amd64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64}"
-NETHERNET_VERSION="${NETHERNET_VERSION:-0.1.2}"
-NETHERNET_PACKAGE_URL="${NETHERNET_PACKAGE_URL:-https://gitlab.com/api/v4/projects/VanillaPocketMine%2Fnethernet/packages/generic/pm-nethernet}"
 export CGO_ENABLED=0
 export GOFLAGS=-trimpath
 ROOT="$(pwd)"
-
-echo "== pm-nethernet $NETHERNET_VERSION"
-cd "$ROOT/native/nethernet"
-mkdir -p bin
-SUMS="$(mktemp)"
-curl -fsSL --retry 3 -o "$SUMS" "$NETHERNET_PACKAGE_URL/$NETHERNET_VERSION/SHA256SUMS"
-for t in $TARGETS; do
-	os="${t%/*}"; arch="${t#*/}"
-	ext=""; [ "$os" = "windows" ] && ext=".exe"
-	f="pm-nethernet-$os-$arch$ext"
-	echo "Downloading bin/$f"
-	curl -fsSL --retry 3 -o "bin/$f" "$NETHERNET_PACKAGE_URL/$NETHERNET_VERSION/$f"
-	want="$(awk -v f="$f" '{ n = $2; sub(/^\*/, "", n); if (n == f) print $1 }' "$SUMS")"
-	got="$(sha256sum "bin/$f" | cut -d' ' -f1)"
-	if [ -z "$want" ] || [ "$want" != "$got" ]; then
-		echo "bin/$f: SHA-256 $got does not match the release's SHA256SUMS (${want:-missing})" >&2
-		exit 1
-	fi
-	chmod +x "bin/$f"
-done
-rm -f "$SUMS"
 
 echo "== vanillagen"
 #automatic multiply-add fusion would make the terrain differ from the PHP implementation (see build.ps1)
@@ -58,4 +33,4 @@ for t in $TARGETS; do
 done
 
 cd "$ROOT"
-sha256sum native/nethernet/bin/* native/vanillagen/bin/*
+sha256sum native/vanillagen/bin/*
