@@ -406,10 +406,11 @@ mobs:
     enabled: true
 
 auto-report:
-  #Send crash reports for processing
-  enabled: true
-  send-code: true
-  send-settings: true
+  #Off by default: crash reports may contain plugins and server settings.
+  #Opt in explicitly only after reviewing the destination and payload.
+  enabled: false
+  send-code: false
+  send-settings: false
   send-phpinfo: false
   use-https: true
   host: crash.pmmp.io
@@ -420,14 +421,17 @@ anonymous-statistics:
   host: stats.pocketmine.net
 
 auto-updater:
-  enabled: true
+  #RyzeMP publishes updates through official GitHub Releases and the Pterodactyl Egg.
+  #The inherited VanillaMine/PocketMine update API is NOT a RyzeMP update source.
+  #Do not automatically contact an unrelated update server.
+  enabled: false
   on-update:
     warn-console: true
-  #Can be development, alpha, beta or stable.
+  #Can be development, alpha, beta or stable (for a custom compatible API).
   preferred-channel: stable
-  #If using a development version, it will suggest changing the channel
-  suggest-channels: true
-  host: updates.vanillamine.com
+  suggest-channels: false
+  #Optional: only set if you operate a trusted RyzeMP-compatible HTTPS update API.
+  host: ""
 
 timings:
   #Choose the host to use for viewing your timings results.
