@@ -394,6 +394,7 @@ final class CommandBlockTest extends RedstoneTestCase{
 	public function testOnlyOperatorsInCreativeCanEdit() : void{
 		$tile = $this->placeCommandBlock(0, VanillaBlocks::COMMAND_BLOCK(), "say old");
 		$session = $this->createMock(NetworkSession::class);
+		$session->method("getTypeConverter")->willReturn(\pocketmine\network\mcpe\convert\TypeConverter::getInstance());
 
 		self::assertFalse(CommandBlockRequests::handleBlockUpdate($session, $this->player(false, true), $this->updatePacket(0, "op")));
 		self::assertFalse(CommandBlockRequests::handleBlockUpdate($session, $this->player(true, false), $this->updatePacket(0, "op")));
