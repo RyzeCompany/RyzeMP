@@ -36,7 +36,7 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
             . "network:\n  compression-level: 6\n"
             . "memory:\n  async-worker-hard-limit: 256\n"
             . "auto-report:\n  enabled: false\n"
-            . "auto-updater:\n  enabled: false\n";
+            . "auto-updater:\n  enabled: true\n  host: updates.vanillamine.com\n";
         file_put_contents($yml, $original);
         file_put_contents($properties, "server-port=19132\nlevel-type=flat\n");
         try{
@@ -55,7 +55,9 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
             self::assertSame("", $config->getPropertyString(YmlServerProperties::NETWORK_NETHERNET_HTTPS_CERTIFICATE, ""));
             self::assertTrue($config->getPropertyBool(YmlServerProperties::CHUNK_GENERATION_VANILLA_NATIVE_ENABLED, true));
             self::assertFalse($config->getPropertyBool(YmlServerProperties::AUTO_REPORT_ENABLED, false));
-            self::assertFalse($config->getPropertyBool(YmlServerProperties::AUTO_UPDATER_ENABLED, false));
+            // Legacy updater keys remain untouched in an existing YAML, but no updater is booted.
+            self::assertTrue($config->getPropertyBool("auto-updater.enabled", false));
+            self::assertSame("updates.vanillamine.com", $config->getPropertyString("auto-updater.host", ""));
             // An existing world type, port and YAML comments must not be overwritten.
             self::assertSame("flat", $config->getConfigString(ServerProperties::DEFAULT_WORLD_GENERATOR));
             self::assertSame(19132, $config->getConfigInt(ServerProperties::SERVER_PORT_IPV4, 0));
@@ -86,7 +88,8 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
                 new Config($props, Config::PROPERTIES, [])
             );
             self::assertFalse($group->getPropertyBool(YmlServerProperties::AUTO_REPORT_ENABLED, true));
-            self::assertFalse($group->getPropertyBool(YmlServerProperties::AUTO_UPDATER_ENABLED, true));
+            // The legacy update option is intentionally not part of the RyzeMP API.
+            self::assertFalse(defined(YmlServerProperties::class . "::AUTO_UPDATER_ENABLED"));
             self::assertFalse($group->getPropertyBool(YmlServerProperties::NETWORK_PROXY_ENABLED, true));
             self::assertFalse($group->getPropertyBool("fishing.enabled", true));
             self::assertTrue($group->getPropertyBool("fishing.pvp-enabled", false));
@@ -104,8 +107,7 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
         self::assertFalse($parsed['auto-report']['enabled']);
         self::assertFalse($parsed['auto-report']['send-code']);
         self::assertFalse($parsed['auto-report']['send-settings']);
-        self::assertFalse($parsed['auto-updater']['enabled']);
-        self::assertSame("", $parsed['auto-updater']['host']);
+        self::assertArrayNotHasKey('auto-updater', $parsed);
         self::assertTrue($parsed['fishing']['enabled']);
         self::assertSame(32, $parsed['fishing']['max-distance']);
         self::assertSame("", $parsed['network']['nethernet']['https']['certificate']);
