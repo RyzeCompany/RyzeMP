@@ -114,3 +114,71 @@ jobs:
             RyzeMP.phar.sha256
           if-no-files-found: error
           retention-days: 7
+
+  native-ryzertc:
+    name: Native RyzeRTC API 2 PHAR startup (external module)
+    needs: phar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - uses: actions/download-artifact@v4
+        with:
+          name: RyzeMP-vanillamine-integration-phar
+          path: .
+      - name: Download official pinned RyzeRTC API 2 release outside PHAR
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ryzertc-external"
+          curl --fail --location --retry 3 --proto '=https' \
+            'https://github.com/RyzeCompany/RyzeRTC/releases/download/v0.1.0-dev.3/ryzertc-linux-x86_64-php84-zts.zip' \
+            -o "$RUNNER_TEMP/ryzertc-external/ryzertc.zip"
+          echo "9ecea6cc9d239b8c583d042c91df0448432321ceaf128850fe5b27bcde234602  $RUNNER_TEMP/ryzertc-external/ryzertc.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/ryzertc-external/ryzertc.zip" -d "$RUNNER_TEMP/ryzertc-external"
+          cd "$RUNNER_TEMP/ryzertc-external"
+          sha256sum -c SHA256SUMS.txt
+          test -f ryzertc.so
+          test -d lib
+          echo "RYZERTC_NATIVE_DIR=$RUNNER_TEMP/ryzertc-external" >> "$GITHUB_ENV"
+      - name: Validate native PHP API and external library
+        run: |
+          set -euo pipefail
+          php -r 'exit(PHP_VERSION_ID >= 80400 && PHP_VERSION_ID < 80500 && PHP_ZTS && PHP_INT_SIZE === 8 ? 0 : 1);'
+          LD_LIBRARY_PATH="$RYZERTC_NATIVE_DIR/lib" php -d "extension=$RYZERTC_NATIVE_DIR/ryzertc.so" -r '
+            if (!extension_loaded("ryzertc") || RyzeRTC\Runtime::apiVersion() < 2) exit(1);
+            echo RyzeRTC\Runtime::version(), " API ", RyzeRTC\Runtime::apiVersion(), "\n";'
+      - name: Boot PHAR using native RyzeRTC (not pm-nethernet)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ryzertc-smoke/plugins"
+          cp resources/pocketmine.yml "$RUNNER_TEMP/ryzertc-smoke/pocketmine.yml"
+          sed -i 's/enable-dev-builds: false/enable-dev-builds: true/' "$RUNNER_TEMP/ryzertc-smoke/pocketmine.yml"
+          set +e
+          timeout --signal=INT --kill-after=10s 120s env LD_LIBRARY_PATH="$RYZERTC_NATIVE_DIR/lib" \
+            php -d "extension=$RYZERTC_NATIVE_DIR/ryzertc.so" -d memory_limit=2G \
+            RyzeMP.phar --no-wizard --disable-ansi --no-log-file \
+            --data="$RUNNER_TEMP/ryzertc-smoke" --plugins="$RUNNER_TEMP/ryzertc-smoke/plugins" \
+            > "$RUNNER_TEMP/ryzertc-smoke.log" 2>&1
+          code=$?
+          set -e
+          tail -n 130 "$RUNNER_TEMP/ryzertc-smoke.log"
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Native RyzeRTC PHAR exited unexpectedly with code $code" >&2
+            exit 1
+          fi
+          if grep -Eiq 'Fatal error|Uncaught |\[.*(CRITICAL|EMERGENCY).*\]' "$RUNNER_TEMP/ryzertc-smoke.log"; then
+            echo "Native transport reported a fatal startup error" >&2
+            exit 1
+          fi
+          grep -Fq 'Native RyzeRTC API 2 using TCP/UDP 19132' "$RUNNER_TEMP/ryzertc-smoke.log"
+          grep -Eq 'Done \(|For help, type|Server started' "$RUNNER_TEMP/ryzertc-smoke.log"
+          if grep -Fq 'Bridge 0.1.2' "$RUNNER_TEMP/ryzertc-smoke.log"; then
+            echo 'Mutually exclusive transports ran together' >&2
+            exit 1
+          fi
+          grep -Fq 'NetherNet READY' "$RUNNER_TEMP/ryzertc-smoke.log"
