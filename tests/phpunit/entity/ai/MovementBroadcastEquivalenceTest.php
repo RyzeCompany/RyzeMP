@@ -154,7 +154,7 @@ final class MovementBroadcastEquivalenceTest extends MobTestCase{
 		$encoded = [];
 		foreach($packets as $packet){
 			$writer = new ByteBufferWriter();
-			$packet->encode($writer);
+			$packet->encode($writer, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 			$encoded[] = $writer->getData();
 		}
 		$this->calls[] = [$broadcaster, $viewers, $encoded];
