@@ -154,11 +154,11 @@ class BuiltInCommandOverloadsTest extends TestCase{
 		}
 
 		$writer = new ByteBufferWriter();
-		$packet->encode($writer);
+		$packet->encode($writer, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		self::assertLessThan(200_000, strlen($writer->getData()), "AvailableCommandsPacket should stay reasonably small");
 
 		$decoded = new AvailableCommandsPacket();
-		$decoded->decode(new ByteBufferReader($writer->getData()));
+		$decoded->decode(new ByteBufferReader($writer->getData()), \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$commandData = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
 		self::assertCount(count($commands), $commandData);
 
