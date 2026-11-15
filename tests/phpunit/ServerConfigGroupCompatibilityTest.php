@@ -101,6 +101,21 @@ final class ServerConfigGroupCompatibilityTest extends TestCase{
         }
     }
 
+    public function testLegacyAutoUpdaterAndNotificationsAreNotPartOfRyzeMP() : void{
+        self::assertFalse(method_exists(Server::class, "getUpdater"));
+        self::assertFalse(class_exists("pocketmine\\updater\\UpdateChecker"));
+        self::assertFalse(class_exists("pocketmine\\updater\\UpdateCheckTask"));
+        self::assertFalse(class_exists("pocketmine\\updater\\UpdateInfo"));
+        self::assertFalse(class_exists("pocketmine\\event\\server\\UpdateNotifyEvent"));
+
+        // The server no longer prints inherited documentation/plugin links on startup.
+        $serverCode = file_get_contents(__DIR__ . '/../../src/Server.php');
+        self::assertIsString($serverCode);
+        self::assertStringNotContainsString('docs.vanillamine.com', $serverCode);
+        self::assertStringNotContainsString('plugins.vanillamine.com', $serverCode);
+        self::assertStringNotContainsString('pocketmine_server_url_freePlugins', $serverCode);
+    }
+
     public function testNewInstallTemplateAvoidsInheritedExternalServices() : void{
         $parsed = yaml_parse_file(__DIR__ . '/../../resources/pocketmine.yml');
         self::assertIsArray($parsed);
