@@ -1,0 +1,72 @@
+name: RyzeMP VanillaMine-base integration
+
+on:
+  push:
+    branches:
+      - integration/vanillamine-base
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ryzemp-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    name: PHP 8.4 / multiversion regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish --no-interaction
+      - name: Install exactly locked published dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Verify PHP syntax
+        run: find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /tmp/ryzemp-php-lint.log
+      - name: Run full PHPUnit regression suite
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
+      - name: Test multiversion item palettes and entity equipment packet routing
+        run: |
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/ProtocolPaletteTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/StandardEntityEventBroadcasterTest.php
+
+  phar:
+    name: Build unmerged RyzeMP PHAR candidate
+    runs-on: ubuntu-24.04
+    needs: regression
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - name: Install locked production dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
+      - name: Build RyzeMP archive
+        run: |
+          php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar --git="$GITHUB_SHA" --build="$GITHUB_RUN_NUMBER"
+          test -s RyzeMP.phar
+          php -r '$p = new Phar("RyzeMP.phar"); if($p->count() < 100) throw new RuntimeException("Empty PHAR"); foreach(new RecursiveIteratorIterator($p) as $f){if(str_ends_with($f->getPathname(), ".so")) throw new RuntimeException("Native .so must remain outside PHAR");}'
+          sha256sum RyzeMP.phar > RyzeMP.phar.sha256
+      - name: Check archive version entry point
+        run: php RyzeMP.phar --version
+      - name: Upload test build (never a production release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: RyzeMP-vanillamine-integration-phar
+          path: |
+            RyzeMP.phar
+            RyzeMP.phar.sha256
+          if-no-files-found: error
+          retention-days: 7
