@@ -35,7 +35,8 @@ final class RyzeRTCInterface implements AdvancedNetworkInterface{
 
 
     public function __construct(private Server $server, private string $ip, private int $port,
-        private RakLibInterface $raklib, private NetherNetSessionGateway $gateway){
+        private RakLibInterface $raklib, private NetherNetSessionGateway $gateway,
+        private string $tlsCertificate = '', private string $tlsPrivateKey = ''){
         $log = fn(string $message) => $this->server->getLogger()->info($message);
         $this->keys = new NetherNetAuthKeys($server->getAsyncPool(), $log);
         $this->http = new NetherNetHttpServer($ip, $port,
@@ -44,7 +45,8 @@ final class RyzeRTCInterface implements AdvancedNetworkInterface{
                 'level'=>$server->getWorldManager()->getDefaultWorld()?->getFolderName() ?? '',
                 'players'=>count($server->getOnlinePlayers()), 'maxPlayers'=>$server->getMaxPlayers(),
                 'gameType'=>match($server->getGamemode()->getEnglishName()){'Creative'=>1,'Adventure'=>2,'Spectator'=>3,default=>0}
-            ], $this->offer(...), fn(int $request) => $this->transport->cancelRequest($request));
+            ], $this->offer(...), fn(int $request) => $this->transport->cancelRequest($request),
+            $this->tlsCertificate, $this->tlsPrivateKey);
         $bridge = new NetherNetSharedPortSignalingBridge($raklib->authorizeNetherNetUfrag(...), $raklib->revokeNetherNetUfrag(...));
         $this->transport = new NetherNetTransport($port,
             new NetherNetServerIdentity($server->getDataPath() . 'nethernet/operator-key.pem'), $bridge,
