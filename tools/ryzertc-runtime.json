@@ -1,0 +1,10 @@
+{
+  "platform": {"os": "linux", "arch": "x86_64", "php": "8.4", "php_api": 20240924, "zts": true},
+  "ryzertc": {
+    "tag": "v0.1.0-dev.3",
+    "version": "0.1.0-dev.3",
+    "api": 2,
+    "asset": "ryzertc-linux-x86_64-php84-zts.zip",
+    "sha256": "9ecea6cc9d239b8c583d042c91df0448432321ceaf128850fe5b27bcde234602"
+  }
+}
