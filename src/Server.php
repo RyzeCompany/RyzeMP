@@ -1650,35 +1650,26 @@ class Server{
 
 		$port = $this->getPort();
 		$netherNetEnabled = $this->configGroup->getConfigBool(ServerProperties::ENABLE_NETHERNET, true);
-		//Keep the existing bridge as the non-native fallback. A native RyzeRTC module installed
-		//outside the PHAR is preferred by default; neither transport may own the same port twice.
-		$transportMode = $this->configGroup->getPropertyString("network.nethernet.transport", "auto");
-		if(!in_array($transportMode, ["auto", "ryzertc", "bridge"], true)){
-			$this->logger->emergency("Invalid network.nethernet.transport: choose auto, ryzertc or bridge");
-			return false;
-		}
-		$nativeInstalled = extension_loaded("ryzertc");
-		$nativeValid = $nativeInstalled && class_exists(\RyzeRTC\Runtime::class) && \RyzeRTC\Runtime::apiVersion() >= 2;
-		if($netherNetEnabled && $transportMode === "ryzertc" && !$nativeValid){
-			$this->logger->emergency("RyzeRTC transport selected but RyzeRTC API 2 is unavailable. Load the official ryzertc.so outside RyzeMP.phar.");
-			return false;
-		}
-		if($netherNetEnabled && $transportMode === "auto" && $nativeInstalled && !$nativeValid){
-			$this->logger->emergency("RyzeRTC extension has an incompatible API; refusing to silently switch transports.");
-			return false;
-		}
-		$useRyzeRTC = $netherNetEnabled && $nativeValid && $transportMode !== "bridge";
-		if($useRyzeRTC){
-			if(!$this->configGroup->getConfigBool(ServerProperties::ENABLE_RAKNET, true)){
-				$this->logger->emergency("Native RyzeRTC shared-port mode requires RakLib as the public UDP socket owner.");
+		// RyzeRTC API 2 is the only NetherNet implementation in RyzeMP.
+		// Never silently start a competing Go bridge or open an extra public port.
+		if($netherNetEnabled){
+			if(!extension_loaded("ryzertc") || !class_exists(\RyzeRTC\Runtime::class) || \RyzeRTC\Runtime::apiVersion() < 2){
+				$this->logger->emergency("NetherNet needs the official RyzeRTC API 2 native extension. Install it outside RyzeMP.phar using the Egg, or explicitly disable NetherNet for RakNet-only tests.");
 				return false;
 			}
+			if(!$this->configGroup->getConfigBool(ServerProperties::ENABLE_RAKNET, true)){
+				$this->logger->emergency("RyzeRTC shared-port mode requires RakLib to own the sole public UDP socket.");
+				return false;
+			}
+			$resolvePath = fn(string $path) : string => $path === "" || Path::isAbsolute($path) ? $path : Path::join($this->dataPath, $path);
+			$cert = $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_CERTIFICATE, "");
+			$key = $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_PRIVATE_KEY, "");
+			$cert = $resolvePath($cert !== "" ? $cert : $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_TLS_CERTIFICATE, ""));
+			$key = $resolvePath($key !== "" ? $key : $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_TLS_PRIVATE_KEY, ""));
 			try{
 				$raklibV4 = new RakLibInterface($this, $this->getIp(), $port, false, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
 				$gateway = new RyzeRTCSessionGateway($this, $this->network, $packetBroadcaster, $entityEventBroadcaster, $typeConverter);
-				//Construct before starting RakLib: the constructor reserves private ICE, then
-				//configures the sole public UDP socket to forward authorized STUN/DTLS.
-				$rtc = new RyzeRTCInterface($this, $this->getIp(), $port, $raklibV4, $gateway);
+				$rtc = new RyzeRTCInterface($this, $this->getIp(), $port, $raklibV4, $gateway, $cert, $key);
 				if(!$this->network->registerInterface($raklibV4)){
 					$this->logger->emergency("RakLib registration was cancelled; RyzeRTC cannot share its public socket");
 					$rtc->shutdown();
@@ -1703,50 +1694,12 @@ class Server{
 				return false;
 			}
 		}else{
-			$netherNetBinary = $this->configGroup->getConfigBool(ServerProperties::ENABLE_NETHERNET, true) ? $this->locateNetherNetBinary() : null;
-			$netherNetUdpPort = $this->configGroup->getConfigInt(ServerProperties::NETHERNET_UDP_PORT, 0);
-			if($netherNetUdpPort <= 0 || $netherNetUdpPort > 65535){
-				$netherNetUdpPort = $port;
-			}
-			//By default the NetherNet bridge owns the IPv4 UDP server port and shares it with RakNet and Query, so that
-			//hosting needs only server-port open (TCP for NetherNet signaling, UDP for everything else).
-			$sharePort = $netherNetBinary !== null && $netherNetUdpPort === $port;
-			$token = NetherNetInterface::generateToken();
-			$rakLibV4 = null;
-
-			if(
-				!$this->startupPrepareConnectableNetworkInterfaces($this->getIp(), $port, false, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter, $sharePort ? $token : "", $sharePort, $rakLibV4) ||
-				(
-					$this->configGroup->getConfigBool(ServerProperties::ENABLE_IPV6, true) &&
-					!$this->startupPrepareConnectableNetworkInterfaces($this->getIpV6(), $this->getPortV6(), true, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter)
-				)
-			){
+			// Explicit RakNet-only servers remain supported without RyzeRTC installed.
+			if(!$this->startupPrepareConnectableNetworkInterfaces($this->getIp(), $port, false, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter) ||
+				($this->configGroup->getConfigBool(ServerProperties::ENABLE_IPV6, true) &&
+				!$this->startupPrepareConnectableNetworkInterfaces($this->getIpV6(), $this->getPortV6(), true, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter))){
 				return false;
 			}
-
-			if($netherNetBinary !== null){
-				$started = $this->startupPrepareNetherNet(
-					$netherNetBinary,
-					$netherNetUdpPort,
-					$sharePort && $rakLibV4 !== null ? $rakLibV4->getRelayPort() : 0,
-					$sharePort && $rakLibV4 === null,
-					$token,
-					$packetBroadcaster,
-					$entityEventBroadcaster,
-					$typeConverter
-				);
-				if(!$started && $sharePort){
-					//nobody owns the UDP port: bind it as usual
-					$this->logger->debug("Binding UDP port $port without NetherNet");
-					if($rakLibV4 !== null){
-						$this->network->unregisterInterface($rakLibV4);
-					}
-					if(!$this->startupPrepareConnectableNetworkInterfaces($this->getIp(), $port, false, $useQuery, $packetBroadcaster, $entityEventBroadcaster, $typeConverter)){
-						return false;
-					}
-				}
-			}
-
 		}
 
 		if($useQuery){
