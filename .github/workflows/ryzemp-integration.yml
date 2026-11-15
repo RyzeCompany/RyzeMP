@@ -51,7 +51,7 @@ jobs:
           pm-version-major: 5
       - run: composer install --prefer-dist --no-interaction --no-progress
       - name: Run full PHPUnit regression suite
-        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --display-skipped --fail-on-warning tests/phpunit
 
   phar:
     name: Build unmerged RyzeMP PHAR candidate
