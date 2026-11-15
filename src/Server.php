@@ -123,7 +123,6 @@ use pocketmine\thread\ThreadCrashException;
 use pocketmine\thread\ThreadSafeClassLoader;
 use pocketmine\timings\Timings;
 use pocketmine\timings\TimingsHandler;
-use pocketmine\updater\UpdateChecker;
 use pocketmine\utils\AssumptionFailedError;
 use pocketmine\utils\BroadcastLoggerForwarder;
 use pocketmine\utils\Config;
@@ -278,8 +277,6 @@ class Server{
 	private PluginManager $pluginManager;
 
 	private float $profilingTickRate = self::TARGET_TICKS_PER_SECOND;
-
-	private UpdateChecker $updater;
 
 	private AsyncPool $asyncPool;
 
@@ -483,10 +480,6 @@ class Server{
 
 	public function getLogger() : AttachableThreadSafeLogger{
 		return $this->logger;
-	}
-
-	public function getUpdater() : UpdateChecker{
-		return $this->updater;
 	}
 
 	public function getPluginManager() : PluginManager{
@@ -1181,9 +1174,6 @@ class Server{
 				$this->locatorBarUpdater = new LocatorBarUpdater();
 			}
 
-			// The Egg checks official RyzeMP GitHub releases. Do not inherit VanillaMine's updater URL.
-			$this->updater = new UpdateChecker($this, $this->configGroup->getPropertyString(Yml::AUTO_UPDATER_HOST, ""));
-
 			$this->queryInfo = new QueryInfo($this);
 
 			$this->playerDataProvider = new DatFilePlayerDataProvider(Path::join($this->dataPath, "players"));
@@ -1233,20 +1223,6 @@ class Server{
 			$this->configGroup->save();
 
 			$this->logger->info($this->language->translate(KnownTranslationFactory::pocketmine_server_defaultGameMode($this->getGamemode()->getTranslatableName())));
-			$highlight = TextFormat::AQUA;
-			$reset = TextFormat::RESET;
-			$github = VersionInfo::GITHUB_URL;
-			$splash = "\n\n";
-			foreach([
-				KnownTranslationFactory::pocketmine_server_url_docs("{$highlight}https://docs.vanillamine.com{$reset}"),
-				KnownTranslationFactory::pocketmine_server_url_sourceCode("{$highlight}{$github}{$reset}"),
-				KnownTranslationFactory::pocketmine_server_url_freePlugins("{$highlight}https://plugins.vanillamine.com{$reset}"),
-				KnownTranslationFactory::pocketmine_server_url_bugReporting("{$highlight}{$github}/-/issues{$reset}")
-			] as $link){
-				$splash .= "- " . $this->language->translate($link) . "\n";
-			}
-			$this->logger->info($splash);
-
 			$this->logger->info($this->language->translate(KnownTranslationFactory::pocketmine_server_startFinished(strval(round(microtime(true) - $this->startTime, 3)))));
 
 			$forwarder = new BroadcastLoggerForwarder($this, $this->logger, $this->language);
