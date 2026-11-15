@@ -29,6 +29,9 @@ use pocketmine\utils\VersionString;
 use pocketmine\VersionInfo;
 use pocketmine\YmlServerProperties;
 use function date;
+use function in_array;
+use function preg_match;
+use function trim;
 use function strtolower;
 use function ucfirst;
 
