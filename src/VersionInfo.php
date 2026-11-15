@@ -31,7 +31,7 @@ use function str_repeat;
 
 final class VersionInfo{
 	public const NAME = "RyzeMP";
-	public const BASE_VERSION = "1.0.0-beta.6";
+	public const BASE_VERSION = "1.0.0-beta.7";
 	/** PocketMine-MP plugin API compatibility is independent of the RyzeMP release. */
 	public const PLUGIN_API_VERSION = "5.44.2";
 	/** Composer API revision, independent of the user's Bedrock client version. */
