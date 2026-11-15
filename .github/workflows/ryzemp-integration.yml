@@ -32,12 +32,26 @@ jobs:
         run: composer install --prefer-dist --no-interaction --no-progress
       - name: Verify PHP syntax
         run: find src generated tests/phpunit -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /tmp/ryzemp-php-lint.log
-      - name: Run full PHPUnit regression suite
-        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
       - name: Test multiversion item palettes and entity equipment packet routing
         run: |
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/ProtocolPaletteTest.php
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/StandardEntityEventBroadcasterTest.php
+
+  full-suite:
+    name: Full PHPUnit suite (release gate)
+    needs: regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Run full PHPUnit regression suite
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --fail-on-warning tests/phpunit
 
   phar:
     name: Build unmerged RyzeMP PHAR candidate
@@ -53,6 +67,14 @@ jobs:
           pm-version-major: 5
       - name: Install locked production dependencies
         run: composer install --prefer-dist --no-interaction --no-progress --no-dev --classmap-authoritative
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Build checked native NetherNet bridge and Go generator for Linux
+        env:
+          NATIVE_TARGETS: linux/amd64
+        run: bash build/ci/build-native.sh "integration-$GITHUB_RUN_NUMBER"
       - name: Build RyzeMP archive
         run: |
           php -d phar.readonly=0 build/server-phar.php --out=RyzeMP.phar --git="$GITHUB_SHA" --build="$GITHUB_RUN_NUMBER"
