@@ -72,7 +72,7 @@ final class CommandBlockRequests{
 			mb_strlen($packet->name) > self::MAX_NAME_LENGTH ||
 			preg_match('/[\x00-\x1f\x7f]/u', $packet->name) !== 0
 		){
-			foreach($world->createBlockUpdatePackets([$pos]) as $updatePacket){
+			foreach($world->createBlockUpdatePackets([$pos], $session->getTypeConverter()) as $updatePacket){
 				$session->sendDataPacket($updatePacket);
 			}
 			return false;

@@ -23,15 +23,20 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class BlockForceFieldParticle implements Particle{
+class BlockForceFieldParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 	//TODO: proper encode/decode of data
 	public function __construct(private int $data = 0){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::BLOCK_FORCE_FIELD, $this->data, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
+		return [LevelEventPacket::standardParticle(ParticleIds::BLOCK_FORCE_FIELD, $this->data, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

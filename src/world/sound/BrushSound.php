@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -32,7 +35,9 @@ use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 /**
  * Played when a block is brushed with a brush; the block decides which sound variant (sand, gravel...) is used.
  */
-final class BrushSound implements Sound{
+final class BrushSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(
 		private Block $block,
@@ -44,7 +49,7 @@ final class BrushSound implements Sound{
 			$this->completed ? LevelSoundEvent::BRUSH_COMPLETED : LevelSoundEvent::BRUSH,
 			$pos,
 			false,
-			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }

@@ -70,7 +70,7 @@ final class StructureEditorRequests{
 	}
 
 	private static function resendBlock(NetworkSession $session, Player $player, Vector3 $pos) : void{
-		foreach($player->getWorld()->createBlockUpdatePackets([$pos]) as $packet){
+		foreach($player->getWorld()->createBlockUpdatePackets([$pos], $session->getTypeConverter()) as $packet){
 			$session->sendDataPacket($packet);
 		}
 	}

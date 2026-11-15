@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -33,11 +36,13 @@ use pocketmine\network\mcpe\protocol\types\LevelEvent;
  * A turtle egg cracking (LevelEvent PARTICLE_TURTLE_EGG_GROW, 2034). Like BDS, the data is the network ID of the
  * cracked egg's block state, and the client plays the crack sound with it.
  */
-class TurtleEggCrackParticle implements Particle{
+class TurtleEggCrackParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(private Block $egg){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::create(LevelEvent::PARTICLE_TURTLE_EGG_GROW, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->egg->getStateId()), $pos)];
+		return [LevelEventPacket::create(LevelEvent::PARTICLE_TURTLE_EGG_GROW, $this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->egg->getStateId()), $pos)];
 	}
 }

@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
@@ -30,13 +33,15 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 /**
  * Particles of an eyeblossom opening or closing.
  */
-class EyeblossomTransformParticle implements Particle{
+class EyeblossomTransformParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(
 		private bool $open
 	){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle($this->open ? ParticleIds::EYEBLOSSOM_OPEN : ParticleIds::EYEBLOSSOM_CLOSE, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
+		return [LevelEventPacket::standardParticle($this->open ? ParticleIds::EYEBLOSSOM_OPEN : ParticleIds::EYEBLOSSOM_CLOSE, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

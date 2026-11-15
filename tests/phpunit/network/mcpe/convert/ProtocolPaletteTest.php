@@ -6,7 +6,9 @@ namespace pocketmine\network\mcpe\convert;
 
 use PHPUnit\Framework\TestCase;
 use pocketmine\block\VanillaBlocks;
+use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
+use pocketmine\world\particle\TerrainParticle;
 
 final class ProtocolPaletteTest extends TestCase{
 	public function testLegacyAndCurrentSessionsUseDifferentNetworkPalettes() : void{
@@ -27,5 +29,12 @@ final class ProtocolPaletteTest extends TestCase{
 			count($legacy->getItemTypeDictionary()->getEntries()),
 			count($current->getItemTypeDictionary()->getEntries())
 		);
+
+		$effect = new TerrainParticle(VanillaBlocks::STONE());
+		$effect->setTypeConverter($legacy);
+		$legacyPacket = $effect->encode(new Vector3(0, 64, 0))[0];
+		$effect->setTypeConverter($current);
+		$currentPacket = $effect->encode(new Vector3(0, 64, 0))[0];
+		self::assertNotSame($legacyPacket->eventData, $currentPacket->eventData);
 	}
 }

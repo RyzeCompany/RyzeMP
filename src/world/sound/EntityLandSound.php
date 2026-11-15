@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\entity\Entity;
 use pocketmine\math\Vector3;
@@ -33,7 +36,9 @@ use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 /**
  * Played when an entity hits the ground after falling a distance that doesn't cause damage, e.g. due to jumping.
  */
-class EntityLandSound implements Sound{
+class EntityLandSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 	public function __construct(
 		private Entity $entity,
 		private Block $blockLandedOn
@@ -43,7 +48,7 @@ class EntityLandSound implements Sound{
 		return [LevelSoundEventPacket::create(
 			LevelSoundEvent::LAND,
 			$pos,
-			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->blockLandedOn->getStateId()),
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->blockLandedOn->getStateId()),
 			$this->entity::getNetworkTypeId(),
 			false, //TODO: does isBaby have any relevance here?
 			false,

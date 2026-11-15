@@ -99,6 +99,7 @@ use pocketmine\nbt\tag\LongTag;
 use pocketmine\nbt\tag\StringTag;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\NetworkBroadcastUtils;
+use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\BlockActorDataPacket;
 use pocketmine\network\mcpe\protocol\ClientboundPacket;
 use pocketmine\network\mcpe\protocol\types\BlockPosition;
@@ -1055,6 +1056,23 @@ class World implements ChunkManager{
 			$players = $ev->getRecipients();
 		}
 
+		if($sound instanceof ProtocolAwareEffect){
+			if(!NetworkSession::hasOnlyStandardSessions()){
+				$groups = [];
+				foreach($this->filterViewersForPosition($pos, $players) as $player){
+					$groups[$player->getNetworkSession()->getProtocolId()][] = $player;
+				}
+				foreach($groups as $protocolId => $recipients){
+					$sound->setTypeConverter(TypeConverter::getInstance($protocolId));
+					$pk = $sound->encode($pos);
+					if(count($pk) > 0){
+						NetworkBroadcastUtils::broadcastPackets($recipients, $pk);
+					}
+				}
+				return;
+			}
+			$sound->setTypeConverter(TypeConverter::getInstance());
+		}
 		$pk = $sound->encode($pos);
 		if(count($pk) > 0){
 			if($players === $this->getViewersForPosition($pos)){
@@ -1084,6 +1102,23 @@ class World implements ChunkManager{
 			$players = $ev->getRecipients();
 		}
 
+		if($particle instanceof ProtocolAwareEffect){
+			if(!NetworkSession::hasOnlyStandardSessions()){
+				$groups = [];
+				foreach($this->filterViewersForPosition($pos, $players) as $player){
+					$groups[$player->getNetworkSession()->getProtocolId()][] = $player;
+				}
+				foreach($groups as $protocolId => $recipients){
+					$particle->setTypeConverter(TypeConverter::getInstance($protocolId));
+					$pk = $particle->encode($pos);
+					if(count($pk) > 0){
+						NetworkBroadcastUtils::broadcastPackets($recipients, $pk);
+					}
+				}
+				return;
+			}
+			$particle->setTypeConverter(TypeConverter::getInstance());
+		}
 		$pk = $particle->encode($pos);
 		if(count($pk) > 0){
 			if($players === $this->getViewersForPosition($pos)){
@@ -1431,8 +1466,18 @@ class World implements ChunkManager{
 							$p->onChunkChanged($chunkX, $chunkZ, $chunk);
 						}
 					}else{
-						foreach($this->createBlockUpdatePackets($blocks) as $packet){
-							$this->broadcastPacketToPlayersUsingChunk($chunkX, $chunkZ, $packet);
+						if(NetworkSession::hasOnlyStandardSessions()){
+							foreach($this->createBlockUpdatePackets($blocks) as $packet){
+								$this->broadcastPacketToPlayersUsingChunk($chunkX, $chunkZ, $packet);
+							}
+						}else{
+							$groups = [];
+							foreach($this->getChunkPlayers($chunkX, $chunkZ) as $player){
+								$groups[$player->getNetworkSession()->getProtocolId()][] = $player;
+							}
+							foreach($groups as $protocolId => $recipients){
+								NetworkBroadcastUtils::broadcastPackets($recipients, $this->createBlockUpdatePackets($blocks, TypeConverter::getInstance($protocolId)));
+							}
 						}
 					}
 				}
@@ -1544,10 +1589,11 @@ class World implements ChunkManager{
 	 * @return ClientboundPacket[]
 	 * @phpstan-return list<ClientboundPacket>
 	 */
-	public function createBlockUpdatePackets(array $blocks) : array{
+	public function createBlockUpdatePackets(array $blocks, ?TypeConverter $typeConverter = null) : array{
 		$packets = [];
 
-		$blockTranslator = TypeConverter::getInstance()->getBlockTranslator();
+		$typeConverter ??= TypeConverter::getInstance();
+		$blockTranslator = $typeConverter->getBlockTranslator();
 
 		foreach($blocks as $b){
 			if(!($b instanceof Vector3)){
@@ -1567,9 +1613,13 @@ class World implements ChunkManager{
 						array_merge($originalStateData->getStates(), $fakeStateProperties),
 						$originalStateData->getVersion()
 					);
+					$fakeNetworkId = $blockTranslator->getBlockStateDictionary()->lookupStateIdFromData($fakeStateData);
+					if($fakeNetworkId === null && $typeConverter->getProtocolId() < \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL){
+						$fakeNetworkId = $blockTranslator->internalIdToNetworkId($fullBlock->getStateId());
+					}
 					$packets[] = UpdateBlockPacket::create(
 						$blockPosition,
-						$blockTranslator->getBlockStateDictionary()->lookupStateIdFromData($fakeStateData) ?? throw new AssumptionFailedError("Unmapped fake blockstate data: " . $fakeStateData->toNbt()),
+						$fakeNetworkId ?? throw new AssumptionFailedError("Unmapped fake blockstate data: " . $fakeStateData->toNbt()),
 						UpdateBlockPacket::FLAG_NETWORK,
 						UpdateBlockPacket::DATA_LAYER_NORMAL
 					);

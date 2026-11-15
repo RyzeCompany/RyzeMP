@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -33,7 +36,9 @@ use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
  * Sound of an eyeblossom opening or closing: the long one for the flower that changed on its own, the short one for
  * the eyeblossoms around that follow it.
  */
-class EyeblossomSwitchSound implements Sound{
+class EyeblossomSwitchSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(
 		private Block $block,
@@ -46,7 +51,7 @@ class EyeblossomSwitchSound implements Sound{
 			$this->open ? ($this->long ? LevelSoundEvent::OPEN_LONG : LevelSoundEvent::OPEN) : ($this->long ? LevelSoundEvent::CLOSE_LONG : LevelSoundEvent::CLOSE),
 			$pos,
 			false,
-			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }

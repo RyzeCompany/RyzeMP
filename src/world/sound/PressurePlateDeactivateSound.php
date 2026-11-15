@@ -23,13 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
 use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 
-final class PressurePlateDeactivateSound implements Sound{
+final class PressurePlateDeactivateSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(
 		private readonly Block $block
@@ -40,7 +45,7 @@ final class PressurePlateDeactivateSound implements Sound{
 			LevelSoundEvent::PRESSURE_PLATE_CLICK_OFF,
 			$pos,
 			false,
-			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }

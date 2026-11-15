@@ -23,13 +23,18 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
 
-class HugeExplodeSeedParticle implements Particle{
+class HugeExplodeSeedParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::HUGE_EXPLODE_SEED, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
+		return [LevelEventPacket::standardParticle(ParticleIds::HUGE_EXPLODE_SEED, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

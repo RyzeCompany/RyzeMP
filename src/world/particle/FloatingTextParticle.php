@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\VanillaBlocks;
 use pocketmine\entity\Entity;
 use pocketmine\math\Vector3;
@@ -39,7 +42,9 @@ use pocketmine\network\mcpe\protocol\types\entity\LongMetadataProperty;
 use pocketmine\network\mcpe\protocol\types\entity\PropertySyncData;
 use pocketmine\network\mcpe\protocol\types\entity\StringMetadataProperty;
 
-class FloatingTextParticle implements Particle{
+class FloatingTextParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 	//TODO: HACK!
 
 	protected ?int $entityId = null;
@@ -95,7 +100,7 @@ class FloatingTextParticle implements Particle{
 				EntityMetadataProperties::BOUNDING_BOX_WIDTH => new FloatMetadataProperty(0.0),
 				EntityMetadataProperties::BOUNDING_BOX_HEIGHT => new FloatMetadataProperty(0.0),
 				EntityMetadataProperties::NAMETAG => new StringMetadataProperty($name),
-				EntityMetadataProperties::VARIANT => new IntMetadataProperty(TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId())),
+				EntityMetadataProperties::VARIANT => new IntMetadataProperty($this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId(VanillaBlocks::AIR()->getStateId())),
 				EntityMetadataProperties::ALWAYS_SHOW_NAMETAG => new ByteMetadataProperty(1),
 			];
 			$p[] = AddActorPacket::create(

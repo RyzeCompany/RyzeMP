@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
@@ -30,9 +33,11 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 /**
  * Bark crumbling off a creaking that despawns (vanilla "creakingcrumble", emitted by the minecraft:crumble event).
  */
-class CreakingCrumbleParticle implements Particle{
+class CreakingCrumbleParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle(ParticleIds::CREAKING_CRUMBLE, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
+		return [LevelEventPacket::standardParticle(ParticleIds::CREAKING_CRUMBLE, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

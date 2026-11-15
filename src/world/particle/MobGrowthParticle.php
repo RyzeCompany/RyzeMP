@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\particle;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelEventPacket;
 use pocketmine\network\mcpe\protocol\types\ParticleIds;
@@ -30,7 +33,9 @@ use pocketmine\network\mcpe\protocol\types\ParticleIds;
 /**
  * Shown above a baby mob after a golden dandelion paused its growth (paused) or let it grow again (reset).
  */
-class MobGrowthParticle implements Particle{
+class MobGrowthParticle implements Particle, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 
 	public function __construct(
 		private bool $paused
@@ -41,6 +46,6 @@ class MobGrowthParticle implements Particle{
 	}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelEventPacket::standardParticle($this->paused ? ParticleIds::PAUSE_MOB_GROWTH : ParticleIds::RESET_MOB_GROWTH, 0, $pos, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL)];
+		return [LevelEventPacket::standardParticle($this->paused ? ParticleIds::PAUSE_MOB_GROWTH : ParticleIds::RESET_MOB_GROWTH, 0, $pos, $this->getTypeConverter()->getProtocolId())];
 	}
 }

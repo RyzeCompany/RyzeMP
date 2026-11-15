@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -32,10 +35,12 @@ use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 /**
  * Played by a shelf when it becomes powered. The client picks the sound from the block's sound type.
  */
-class ShelfActivateSound implements Sound{
+class ShelfActivateSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 	public function __construct(private Block $block){}
 
 	public function encode(Vector3 $pos) : array{
-		return [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::ACTIVATE, $pos, false, TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()))];
+		return [LevelSoundEventPacket::nonActorSound(LevelSoundEvent::ACTIVATE, $pos, false, $this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId()))];
 	}
 }

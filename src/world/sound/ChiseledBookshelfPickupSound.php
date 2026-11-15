@@ -23,6 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\world\sound;
 
+use pocketmine\world\ProtocolAwareEffect;
+use pocketmine\world\ProtocolAwareEffectTrait;
+
 use pocketmine\block\Block;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\convert\TypeConverter;
@@ -32,7 +35,9 @@ use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
 /**
  * A book taken out of a chiseled bookshelf (block sound "pickup", or "pickup_enchanted" for an enchanted book).
  */
-final class ChiseledBookshelfPickupSound implements Sound{
+final class ChiseledBookshelfPickupSound implements Sound, ProtocolAwareEffect{
+	use ProtocolAwareEffectTrait;
+
 	public function __construct(
 		private Block $block,
 		private bool $enchanted = false
@@ -45,7 +50,7 @@ final class ChiseledBookshelfPickupSound implements Sound{
 			$this->enchanted ? LevelSoundEvent::PICKUP_ENCHANTED : LevelSoundEvent::PICKUP,
 			$pos,
 			false,
-			TypeConverter::getInstance()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
+			$this->getTypeConverter()->getBlockTranslator()->internalIdToNetworkId($this->block->getStateId())
 		)];
 	}
 }
