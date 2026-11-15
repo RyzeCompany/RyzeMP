@@ -73,8 +73,6 @@ use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\encryption\EncryptionContext;
 use pocketmine\network\mcpe\EntityEventBroadcaster;
-use pocketmine\network\mcpe\nethernet\NetherNetConfig;
-use pocketmine\network\mcpe\nethernet\NetherNetInterface;
 use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\PacketBroadcaster;
 use pocketmine\network\mcpe\protocol\PacketPool;
@@ -1416,12 +1414,6 @@ class Server{
 		return !$anyWorldFailedToLoad;
 	}
 
-	/**
-	 * @param string $rakNetRelayToken  non-empty: RakLib listens on a loopback relay socket and the NetherNet bridge owns
-	 *                                  the UDP port, relaying RakNet and Query datagrams to it
-	 * @param bool   $queryViaNetherNet the NetherNet bridge owns the UDP port (Query datagrams come over its link if RakNet
-	 *                                  is disabled), so no dedicated Query socket is needed
-	 */
 	private function startupPrepareConnectableNetworkInterfaces(
 		string $ip,
 		int $port,
@@ -1466,103 +1458,6 @@ class Server{
 			$this->logger->info($this->language->translate(KnownTranslationFactory::pocketmine_server_query_running($prettyIp, (string) $port)));
 		}
 		return true;
-	}
-
-	/**
-	 * Finds the NetherNet bridge program, or logs a warning and returns null.
-	 */
-	private function locateNetherNetBinary() : ?string{
-		$configured = $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_BINARY, "");
-		$binary = NetherNetConfig::locateBinary($configured, $this->dataPath);
-		if($binary === null){
-			$this->logger->warning("NetherNet is enabled but the pm-nethernet program for this platform (" . NetherNetConfig::platformName() . ") was not found" . ($configured !== "" ? " at $configured" : "") . ". " . $this->describeNetherNetFallback());
-		}
-		return $binary;
-	}
-
-	private function describeNetherNetFallback() : string{
-		return $this->configGroup->getConfigBool(ServerProperties::ENABLE_RAKNET, true) ?
-			"Bedrock clients that still support RakNet will use it." :
-			"RakNet is disabled (enable-raknet=off), so Bedrock clients cannot join.";
-	}
-
-	/**
-	 * Starts the NetherNet bridge. Failures are not fatal: the server keeps running with RakNet only.
-	 *
-	 * @param int  $udpPort         UDP port for WebRTC (equal to the server port when it is shared)
-	 * @param int  $rakNetRelayPort loopback port of RakLib's relay socket when the UDP port is shared with RakNet
-	 * @param bool $queryToLink     the UDP port is shared without RakNet: Query datagrams come over the link
-	 */
-	private function startupPrepareNetherNet(
-		string $binary,
-		int $udpPort,
-		int $rakNetRelayPort,
-		bool $queryToLink,
-		string $token,
-		PacketBroadcaster $packetBroadcaster,
-		EntityEventBroadcaster $entityEventBroadcaster,
-		TypeConverter $typeConverter
-	) : bool{
-		$advertise = [];
-		foreach(explode(",", $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_ADVERTISE_ADDRESSES, ""), 64) as $address){
-			$address = trim($address);
-			if($address !== ""){
-				$advertise[] = $address;
-			}
-		}
-		$resolvePath = fn(string $path) : string => $path === "" || Path::isAbsolute($path) ? $path : Path::join($this->dataPath, $path);
-		$config = new NetherNetConfig(
-			binaryPath: $binary,
-			bindIp: $this->getIp(),
-			signalingPort: $this->getPort(),
-			udpPort: $udpPort,
-			advertiseAddresses: $advertise,
-			identityFile: $resolvePath($this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_IDENTITY_FILE, "nethernet_identity.pem")),
-			domain: $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_DOMAIN, "self"),
-			tlsCertificate: $resolvePath($this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_CERTIFICATE, "") !== "" ?
-				$this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_CERTIFICATE, "") :
-				$this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_TLS_CERTIFICATE, "")
-			),
-			tlsPrivateKey: $resolvePath($this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_PRIVATE_KEY, "") !== "" ?
-				$this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_PRIVATE_KEY, "") :
-				$this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_TLS_PRIVATE_KEY, "")
-			),
-			logLevel: $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_LOG_LEVEL, "info"),
-			logFile: "",
-			requireIdentity: false,
-			rakNetRelayPort: $rakNetRelayPort,
-			queryToLink: $queryToLink,
-			acmeDomains: $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_ACME_DOMAINS, ""),
-			acmeEmail: $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_ACME_EMAIL, ""),
-			acmeDirectory: $this->configGroup->getPropertyString(Yml::NETWORK_NETHERNET_HTTPS_ACME_DIRECTORY, ""),
-			acmeStorage: Path::join($this->dataPath, "nethernet_certificates"),
-			acmeHttpPort: $this->configGroup->getPropertyInt(Yml::NETWORK_NETHERNET_HTTPS_ACME_HTTP_PORT, 0),
-			acmeTlsPort: $this->configGroup->getPropertyInt(Yml::NETWORK_NETHERNET_HTTPS_ACME_TLS_PORT, 0),
-			environment: [
-				"PM_NETHERNET_MAX_PENDING" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_NETHERNET_PENDING_JOINS, 256),
-				"PM_NETHERNET_MAX_PENDING_PER_IP" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_NETHERNET_PENDING_JOINS_PER_IP, 32),
-				"PM_NETHERNET_MAX_SESSIONS" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_NETHERNET_MAX_CONNECTIONS, 2048),
-				"PM_NETHERNET_MAX_SESSIONS_PER_IP" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_NETHERNET_MAX_CONNECTIONS_PER_IP, 0),
-				"PM_NETHERNET_MAX_BUFFERED_MB" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_NETHERNET_MAX_BUFFERED_MB, 1024),
-				"PM_NETHERNET_QUERY_RATE" => (string) $this->configGroup->getPropertyInt(Yml::NETWORK_CONNECTION_LIMITS_QUERY_PER_SECOND, 200),
-				"PM_NETHERNET_LIMIT_EXEMPT" => implode(",", $this->getConnectionLimitExemptAddresses()),
-			]
-		);
-		try{
-			return $this->network->registerInterface(new NetherNetInterface(
-				$this,
-				$config,
-				Path::join($this->dataPath, "nethernet.log"),
-				$packetBroadcaster,
-				$entityEventBroadcaster,
-				$typeConverter,
-				$token
-			));
-		}catch(NetworkInterfaceStartException $e){
-			$this->logger->warning("NetherNet could not be started: " . $e->getMessage());
-			$this->logger->warning($this->describeNetherNetFallback());
-			return false;
-		}
 	}
 
 	/**
