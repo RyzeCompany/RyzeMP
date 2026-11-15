@@ -169,57 +169,20 @@ network:
   #Enable encryption of Minecraft network traffic. This has an impact on performance, but prevents hackers from stealing sessions and pretending to be other players.
   #DO NOT DISABLE THIS unless you understand the risks involved.
   enable-encryption: true
-  #NetherNet is the WebRTC-based transport that Bedrock clients 1.26.50 and newer prefer over RakNet (newer clients
-  #drop RakNet). It is enabled with enable-nethernet in server.properties and served by a small helper program
-  #(pm-nethernet) that the server starts by itself. Clients reach it with HTTP(S) on TCP server-port (no conflict
-  #with RakNet, which uses UDP) and then send game data over UDP. By default the helper owns UDP server-port and
-  #shares it with RakNet and Query, so only server-port has to be open, in TCP and UDP. nethernet-udp-port in
-  #server.properties moves NetherNet's UDP traffic to a port of its own instead (open it too).
-  #If the helper is missing or fails, the server keeps running with RakNet only.
+  #Minecraft Bedrock 1.26.50+ uses NetherNet (WebRTC). RyzeMP uses RyzeRTC API 2
+  #exclusively, loaded externally from the Egg. No pm-nethernet process or additional
+  #public UDP port is needed. RakLib and RyzeRTC use the same server-port (TCP+UDP).
+  #The operator identity is stored in nethernet/operator-key.pem; preserve it.
   nethernet:
-    #Path of the pm-nethernet program. Empty = use the one shipped for this platform.
-    binary: ""
-    #Extra public IP addresses (comma-separated) to give to clients, for servers behind NAT. The address the player
-    #typed in the server list is always offered too, so this is rarely needed.
-    advertise-addresses: ""
-    #Operator identity key (P-384, created on first start). Over plain HTTP the client shows a one-time trust prompt
-    #and remembers this key. Back it up, and copy it to every server of a network so players are only asked once.
-    identity-file: "nethernet_identity.pem"
-    #Name shown in the trust prompt
-    domain: "self"
-    #HTTPS for signaling. Clients try HTTPS first: with a certificate valid for the address players type they skip the
-    #trust prompt, and iOS clients (which never retry over plain HTTP) can join. Without one, the server rejects the
-    #HTTPS attempt and Windows/Android clients retry over plain HTTP. iOS players cannot join without HTTPS (the same
-    #happens with Bedrock Dedicated Server, Mojang bugs BDS-23108 and BDS-23125). See native/nethernet/README.md.
+    #Optional HTTPS on the SAME server-port: existing PEM files are loaded for new
+    #connections, so external certificate renewals do not need a server restart.
+    #Without a trusted certificate Android/Windows retry over HTTP. iOS requires
+    #a valid HTTPS certificate for the exact address used to join.
+    #RyzeRTC does not issue ACME certificates itself yet. For Let's Encrypt, use
+    #certificates provided by your hosting panel or an external ACME/DNS provider.
     https:
-      #Get certificates automatically from Let's Encrypt for these names (comma-separated), e.g. "play.example.com".
-      #The names must point to this server and players must join with one of them. A public IP address works too
-      #(short-lived certificate, renewed every few days) for players who join by IP.
-      #Let's Encrypt checks that the name is yours by connecting to port 80 (HTTP) or 443 (TLS) of this server, so
-      #one of them must be open and unused while certificates are issued and renewed. The server listens on it only
-      #for that moment.
-      acme-domains: ""
-      #Contact e-mail for Let's Encrypt (expiry notices). Optional.
-      acme-email: ""
-      #Local ports for the checks, if your router/firewall forwards 80/443 to other ports. 0 = default (80 and 443).
-      acme-http-port: 0
-      acme-tls-port: 0
-      #ACME CA directory. Empty = Let's Encrypt.
-      acme-directory: ""
-      #Or use your own certificate files (PEM; reloaded automatically when they change). They take precedence over
-      #acme-domains.
       certificate: ""
       private-key: ""
-    #Deprecated: use https.certificate and https.private-key
-    tls-certificate: ""
-    tls-private-key: ""
-    #NetherNet clients skip Minecraft's encryption handshake (the transport is encrypted). What prevents someone from
-    #replaying a captured login of an Xbox-authenticated player is that the client signs the connection with the key
-    #of its login. Players whose connection is not signed with that key are disconnected. Only turn this off to work
-    #around a client bug.
-    verify-identity: true
-    #Log level of the helper program: debug, info, warn or error. Its full output also goes to nethernet.log.
-    log-level: "info"
   #Run behind pm-proxy, the VanillaMine Bedrock proxy. The proxy owns the player connections, checks Xbox Live and
   #sends each player here over pm-link with a ticket signed by its key. With this enabled the server opens no RakNet
   #or NetherNet port and players can only join through a trusted proxy.
