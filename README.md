@@ -6,7 +6,7 @@
 
 **Attribution:** RyzeMP incorporates [VanillaMine](https://gitlab.com/VanillaMine/VanillaMine) and descends from [PocketMine-MP](https://github.com/pmmp/PocketMine-MP). Their original copyrights, attributions and LGPL license are retained. RyzeCompany does not claim authorship of the upstream code.
 
-**Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) loads RyzeRTC API 2 **outside** the PHAR. This branch automatically prefers the authenticated native RyzeRTC adapter when that module is present, otherwise falls back to VanillaMine's `pm-nethernet` bridge. They are mutually exclusive and use the same configured public TCP/UDP port. Both automatic startup modes are CI-tested; retail Bedrock clients and existing-world compatibility must still be verified before production release.
+**Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) installs the official RyzeRTC API 2 extension **outside** the PHAR. RyzeRTC is the only NetherNet transport; pm-nethernet is removed. With NetherNet enabled, a missing native module stops startup instead of silently falling back. RakLib and RyzeRTC share the same public server-port on TCP/UDP (typically 19132). A trusted PEM certificate enables HTTPS on that TCP port; ACME issuance still requires external certificate provisioning. RakNet-only smoke testing can explicitly disable NetherNet. Retail Bedrock clients and existing-world compatibility still require verification before production release.
 
 ## What is this?
 PocketMine-MP is a highly customisable server software for Minecraft: Bedrock Edition, built from scratch in PHP.
@@ -48,7 +48,7 @@ This fork changes that. Implemented so far:
 - Commands with target selectors (`@a`, `@p`, `@e[...]`), `/tag`, `/locate biome|structure`, `/weather` and command overloads
 
 **Server**
-- [NetherNet](native/nethernet/README.md) (WebRTC) transport, needed by Bedrock clients 1.26.50+, alongside RakNet
+- [NetherNet over RyzeRTC](docs/INTEGRATION_RELEASE_GATES.md) (WebRTC), needed by Bedrock clients 1.26.50+, alongside RakNet
 - Plugin fault isolation: a plugin that throws no longer takes the whole server down
 - Production RyzeMP builds are published only through official RyzeCompany releases (integration builds never auto-publish)
 
