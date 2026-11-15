@@ -157,7 +157,7 @@ final class RecipeUnlockTest extends TestCase{
 		self::assertArrayHasKey(-1, $priorities);
 		self::assertArrayHasKey(2, $priorities);
 		self::assertNotNull($planksRequirement);
-		self::assertSame(RecipeUnlockingRequirement::CONTEXT_NONE, $planksRequirement->getContext());
+		self::assertNotNull($planksRequirement->getUnlockingIngredients(), "An unlock list represents the context NONE in modern BedrockProtocol");
 		self::assertNotEmpty($planksRequirement->getUnlockingIngredients());
 	}
 
