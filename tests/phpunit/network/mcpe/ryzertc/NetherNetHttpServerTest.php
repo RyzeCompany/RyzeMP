@@ -71,16 +71,20 @@ final class NetherNetHttpServerTest extends TestCase{
     }
 
     public function testHttpsNegotiatesOnOriginalPortWhenCertificateExists() : void{
-        $key = openssl_pkey_new(['private_key_type'=>OPENSSL_KEYTYPE_RSA, 'private_key_bits'=>2048]);
-        self::assertNotFalse($key);
-        $csr = openssl_csr_new(['commonName'=>'localhost'], $key);
-        self::assertNotFalse($csr);
-        $cert = openssl_csr_sign($csr, null, $key, 1);
-        self::assertNotFalse($cert);
-        openssl_x509_export($cert, $pem);
-        openssl_pkey_export($key, $private);
+        // PocketMine's portable PHP has no system openssl.cnf: supply one locally.
         $dir = sys_get_temp_dir() . '/ryzertc-tls-' . bin2hex(random_bytes(8));
         mkdir($dir, 0700);
+        $cfg = $dir . '/openssl.cnf';
+        file_put_contents($cfg, "[req]\ndistinguished_name=req_dn\nprompt=no\n[req_dn]\nCN=localhost\n[v3_req]\nbasicConstraints=CA:FALSE\nsubjectAltName=DNS:localhost\n");
+        $options = ['config'=>$cfg, 'digest_alg'=>'sha256'];
+        $key = openssl_pkey_new($options + ['private_key_type'=>OPENSSL_KEYTYPE_RSA, 'private_key_bits'=>2048]);
+        self::assertNotFalse($key);
+        $csr = openssl_csr_new(['commonName'=>'localhost'], $key, $options);
+        self::assertNotFalse($csr);
+        $cert = openssl_csr_sign($csr, null, $key, 1, $options + ['x509_extensions'=>'v3_req']);
+        self::assertNotFalse($cert);
+        openssl_x509_export($cert, $pem);
+        openssl_pkey_export($key, $private, null, $options);
         $certFile = $dir . '/certificate.pem';
         $keyFile = $dir . '/key.pem';
         file_put_contents($certFile, $pem);
@@ -118,6 +122,7 @@ final class NetherNetHttpServerTest extends TestCase{
             $server->shutdown();
             @unlink($certFile);
             @unlink($keyFile);
+            @unlink($cfg);
             @rmdir($dir);
         }
     }
