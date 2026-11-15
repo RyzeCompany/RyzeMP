@@ -1,0 +1,90 @@
+name: RyzeMP extended integration coverage
+
+on:
+  push:
+    branches:
+      - integration/vanillamine-base
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ryzemp-extended-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vanilla-data:
+    name: Real vanilla worldgen and loot tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      POCKETMINE_VANILLA_WORLDGEN_DATA: ${{ runner.temp }}/ryzemp-vanilla-fixtures
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Fetch official pinned Mojang Java 26.3 worldgen data, do not redistribute
+        run: |
+          php -d memory_limit=2G tools/fetch-vanilla-worldgen-data.php "$POCKETMINE_VANILLA_WORLDGEN_DATA"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/template_pool"
+          test -d "$POCKETMINE_VANILLA_WORLDGEN_DATA/data/minecraft/worldgen/feature"
+      - name: Run vanilla worldgen, tree, loot and biome regressions with real data
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php --display-skipped --fail-on-warning \
+            tests/phpunit/block/LeavesNetworkStateTest.php \
+            tests/phpunit/block/TreesFungiTest.php \
+            tests/phpunit/loot \
+            tests/phpunit/world/generator/vanilla \
+            tests/phpunit/world/locate
+
+  bedrock-fixture:
+    name: Official Bedrock 26.50.4 food fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Download pinned release of Mojang Bedrock samples (text-only)
+        run: |
+          curl --fail --location --retry 3 --proto '=https' \
+            --output "$RUNNER_TEMP/bedrock-samples.zip" \
+            'https://github.com/Mojang/bedrock-samples/releases/download/v1.26.50.4/bedrock-samples-v1.26.50.4-min.zip'
+          unzip -q "$RUNNER_TEMP/bedrock-samples.zip" -d "$RUNNER_TEMP/bedrock-samples"
+          dir="$(find "$RUNNER_TEMP/bedrock-samples" -type d -name behavior_pack -print -quit)"
+          test -n "$dir" && test -d "$dir/items"
+          echo "BEDROCK_SAMPLES_BP=$dir" >> "$GITHUB_ENV"
+      - name: Verify food fixture against official behavior pack
+        run: php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php --filter testFixtureMatchesBehaviorPack --display-skipped tests/phpunit/item/FoodBehaviorPackParityTest.php
+
+  benchmarks:
+    name: Explicit opt-in performance regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      MOB_BENCH: '1'
+      STRUCTURE_BENCH: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pmmp/setup-php-action@3.2.0
+        with:
+          php-version: '8.4'
+          install-path: ./bin
+          pm-version-major: 5
+      - run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Run all opt-in mob, wind burst and structure benchmarks
+        run: |
+          php -d memory_limit=3G vendor/bin/phpunit --bootstrap vendor/autoload.php --display-skipped --fail-on-warning \
+            tests/phpunit/entity/ai/HostileMobBenchmarkTest.php \
+            tests/phpunit/entity/ai/RaidGardenBenchmarkTest.php \
+            tests/phpunit/world/WindBurstWorldTest.php \
+            tests/phpunit/world/structure/StructureLoadBenchmarkTest.php
