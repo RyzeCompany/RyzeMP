@@ -30,12 +30,12 @@ use function is_int;
 use function str_repeat;
 
 final class VersionInfo{
-	public const NAME = "PocketMine-MP";
+	public const NAME = "RyzeMP";
 	public const BASE_VERSION = "5.48.5";
 	public const IS_DEVELOPMENT_BUILD = true;
 	public const BUILD_CHANNEL = "stable";
-	/** The project page (VanillaMine on GitLab; the name is kept for plugins that use it). */
-	public const GITHUB_URL = "https://gitlab.com/VanillaPocketMine/VanillaMine";
+	/** Public source repository of RyzeMP; PocketMine namespaces and core API versions stay compatible. */
+	public const GITHUB_URL = "https://github.com/RyzeCompany/RyzeMP";
 
 	/**
 	 * PocketMine-MP-specific version ID for world data. Used to determine what fixes need to be applied to old world
