@@ -924,6 +924,23 @@ class Server{
 				$this->logger->setLogDebug($debugLogLevel > 1);
 			}
 
+			// Existing pocketmine.yml is intentionally left untouched on upgrades. Tell operators
+			// when an old tuning key is now handled by the new vanilla fishing engine instead.
+			if(
+				$this->configGroup->getProperty("fishing.cooldown-ticks") !== null ||
+				$this->configGroup->getProperty("fishing.pull-strength") !== null ||
+				$this->configGroup->getProperty("fishing.pull-vertical") !== null ||
+				$this->configGroup->getProperty("fishing.bite-wait-min-ticks") !== null ||
+				$this->configGroup->getProperty("fishing.bite-wait-max-ticks") !== null ||
+				$this->configGroup->getProperty("fishing.bite-window-ticks") !== null ||
+				$this->configGroup->getProperty("fishing.lifetime-ticks") !== null
+			){
+				$this->logger->warning("Legacy fishing timing/pull options in pocketmine.yml are obsolete in the new vanilla fishing system; enabled, pvp-enabled and max-distance are still supported. See docs/POCKETMINE_YML_UPGRADE.md.");
+			}
+			if($this->configGroup->getProperty("level-settings.min-y") !== null){
+				$this->logger->warning("Legacy level-settings.min-y in pocketmine.yml is no longer used; new world heights follow the selected generator/dimension. Existing world files are not rewritten by this warning.");
+			}
+
 			$this->forceLanguage = $this->configGroup->getPropertyBool(Yml::SETTINGS_FORCE_LANGUAGE, false);
 			$this->perPlayerLanguage = $this->configGroup->getPropertyBool(Yml::SETTINGS_PER_PLAYER_LANGUAGE, true);
 			$selectedLang = $this->configGroup->getConfigString(ServerProperties::LANGUAGE, $this->configGroup->getPropertyString("settings.language", Language::FALLBACK_LANGUAGE));
