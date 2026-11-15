@@ -6,7 +6,7 @@
 
 **Attribution:** RyzeMP incorporates [VanillaMine](https://gitlab.com/VanillaMine/VanillaMine) and descends from [PocketMine-MP](https://github.com/pmmp/PocketMine-MP). Their original copyrights, attributions and LGPL license are retained. RyzeCompany does not claim authorship of the upstream code.
 
-**Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) remains the only supported egg. It installs native RyzeRTC outside the PHAR. This integration branch also contains VanillaMine's different `pm-nethernet` bridge: the two implementations must not be launched on the same public port. The final production transport and egg integration require real-client tests before release.
+**Deployment:** The [official RyzeMP Pterodactyl egg](https://github.com/RyzeCompany/egg-ryzemp) loads RyzeRTC API 2 **outside** the PHAR. This branch automatically prefers the authenticated native RyzeRTC adapter when that module is present, otherwise falls back to VanillaMine's `pm-nethernet` bridge. They are mutually exclusive and use the same configured public TCP/UDP port. Both automatic startup modes are CI-tested; retail Bedrock clients and existing-world compatibility must still be verified before production release.
 
 ## What is this?
 PocketMine-MP is a highly customisable server software for Minecraft: Bedrock Edition, built from scratch in PHP.
@@ -50,7 +50,7 @@ This fork changes that. Implemented so far:
 **Server**
 - [NetherNet](native/nethernet/README.md) (WebRTC) transport, needed by Bedrock clients 1.26.50+, alongside RakNet
 - Plugin fault isolation: a plugin that throws no longer takes the whole server down
-- Auto-updater served from `updates.vanillamine.com`
+- Production RyzeMP builds are published only through official RyzeCompany releases (integration builds never auto-publish)
 
 Vanilla behaviour is still a work in progress: some mechanics are simplified or missing. If you find something that
 behaves differently from Bedrock Dedicated Server, please [open an issue](https://github.com/RyzeCompany/RyzeMP/issues).
