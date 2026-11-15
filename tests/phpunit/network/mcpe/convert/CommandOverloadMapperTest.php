@@ -70,9 +70,9 @@ class CommandOverloadMapperTest extends TestCase{
 		}
 		$packet = AvailableCommandsPacketAssembler::assemble($data, [], []);
 		$writer = new ByteBufferWriter();
-		$packet->encode($writer);
+		$packet->encode($writer, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$decoded = new AvailableCommandsPacket();
-		$decoded->decode(new ByteBufferReader($writer->getData()));
+		$decoded->decode(new ByteBufferReader($writer->getData()), \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$commandData = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData;
 		self::assertCount(count($commands), $commandData);
 
@@ -117,9 +117,9 @@ class CommandOverloadMapperTest extends TestCase{
 		$packet = AvailableCommandsPacketAssembler::assemble([new CommandData("softenumtest", "", 0, CommandPermissions::NORMAL, null, $overloads, chainedSubCommandData: [])], [], []);
 		self::assertCount(1, $packet->softEnums, "soft enums are shared by name");
 		$writer = new ByteBufferWriter();
-		$packet->encode($writer);
+		$packet->encode($writer, \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$decoded = new AvailableCommandsPacket();
-		$decoded->decode(new ByteBufferReader($writer->getData()));
+		$decoded->decode(new ByteBufferReader($writer->getData()), \pocketmine\network\mcpe\protocol\ProtocolInfo::CURRENT_PROTOCOL);
 		$parameter = AvailableCommandsPacketDisassembler::disassemble($decoded)->commandData[0]->getOverloads()[0]->getParameters()[0];
 		self::assertInstanceOf(CommandSoftEnum::class, $parameter->enum);
 		self::assertSame("TestNames", $parameter->enum->getName());
