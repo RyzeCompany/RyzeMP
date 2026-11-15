@@ -66,6 +66,7 @@ final class StructureEditorRequestsTest extends RedstoneTestCase{
 	 */
 	private function session(array &$sent) : NetworkSession{
 		$session = $this->createMock(NetworkSession::class);
+		$session->method("getTypeConverter")->willReturn(\pocketmine\network\mcpe\convert\TypeConverter::getInstance());
 		$session->method("sendDataPacket")->willReturnCallback(function(ClientboundPacket $packet) use (&$sent) : bool{
 			$sent[] = $packet;
 			return true;
