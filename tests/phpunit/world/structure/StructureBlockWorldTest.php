@@ -277,8 +277,8 @@ final class StructureBlockWorldTest extends RedstoneTestCase{
 			self::assertFalse($this->get(8, 11, 8)->isSameState(VanillaBlocks::STONE()), "the first load used the budget of the tick");
 		}
 		$this->runUntilLoaded(400, $first, $second);
-		self::assertTrue($this->get(1, 12, 31)->isSameState(VanillaBlocks::STONE()));
-		self::assertTrue($this->get(9, 12, 9)->isSameState(VanillaBlocks::STONE()));
+		self::assertTrue($this->get(1, 12, 1)->isSameState(VanillaBlocks::STONE()), "the first structure finished");
+		self::assertTrue($this->get(39, 12, 39)->isSameState(VanillaBlocks::STONE()), "the second structure finished");
 	}
 
 	/**
