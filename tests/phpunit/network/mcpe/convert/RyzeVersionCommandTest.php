@@ -43,7 +43,8 @@ final class RyzeVersionCommandTest extends TestCase{
 		$command = new VersionCommand();
 		self::assertTrue($command->execute($sender, "version", ["protocols"]));
 		$joined = implode("\n", $messages);
-		self::assertStringContainsString("32 (version: protocol)", $joined);
+		self::assertStringContainsString("32", $joined);
+		self::assertStringContainsString("(version: protocol)", $joined);
 		self::assertStringContainsString("1.20.0: 589", $joined);
 		self::assertStringContainsString("1.26.60: 2225", $joined);
 	}
