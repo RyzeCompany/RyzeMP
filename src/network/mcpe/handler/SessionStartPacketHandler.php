@@ -23,9 +23,9 @@ declare(strict_types=1);
 
 namespace pocketmine\network\mcpe\handler;
 
+use pocketmine\network\mcpe\ClientVersionSupport;
 use pocketmine\network\mcpe\NetworkSession;
 use pocketmine\network\mcpe\protocol\NetworkSettingsPacket;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\RequestNetworkSettingsPacket;
 
 final class SessionStartPacketHandler extends PacketHandler{
@@ -61,11 +61,6 @@ final class SessionStartPacketHandler extends PacketHandler{
 	}
 
 	protected function isCompatibleProtocol(int $protocolVersion) : bool{
-		return in_array($protocolVersion, [
-			ProtocolInfo::PROTOCOL_1_26_40,
-			ProtocolInfo::PROTOCOL_1_26_45,
-			ProtocolInfo::PROTOCOL_1_26_52,
-			ProtocolInfo::CURRENT_PROTOCOL
-		], true);
+		return ClientVersionSupport::isSupported($protocolVersion);
 	}
 }

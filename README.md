@@ -2,7 +2,7 @@
 
 **Status: development integration (`integration/vanillamine-base`).** This branch is not a production release. It combines the VanillaMine game engine with RyzeMP's Bedrock multi-protocol packet and item conversion. Until real-client tests pass, use the [integration CI artifacts](https://github.com/RyzeCompany/RyzeMP/actions/workflows/ryzemp-integration.yml) only on a disposable test server; do not replace a production PHAR.
 
-**Compatibility:** PocketMine-MP 5 plugin API and world data are retained; the core API version is independent from RyzeMP release tags. Target clients: Bedrock 1.26.40, 1.26.45, 1.26.52 and 1.26.60, including mixed sessions. Client compatibility has **not yet been validated end-to-end**.
+**Compatibility:** PocketMine-MP 5 plugin API and world data are retained; the core API version is independent from RyzeMP release tags. RyzeMP accepts the 32 Bedrock protocol IDs in `ClientVersionSupport`, from 1.20.0 (589) through 1.26.60 (2225). Run `/version` or `/version protocols` for the complete version/ID list. Some patch releases share a protocol ID and may connect, but are not individually certified. Full real-client gameplay and mixed-session compatibility have **not yet been validated end-to-end** for all 32 protocols.
 
 **Native world generation:** Go is developed and released independently in [RyzeVanillaGen](https://github.com/RyzeCompany/RyzeVanillaGen), not built from this RyzeMP tree. The Egg and CI pin the official [v0.1.0 binary](https://github.com/RyzeCompany/RyzeVanillaGen/releases/tag/v0.1.0) with SHA-256 `3cddcb4be9bd17eaa3225be5d167fb63328566c252a8c4fe7b1e3b9e7d716dc7`, protocol 7 / algorithm 4; RyzeMP retains the PHP fallback. Go lives outside `RyzeMP.phar`.
 

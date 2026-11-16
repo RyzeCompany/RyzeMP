@@ -48,6 +48,8 @@ still **experimental** and not production approved.
 
 ## Required real-client acceptance matrix
 
+The four versions below are the initial integration gate. The expanded 32-protocol allowlist also needs real-client spawn, inventory, block, chunk, dimension, reconnect and mixed-session checks across each supported protocol before it can be called production-compatible. Passing the protocol handshake or palette unit tests alone is insufficient.
+
 | Bedrock client | Expected transport | Manual checks |
 | --- | --- | --- |
 | 1.26.40 | RakNet | Connect, spawn, items/armor/inventory, block actors, movements, chunks, world transitions |
