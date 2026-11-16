@@ -700,6 +700,7 @@ class InventoryManager{
 	}
 
 	private function sendInventorySlotPackets(int $windowId, int $netSlot, ItemStackWrapper $itemStackWrapper) : void{
+		$containerName = self::slotContainerName($windowId, $netSlot);
 		/*
 		 * TODO: HACK!
 		 * As of 1.20.12, the client ignores change of itemstackID in some cases when the old item == the new item.
@@ -712,7 +713,7 @@ class InventoryManager{
 			$this->session->sendDataPacket(InventorySlotPacket::create(
 				$windowId,
 				$netSlot,
-				null,
+				$containerName,
 				0,
 				null,
 				new ItemStackWrapper(0, ItemStack::null())
@@ -722,11 +723,53 @@ class InventoryManager{
 		$this->session->sendDataPacket(InventorySlotPacket::create(
 			$windowId,
 			$netSlot,
-			null,
+			$containerName,
 			0,
 			null,
 			$itemStackWrapper
 		));
+	}
+
+	private static function slotContainerName(int $windowId, int $netSlot) : FullContainerName{
+		if($windowId !== ContainerIds::UI){
+			//Regular windows use the same default name as InventoryContentPacket.
+			return new FullContainerName(0);
+		}
+
+		//The UI window multiplexes several inventories. The container name must describe
+		//the actual slot, especially for protocols before 1.26.20 where it is mandatory.
+		$containerId = match($netSlot){
+			0 => ContainerUIIds::CURSOR,
+			1 => ContainerUIIds::ANVIL_INPUT,
+			2 => ContainerUIIds::ANVIL_MATERIAL,
+			3 => ContainerUIIds::STONECUTTER_INPUT,
+			4 => ContainerUIIds::TRADE2_INGREDIENT1,
+			5 => ContainerUIIds::TRADE2_INGREDIENT2,
+			6 => ContainerUIIds::TRADE_INGREDIENT1,
+			7 => ContainerUIIds::TRADE_INGREDIENT2,
+			8 => ContainerUIIds::MATERIAL_REDUCER_INPUT,
+			9 => ContainerUIIds::LOOM_INPUT,
+			10 => ContainerUIIds::LOOM_DYE,
+			11 => ContainerUIIds::LOOM_MATERIAL,
+			12 => ContainerUIIds::CARTOGRAPHY_INPUT,
+			13 => ContainerUIIds::CARTOGRAPHY_ADDITIONAL,
+			14 => ContainerUIIds::ENCHANTING_INPUT,
+			15 => ContainerUIIds::ENCHANTING_MATERIAL,
+			16 => ContainerUIIds::GRINDSTONE_INPUT,
+			17 => ContainerUIIds::GRINDSTONE_ADDITIONAL,
+			27 => ContainerUIIds::BEACON_PAYMENT,
+			50 => ContainerUIIds::CREATED_OUTPUT,
+			51 => ContainerUIIds::SMITHING_TABLE_INPUT,
+			52 => ContainerUIIds::SMITHING_TABLE_MATERIAL,
+			53 => ContainerUIIds::SMITHING_TABLE_TEMPLATE,
+			default => match(true){
+				$netSlot >= 18 && $netSlot <= 26 => ContainerUIIds::COMPOUND_CREATOR_INPUT,
+				$netSlot >= 28 && $netSlot <= 40 => ContainerUIIds::CRAFTING_INPUT,
+				$netSlot >= 41 && $netSlot <= 49 => ContainerUIIds::MATERIAL_REDUCER_OUTPUT,
+				default => throw new AssumptionFailedError("Unmapped UI inventory slot $netSlot")
+			}
+		};
+		return new FullContainerName($containerId);
 	}
 
 	/**
