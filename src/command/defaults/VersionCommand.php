@@ -26,6 +26,7 @@ namespace pocketmine\command\defaults;
 use pocketmine\command\CommandSender;
 use pocketmine\command\parameter\CommandParameter;
 use pocketmine\lang\KnownTranslationFactory;
+use pocketmine\network\mcpe\ClientVersionSupport;
 use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\permission\DefaultPermissionNames;
 use pocketmine\plugin\Plugin;
@@ -62,7 +63,7 @@ class VersionCommand extends VanillaCommand{
 	public function getOverloads() : array{
 		return [
 			[],
-			[CommandParameter::enum("section", "RyzeMPVersionSection", ["runtime", "help"])],
+			[CommandParameter::enum("section", "RyzeMPVersionSection", ["runtime", "protocols", "help"])],
 			[CommandParameter::enum("action", "RyzeMPVersionPluginAction", ["plugin"]), CommandParameter::rawText("pluginName")]
 		];
 	}
@@ -75,12 +76,16 @@ class VersionCommand extends VanillaCommand{
 
 		$first = strtolower($args[0]);
 		if($first === "help" && count($args) === 1){
-			$sender->sendMessage(TextFormat::AQUA . "RyzeMP /version" . TextFormat::RESET . " - /version, /version runtime, /version plugin <name>");
+			$sender->sendMessage(TextFormat::AQUA . "RyzeMP /version" . TextFormat::RESET . " - /version, /version protocols, /version runtime, /version plugin <name>");
 			$sender->sendMessage(TextFormat::GRAY . "Aliases: /ver, /about. Legacy /version <plugin name> is supported.");
 			return true;
 		}
 		if($first === "runtime" && count($args) === 1){
 			$this->sendRuntimeInfo($sender);
+			return true;
+		}
+		if($first === "protocols" && count($args) === 1){
+			$this->sendCompatibleVersions($sender);
 			return true;
 		}
 		if($first === "plugin"){
@@ -102,9 +107,27 @@ class VersionCommand extends VanillaCommand{
 		$sender->sendMessage(TextFormat::GRAY . "Release: " . TextFormat::AQUA . $version . TextFormat::GRAY . " (" . VersionInfo::BUILD_CHANNEL . ")");
 		$sender->sendMessage(TextFormat::GRAY . "Build: " . TextFormat::AQUA . $shortHash);
 		$sender->sendMessage(TextFormat::GRAY . "Minecraft Bedrock: " . TextFormat::AQUA . ProtocolInfo::MINECRAFT_VERSION_NETWORK . TextFormat::GRAY . " | Protocol: " . TextFormat::AQUA . ProtocolInfo::CURRENT_PROTOCOL);
+		$this->sendCompatibleVersions($sender);
 		$sender->sendMessage(TextFormat::GRAY . "Plugin API: " . TextFormat::AQUA . VersionInfo::PLUGIN_API_VERSION . TextFormat::GRAY . " | Composer API: " . TextFormat::AQUA . VersionInfo::COMPOSER_API_VERSION);
 		$sender->sendMessage(TextFormat::GRAY . "Runtime: " . TextFormat::AQUA . "PHP " . PHP_VERSION . TextFormat::GRAY . " | JIT: " . $this->jitStatus());
 		$sender->sendMessage(TextFormat::GRAY . "Source: " . TextFormat::AQUA . VersionInfo::GITHUB_URL);
+	}
+
+	private function sendCompatibleVersions(CommandSender $sender) : void{
+		$versions = ClientVersionSupport::getVersions();
+		$sender->sendMessage(TextFormat::GRAY . "Compatible Bedrock protocol IDs: " . TextFormat::AQUA . count($versions) . TextFormat::GRAY . " (version: protocol)");
+		$entries = [];
+		foreach($versions as $protocolId => $version){
+			$entries[] = "$version: $protocolId";
+			if(count($entries) === 4){
+				$sender->sendMessage(TextFormat::AQUA . implode(TextFormat::GRAY . " | " . TextFormat::AQUA, $entries));
+				$entries = [];
+			}
+		}
+		if($entries !== []){
+			$sender->sendMessage(TextFormat::AQUA . implode(TextFormat::GRAY . " | " . TextFormat::AQUA, $entries));
+		}
+		$sender->sendMessage(TextFormat::GRAY . "1.26.50+ clients require NetherNet (RyzeRTC). Same-protocol patch releases may connect; test gameplay before production.");
 	}
 
 	private function sendRuntimeInfo(CommandSender $sender) : void{

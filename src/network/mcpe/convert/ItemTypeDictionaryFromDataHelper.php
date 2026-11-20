@@ -26,8 +26,8 @@ namespace pocketmine\network\mcpe\convert;
 use pocketmine\errorhandler\ErrorToExceptionHandler;
 use pocketmine\nbt\LittleEndianNbtSerializer;
 use pocketmine\nbt\tag\CompoundTag;
+use pocketmine\network\mcpe\ClientVersionSupport;
 use pocketmine\network\mcpe\protocol\serializer\ItemTypeDictionary;
-use pocketmine\network\mcpe\protocol\ProtocolInfo;
 use pocketmine\network\mcpe\protocol\types\CacheableNbt;
 use pocketmine\network\mcpe\protocol\types\ItemTypeEntry;
 use pocketmine\utils\AssumptionFailedError;
@@ -42,12 +42,7 @@ use function json_decode;
 
 final class ItemTypeDictionaryFromDataHelper{
 	public static function loadFromProtocolId(int $protocolId) : ItemTypeDictionary{
-		$suffix = match($protocolId){
-			ProtocolInfo::PROTOCOL_1_26_60 => "-1.26.60",
-			ProtocolInfo::PROTOCOL_1_26_52 => "-1.26.51",
-			ProtocolInfo::PROTOCOL_1_26_40, ProtocolInfo::PROTOCOL_1_26_45 => "",
-			default => throw new \InvalidArgumentException("Unsupported item palette protocol $protocolId")
-		};
+		$suffix = ClientVersionSupport::getItemPaletteSuffix($protocolId);
 		return self::loadFromString(Filesystem::fileGetContents(\pocketmine\BEDROCK_DATA_PATH . "required_item_list$suffix.json"));
 	}
 
@@ -62,10 +57,10 @@ final class ItemTypeDictionaryFromDataHelper{
 
 		$params = [];
 		foreach(Utils::promoteKeys($table) as $name => $entry){
-			if(!is_array($entry) || !is_string($name) || !isset($entry["component_based"], $entry["runtime_id"], $entry["version"]) || !is_bool($entry["component_based"]) || !is_int($entry["runtime_id"]) || !is_int($entry["version"]) || !(is_string($componentNbt = $entry["component_nbt"] ?? null) || $componentNbt === null)){
+			if(!is_array($entry) || !is_string($name) || !isset($entry["component_based"], $entry["runtime_id"]) || !is_bool($entry["component_based"]) || !is_int($entry["runtime_id"]) || !is_int($entry["version"] ?? 2) || !(is_string($componentNbt = $entry["component_nbt"] ?? null) || $componentNbt === null)){
 				throw new AssumptionFailedError("Invalid item list format");
 			}
-			$params[] = new ItemTypeEntry($name, $entry["runtime_id"], $entry["component_based"], $entry["version"], $componentNbt === null ? $emptyNBT : new CacheableNbt($nbtSerializer->read(ErrorToExceptionHandler::trapAndRemoveFalse(fn() => base64_decode($componentNbt, true)))->mustGetCompoundTag()));
+			$params[] = new ItemTypeEntry($name, $entry["runtime_id"], $entry["component_based"], $entry["version"] ?? 2, $componentNbt === null ? $emptyNBT : new CacheableNbt($nbtSerializer->read(ErrorToExceptionHandler::trapAndRemoveFalse(fn() => base64_decode($componentNbt, true)))->mustGetCompoundTag()));
 		}
 		return new ItemTypeDictionary($params);
 	}

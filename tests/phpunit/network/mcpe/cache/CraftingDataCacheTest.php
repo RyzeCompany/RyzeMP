@@ -37,6 +37,7 @@ use pocketmine\event\RegisteredListener;
 use pocketmine\event\server\DataPacketSendEvent;
 use pocketmine\item\VanillaItems;
 use pocketmine\lang\Language;
+use pocketmine\network\mcpe\ClientVersionSupport;
 use pocketmine\network\mcpe\compression\ZlibCompressor;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\NetworkSession;
@@ -117,6 +118,13 @@ final class CraftingDataCacheTest extends TestCase{
 		//forgotten on demand (the packet went to event handlers): encoded again from the cached packet
 		$cache->clearEncodedCache($manager);
 		self::assertSame($encoded, $cache->getEncodedCache($manager, TypeConverter::getInstance()));
+	}
+
+	public function testRecipesCanBeEncodedForEveryAcceptedClientProtocol() : void{
+		$cache = CraftingDataCache::getInstance();
+		foreach(ClientVersionSupport::getVersions() as $protocolId => $version){
+			self::assertNotSame("", $cache->getEncodedCache(self::manager(), TypeConverter::getInstance($protocolId)), "Recipes failed for $version ($protocolId)");
+		}
 	}
 
 	public function testRegisteringARecipeInvalidatesTheEncodedPacket() : void{

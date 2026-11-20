@@ -36,6 +36,7 @@ jobs:
       - name: Test multiversion, authenticated NetherNet and same-port HTTP/TLS regressions
         run: |
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/convert/ProtocolPaletteTest.php
+          php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/InventorySlotContainerNameTest.php
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/StandardEntityEventBroadcasterTest.php
           php -d memory_limit=2G vendor/bin/phpunit --bootstrap vendor/autoload.php tests/phpunit/network/mcpe/ryzertc/NetherNetHttpServerTest.php
 
